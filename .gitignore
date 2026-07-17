@@ -1,0 +1,20 @@
+# [2026-07-17] 防止本地敏感凭据和私钥进入版本库。
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+secrets/
+*.secret.*
+
+# [2026-07-17] 忽略常见编辑器、系统和临时文件。
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.log
