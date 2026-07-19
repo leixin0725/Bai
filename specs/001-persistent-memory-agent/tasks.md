@@ -180,16 +180,16 @@
 
 ### Tests for User Story 4（先写并确认失败）
 
-- [ ] T080 [P] [US4] 在 `tests/integration/test_state_persona_composition.py` 覆盖三个测试状态、多份人格确定顺序、RawRecord.state_id、无专属人格仍保留基础人格和缺失引用 fail-closed
-- [ ] T081 [P] [US4] 在 `tests/contract/test_state_resolver.py` 验证替换测试 StateResolver 无需修改 Controller、MemoryRepository 或 PromptAssembler 契约
+- [X] T080 [P] [US4] 在 `tests/integration/test_state_persona_composition.py` 覆盖三个测试状态、多份人格确定顺序、RawRecord.state_id、无专属人格仍保留基础人格和缺失引用 fail-closed
+- [X] T081 [P] [US4] 在 `tests/contract/test_state_resolver.py` 验证替换测试 StateResolver 无需修改 Controller、MemoryRepository 或 PromptAssembler 契约
 
 ### Implementation for User Story 4
 
-- [ ] T082 [US4] 在 `src/bai_agent/domain/models.py` 完善 AgentStateDefinition、StateResolutionContext/Result 及有序 persona ID 不重复/引用约束
-- [ ] T083 [US4] 在 `src/bai_agent/states/resolver.py` 完善配置驱动的 StaticStateResolver，生产只选择 `default_state_id`，测试可注入其他已验证状态
-- [ ] T084 [US4] 在 `src/bai_agent/prompting/assembler.py` 与 `src/bai_agent/runtime/controller.py` 集成有序状态人格、状态追踪和无效引用时生成前停止
-- [ ] T085 [P] [US4] 在 `tests/fixtures/config-three-states/states.toml` 与 `tests/fixtures/config-three-states/personas/states/` 创建三个状态和多人格的非敏感验收配置
-- [ ] T086 [US4] 运行 `tests/unit/test_static_state_resolver.py`、`tests/integration/test_state_persona_composition.py`、`tests/contract/test_state_resolver.py`、US1/US2 回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/domain/models.py`、`src/bai_agent/states/resolver.py`、`src/bai_agent/prompting/assembler.py`、`src/bai_agent/runtime/controller.py`、状态 fixture 与 US4 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US4 原子提交
+- [X] T082 [US4] 在 `src/bai_agent/domain/models.py` 完善 AgentStateDefinition、StateResolutionContext/Result 及有序 persona ID 不重复/引用约束
+- [X] T083 [US4] 在 `src/bai_agent/states/resolver.py` 完善配置驱动的 StaticStateResolver，生产只选择 `default_state_id`，测试可注入其他已验证状态
+- [X] T084 [US4] 在 `src/bai_agent/prompting/assembler.py` 与 `src/bai_agent/runtime/controller.py` 集成有序状态人格、状态追踪和无效引用时生成前停止
+- [X] T085 [P] [US4] 在 `tests/fixtures/config-three-states/states.toml` 与 `tests/fixtures/config-three-states/personas/states/` 创建三个状态和多人格的非敏感验收配置
+- [X] T086 [US4] 运行 `tests/unit/test_static_state_resolver.py`、`tests/integration/test_state_persona_composition.py`、`tests/contract/test_state_resolver.py`、US1/US2 回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/domain/models.py`、`src/bai_agent/states/resolver.py`、`src/bai_agent/prompting/assembler.py`、`src/bai_agent/runtime/controller.py`、状态 fixture 与 US4 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US4 原子提交
 
 **Checkpoint**: 状态扩展边界可替换、可测试，首版仍只有确定的默认状态行为。
 

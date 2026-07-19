@@ -1,0 +1,37 @@
+schema_version = 1
+default_state_id = "default"
+resolver = "static"
+
+[[personas]]
+id = "state_default"
+role = "state"
+prompt = "personas/states/default.md"
+model_profile = "chat"
+
+[[personas]]
+id = "state_focused"
+role = "state"
+prompt = "personas/states/focused.md"
+model_profile = "chat"
+
+[[personas]]
+id = "state_precise"
+role = "state"
+prompt = "personas/states/precise.md"
+model_profile = "chat"
+
+[[states]]
+id = "default"
+enabled = true
+ordered_persona_ids = ["state_default"]
+
+[[states]]
+id = "focused"
+enabled = true
+ordered_persona_ids = ["state_focused", "state_precise"]
+
+[[states]]
+id = "bare"
+enabled = true
+ordered_persona_ids = []
+

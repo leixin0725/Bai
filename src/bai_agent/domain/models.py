@@ -145,6 +145,28 @@ class StateResolutionResult(FrozenModel):
     resolver_version: str
     reason_code: str
 
+    @field_validator("ordered_persona_ids")
+    @classmethod
+    def validate_persona_order(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) != len(set(value)):
+            raise ValueError("状态人格 ID 不能重复")
+        return value
+
+
+class AgentStateDefinition(FrozenModel):
+    state_id: str = Field(min_length=1)
+    ordered_persona_ids: tuple[str, ...] = ()
+    enabled: bool
+
+    @field_validator("ordered_persona_ids")
+    @classmethod
+    def validate_persona_order(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(value) != len(set(value)):
+            raise ValueError("状态人格 ID 不能重复")
+        if any(not item for item in value):
+            raise ValueError("状态人格 ID 不能为空")
+        return value
+
 
 class PromptSegment(FrozenModel):
     segment_id: str
