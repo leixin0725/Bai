@@ -96,7 +96,23 @@ python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
 
 结果按 `global_sequence` 返回来源原文并支持游标分页，不暴露存储路径。`memory_source_query` 对聊天人格、整理人格和获准的辅助人格使用同一 Schema、权限和错误语义。未调用工具时，来源原文不会因长期记忆被自动注入；工具结果只属于发起查询的当前 flow。
 
-## 6. 人工维护、备份与恢复
+## 6. 记忆重置
+
+重置命令不调用 Provider，也不需要 API Key。先停止 Agent，再按需要执行：
+
+```powershell
+# [2026-07-19] 保留全部原始聊天和近期直接窗口，只清空长期派生记忆。
+python -m bai_agent --config-dir config --data-dir data memory reset long-term
+
+# [2026-07-19] 清空原始聊天、近期窗口、长期记忆、覆盖概览和整理前沿，恢复首次启动状态。
+python -m bai_agent --config-dir config --data-dir data memory reset all
+```
+
+两条命令使用显式作用域后立即执行，不再询问确认。`long-term` 会保留 coverage spans 作为已处理范围索引，但把可注入概览改为中性文本，避免下一轮从旧原文立即重新生成刚删除的长期事实；`all` 还会清除原始分段和可能含旧正文的原子临时副本。安全事件状态位于记忆根之外，不随任何记忆重置删除。
+
+成功输出只报告重置前后的原始记录数、长期条目数、coverage span 数和整理前沿，不回显记忆正文；若损坏文档无法可信统计旧长期条目，对应重置前计数为 `-1`。若聊天实例仍持有写锁，命令以 `WRITER_LOCKED` 拒绝执行。
+
+## 7. 人工维护、备份与恢复
 
 人工操作前：
 
@@ -116,13 +132,13 @@ python -m bai_agent --config-dir config --data-dir data doctor
 
 POSIX 预期目录为 `0700`、文件为 `0600`；Windows 预期 DACL 仅允许当前用户、SYSTEM 和 Administrators。程序会尽力收紧本地路径，网络共享、符号链接/junction 或无法验证的权限会 fail-closed。
 
-## 7. Provider、工具、状态与自主循环扩展
+## 8. Provider、工具、状态与自主循环扩展
 
 DeepSeek 通过 Provider-neutral DTO 接入。新增供应商时实现 `ModelProvider` adapter 并复用 Provider 契约测试，不能把 SDK 对象带入 Controller、Memory 或 Tool 层。
 
 新增工具时在注册器声明本地 input/output JSON Schema、安全 annotations、启用开关和获准人格，并保留 deadline、轮数、结果大小和无正文审计限制。状态解析器只能返回可信配置中已定义的人格 ID 与顺序。自主循环默认 `disabled`；测试 Runner 也必须受迭代、deadline、token/成本、人工停止、取消和幂等检查点约束。
 
-## 8. 自动化与兼容性矩阵
+## 9. 自动化与兼容性矩阵
 
 默认本地门禁不需要真实 Provider 调用：
 
@@ -136,7 +152,7 @@ git diff --check
 
 `.github/workflows/compatibility.yml` 在 Windows、Ubuntu、macOS 上分别以 Python 3.13 和 3.14 安装项目，验证模块入口、权限结果归一化、本地原子替换、UTF-8 和全部非性能功能。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
 
-## 9. Windows 参考性能复现
+## 10. Windows 参考性能复现
 
 性能 fixture 含 10,000 条永久原始记录、1,000 条长期记忆和配置上限内的 48 条近期直接原文。显式开启后执行至少 100 次全新 Python 进程：
 
@@ -149,7 +165,7 @@ pytest tests\performance\test_startup.py -m performance -q -s
 
 计时从进程创建到配置、原始索引、长期 YAML、覆盖概览和首轮 `PromptContext` 可用；报告 OS、CPU、内存、存储、Python、缓存策略和 nearest-rank p95。门槛为 3 秒且网络调用为 0，只在指定 Windows 参考环境判定，其他平台只跑功能矩阵。
 
-## 10. 凭据事件处置
+## 11. 凭据事件处置
 
 常规检查：
 

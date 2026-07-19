@@ -13,7 +13,7 @@ python -m bai_agent [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS]
 - `--log-level LEVEL`：只允许收紧/放宽已配置日志级别，不关闭凭据过滤。
 - `--json`：命令结果输出稳定 JSON；聊天正文除外。
 
-CLI 不提供会话/线程 ID、创建新对话、选择历史对话或清空记忆命令。所有 `chat` 调用使用同一个数据根和连续 Agent 身份。
+CLI 不提供会话/线程 ID、创建新对话或选择历史对话。所有 `chat` 调用使用同一个数据根和连续 Agent 身份；记忆重置只通过带显式作用域的维护命令执行。
 
 ## 2. `config validate`
 
@@ -51,7 +51,27 @@ python -m bai_agent memory source MEMORY_ID [--cursor CURSOR]
 
 该命令是内置 `memory_source_query` 的维护者 CLI 包装，必须复用同一只读服务、排序、分页、凭据过滤和错误码，不能直接另写文件读取旁路。默认输出 JSON；正文输出到 stdout，审计日志不复制正文。
 
-## 5. `doctor`
+## 5. `memory reset`
+
+```powershell
+python -m bai_agent memory reset long-term
+python -m bai_agent memory reset all
+```
+
+两个作用域均立即执行，不提供额外交互确认：
+
+- `long-term`：保留永久原始记录、近期直接窗口、整理前沿和 coverage spans，清空长期条目并用中性概览替换可注入的旧概览正文；同一 revision 原子更新主 YAML 与 last-valid。
+- `all`：先原子提交空长期文档，再从末段向前清除全部原始记录和原子临时副本，使任一中断状态仍不存在悬空来源；最终 revision、整理前沿和 coverage 均回到首次启动状态。
+
+两者必须取得与聊天相同的单写者锁，不调用 Provider、不要求 Provider 凭据、不输出任何记忆正文。安全事件门禁和处置证据不属于记忆根，任何作用域都不得删除。
+
+成功 JSON：
+
+```json
+{"ok":true,"scope":"all","raw_records_before":42,"raw_records_after":0,"long_term_items_before":3,"long_term_items_after":0,"coverage_spans_before":2,"coverage_spans_after":0,"curated_through_sequence":0}
+```
+
+## 6. `doctor`
 
 ```powershell
 python -m bai_agent doctor
@@ -59,7 +79,7 @@ python -m bai_agent doctor
 
 只读检查 Python/依赖版本、配置、数据目录、写锁状态、文件权限、凭据环境变量存在性和 Provider profile 结构。默认不发网络请求；`--probe-provider` 可显式执行最小 Provider 探测且不能把响应正文写入记忆。
 
-## 6. `chat`
+## 7. `chat`
 
 ```powershell
 python -m bai_agent chat
@@ -82,7 +102,7 @@ python -m bai_agent chat
 - 记忆整理或长期 YAML 写入失败且即将越过窗口时，本轮在 Provider 调用前停止。
 - 不在终端状态行显示提示正文、API Key、Authorization 或 DeepSeek 推理内容。
 
-## 7. 稳定退出码
+## 8. 稳定退出码
 
 | Code | Meaning |
 |---:|---|
@@ -113,11 +133,12 @@ python -m bai_agent security incident acknowledge --rotation-reference REF --rep
 
 `message` 不包含正文、秘密、绝对路径或 SDK 堆栈。详细调试仍必须经过日志过滤。
 
-## 8. CLI 验收
+## 9. CLI 验收
 
 - 首次启动、正常轮次、Provider 失败、重启恢复和 pending retry。
 - 不存在任何会话/线程创建或选择交互。
 - 输入落盘早于 Provider 调用，输出落盘早于 stdout。
 - 无效配置/人格/YAML、锁冲突和权限过宽具有稳定退出码。
 - `memory source` 与人格工具调用在相同 revision 下返回相同记录顺序和错误。
+- `memory reset long-term` 保留原始记录与覆盖索引但不保留长期正文；`memory reset all` 恢复空记忆且安全事件状态不变。
 - `--json` 输出可由 Schema 解析，且 stderr/stdout 不泄漏测试凭据。

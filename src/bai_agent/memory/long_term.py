@@ -24,7 +24,7 @@ from bai_agent.domain.models import (
     new_id,
     utc_now,
 )
-from bai_agent.memory.recovery import atomic_write
+from bai_agent.memory.recovery import atomic_write, find_temporary_files
 from bai_agent.security.credentials import CredentialGuard
 from bai_agent.security.permissions import PermissionResult, PermissionStatus, ensure_private_path
 
@@ -60,10 +60,15 @@ class LongTermStore:
         ensure_private_path(self.memory_root, is_directory=True)
         ensure_private_path(self.state_dir, is_directory=True)
 
-    def _render(self, document: LongTermMemoryDocument) -> bytes:
+    def _render(
+        self,
+        document: LongTermMemoryDocument,
+        *,
+        preserve_existing_layout: bool = True,
+    ) -> bytes:
         values = document.model_dump(mode="json")
         root: Any = None
-        if self.path.exists():
+        if preserve_existing_layout and self.path.exists():
             try:
                 root = self.yaml.load(self.path.read_text(encoding="utf-8"))
             except Exception:
@@ -97,6 +102,8 @@ class LongTermStore:
         return document
 
     def _validate_sources(self, document: LongTermMemoryDocument) -> None:
+        if not document.memories and not document.coverage_overview.coverage_spans:
+            return
         raw = {item.record_id: item for item in self.archive.read_all()}
         for memory in document.memories:
             for source in memory.source_refs:
@@ -177,7 +184,12 @@ class LongTermStore:
         self._refresh_last_valid(payload)
         return document
 
-    def commit(self, document: LongTermMemoryDocument) -> LongTermMemoryDocument:
+    def commit(
+        self,
+        document: LongTermMemoryDocument,
+        *,
+        preserve_existing_layout: bool = True,
+    ) -> LongTermMemoryDocument:
         if self.read_only:
             raise BaiError("MEMORY_READ_ONLY_FALLBACK", "长期记忆主文件无效，当前只读回退禁止写入。")
         try:
@@ -194,7 +206,10 @@ class LongTermStore:
             current = self.path.read_bytes()
             if content_hash(current) != self.loaded_hash:
                 raise BaiError("CONCURRENT_MANUAL_EDIT", "检测到并发人工修改；提交已中止。", retryable=True)
-        payload = self._render(validated)
+        payload = self._render(
+            validated,
+            preserve_existing_layout=preserve_existing_layout,
+        )
         atomic_write(self.path, payload, self.failure_hook)
         ensure_private_path(self.path, is_directory=False)
         self.loaded_hash = content_hash(payload)
@@ -235,6 +250,43 @@ class LongTermStore:
             memories=(*document.memories, item),
         )
         return self.commit(updated)
+
+    def clear_long_term_memories(self) -> LongTermMemoryDocument:
+        """[2026-07-19] 清空派生正文但保留覆盖索引，避免旧原文在下一轮被立即重新整理。"""
+        document = self.initialize()
+        revision = document.revision + 1
+        updated = LongTermMemoryDocument(
+            schema_version=1,
+            revision=revision,
+            curation=document.curation,
+            coverage_overview=MemoryCoverageOverview(
+                revision=revision,
+                text="长期记忆已清空；既有已整理范围仅保留来源覆盖索引。",
+                coverage_spans=document.coverage_overview.coverage_spans,
+            ),
+            memories=(),
+        )
+        committed = self.commit(updated, preserve_existing_layout=False)
+        self._clear_recovery_temporary_files()
+        return committed
+
+    def reset_to_factory_state(self) -> LongTermMemoryDocument:
+        """[2026-07-19] 全量重置先原子落盘空文档，再由归档层逆序清除原始段。"""
+        # [2026-07-19] 显式出厂重置允许覆盖无效主文件/恢复副本，同时用当前摘要防并发改写。
+        self.read_only = False
+        self.loaded_hash = content_hash(self.path.read_bytes()) if self.path.exists() else None
+        committed = self.commit(
+            LongTermMemoryDocument.empty(),
+            preserve_existing_layout=False,
+        )
+        self._clear_recovery_temporary_files()
+        return committed
+
+    def _clear_recovery_temporary_files(self) -> None:
+        # [2026-07-19] 重置后的恢复副本不能继续保留旧长期正文或 YAML 注释。
+        for directory in (self.memory_root, self.state_dir):
+            for path in find_temporary_files(directory):
+                path.unlink()
 
     def validate_permissions(self) -> PermissionResult:
         results = [

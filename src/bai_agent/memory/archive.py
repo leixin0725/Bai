@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import RawRecord, Role, canonical_json, new_id, utc_now
-from bai_agent.memory.recovery import atomic_write
+from bai_agent.memory.recovery import atomic_write, find_temporary_files
 from bai_agent.security.credentials import CredentialGuard
 from bai_agent.security.permissions import PermissionStatus, ensure_private_path
 
@@ -120,6 +120,19 @@ class RawRecordArchive:
         if records and records[-1].role == Role.USER:
             return records[-1]
         return None
+
+    def clear(self) -> int:
+        """[2026-07-19] 从末段向前删除，故障中断时剩余记录仍保持连续前缀。"""
+        segments = self._segments()
+        for path in reversed(segments):
+            path.unlink()
+        for path in find_temporary_files(self.raw_dir):
+            path.unlink()
+        return len(segments)
+
+    def stored_line_count(self) -> int:
+        """[2026-07-19] 出厂重置报告可统计损坏行，但不会把它们当成有效原始记录。"""
+        return sum(len(path.read_bytes().splitlines()) for path in self._segments())
 
     def record_index(self) -> dict[str, tuple[str, int, int, int]]:
         """[2026-07-19] offset 索引可从正式段重建，因此永远不是第二事实来源。"""

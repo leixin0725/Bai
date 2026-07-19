@@ -35,6 +35,8 @@ def _parser() -> argparse.ArgumentParser:
     source = memory_sub.add_parser("source")
     source.add_argument("memory_id")
     source.add_argument("--cursor")
+    reset = memory_sub.add_parser("reset")
+    reset.add_argument("reset_scope", choices=("all", "long-term"))
     commands.add_parser("doctor")
 
     security = commands.add_parser("security")
@@ -120,6 +122,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "config_revision": snapshot.revision,
                 "direct_range": list(coverage.direct_range),
             })
+            return 0
+        if args.command == "memory" and args.memory_command == "reset":
+            from bai_agent.memory.reset import MemoryResetService
+
+            snapshot = load_config(args.config_dir, require_credentials=False)
+            agent_settings = snapshot.settings["agent.toml"]
+            archive_settings = agent_settings["archive"]
+            manual_settings = agent_settings["manual_memory"]
+            report = MemoryResetService(
+                args.data_dir / "memory",
+                segment_max_records=int(archive_settings["segment_max_records"]),
+                segment_max_bytes=int(archive_settings["segment_max_bytes"]),
+                max_record_bytes=int(archive_settings["max_record_bytes"]),
+                max_document_bytes=int(manual_settings["max_document_bytes"]),
+                max_items=int(manual_settings["max_items"]),
+                max_overview_chars=int(agent_settings["memory_overview"]["max_chars"]),
+                writer_lock_timeout_seconds=float(
+                    agent_settings["runtime"]["writer_lock_timeout_seconds"]
+                ),
+            ).reset(args.reset_scope)
+            _print({"ok": True, **report.as_dict()})
             return 0
         if args.command == "memory" and args.memory_command == "source":
             from bai_agent.domain.models import ToolExecutionContext

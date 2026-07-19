@@ -43,8 +43,12 @@ python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 ```powershell
 python -m bai_agent --config-dir config --data-dir data memory validate
 python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
+python -m bai_agent --config-dir config --data-dir data memory reset long-term
+python -m bai_agent --config-dir config --data-dir data memory reset all
 python -m bai_agent --data-dir data security incident check
 ```
+
+`memory reset long-term` 保留永久原始聊天和近期窗口，只清空长期派生正文；`memory reset all` 清空全部聊天与长期记忆并恢复首次启动状态。两条命令立即执行且不可撤销，运行前必须先关闭聊天进程；安全事件状态不会随记忆重置而删除。
 
 程序会尽力把 POSIX 权限收紧到目录 `0700`、文件 `0600`，并在 Windows 检查和收紧 DACL；无法证明为私有时验证失败关闭。若凭据可能进入 Git、配置、日志或运行记忆，立即停止聊天/整理，并按[凭据泄露事件处置流程](docs/security-incident-response.md)完成轮换、全仓库与历史扫描、运行数据扫描和显式解除门禁。
 
