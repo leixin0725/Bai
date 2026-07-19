@@ -1,0 +1,15 @@
+schema_version = 1
+default_state_id = "default"
+resolver = "static"
+
+[[personas]]
+id = "state_default"
+role = "state"
+prompt = "personas/states/default.md"
+model_profile = "chat"
+
+[[states]]
+id = "default"
+enabled = true
+ordered_persona_ids = ["state_default"]
+

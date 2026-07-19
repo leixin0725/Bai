@@ -15,7 +15,7 @@ data/memory/
 ```
 
 - `raw/*.jsonl`：全部已确认用户/Agent 原文，永久权威归档。
-- `long_term.yaml`：长期记忆、来源关系和直接注入修剪前沿的联合权威文档。
+- `long_term.yaml`：长期记忆、来源关系、`MemoryCoverageOverview` 和直接注入修剪前沿的联合权威文档；四者共享同一 revision。
 - `long_term.last-valid.yaml`：只用于人工编辑损坏后的只读回退，不接受人工直接维护。
 - 运行时 record/source 索引均可重建，不持久化为第二份权威状态。
 
@@ -55,6 +55,10 @@ curation:
   last_batch_id:
   updated_at:
   covered_record_ids: []
+coverage_overview:
+  revision: 1
+  text: "尚无已整理记录。"
+  coverage_spans: []
 memories:
   - memory_id: mem-00000000-0000-4000-8000-000000000001
     kind: preference
@@ -78,16 +82,16 @@ memories:
 整理只选择旧前沿之后、即将移出直接注入窗口的最旧连续完整轮次。
 
 1. 原始批次已全部确认持久化，计算 `batch_id` 和输入哈希。
-2. 使用独立记忆整理人格和 `memory_curator` model profile 请求完整 JSON。
-3. 校验 Schema、数量/长度、凭据、来源、关系和人工项优先级。
+2. 使用独立记忆整理人格和 `memory_curator` model profile 请求一次完整 JSON；同一响应同时包含长期候选和 `overview_update`。
+3. 校验 Schema、数量/长度、凭据、来源、关系、人工项优先级，以及 coverage span 的批次、序号、record ID/hash 连续性。
 4. 重新读取 `long_term.yaml` 并比较基准哈希；发现人工并发修改则中止，不能覆盖。
-5. 在内存中合并新/修正记忆及其全部 `source_refs`，递增 revision，并将 `curated_through_sequence` 推进到批次末尾。
-6. 对联合文档执行完整校验，包括每个来源在原始索引中存在且哈希一致。
+5. 在内存中合并新/修正记忆、全部 `source_refs` 和 overview update，递增根与概览 revision，并将 `curated_through_sequence` 推进到批次末尾。
+6. 对联合文档执行完整校验，包括每个来源在原始索引中存在且哈希一致，以及 sequence 1 到整理前沿恰好被连续 spans 覆盖。
 7. 同目录临时文件写全 YAML、flush、fsync、replace。
 8. 替换成功后才更新内存快照；提示选择器据新前沿停止直接注入该批次。
 9. 原始 JSONL 不删除、不截断、不重写。
 
-整理没有提取到记忆时仍可提交只推进前沿的有效批次，但必须保留 `last_batch_id`、覆盖记录及整理审计。任何失败均保持旧文档和旧前沿，下一轮可使用同一 `batch_id` 幂等重试。
+整理没有提取到长期记忆时仍必须提交覆盖该批记录的 overview span，才可推进前沿；必须保留 `last_batch_id`、覆盖记录及整理审计。任何失败均保持旧文档、旧概览和旧前沿，下一轮可使用同一 `batch_id` 幂等重试。
 
 ## 6. 人工维护
 
@@ -129,10 +133,11 @@ memories:
 
 ## 8. 直接注入选择
 
-- `global_sequence <= curated_through_sequence` 的记录不再因“近期窗口”自动逐字注入，但仍是长期记忆来源候选。
+- `global_sequence <= curated_through_sequence` 的记录必须被同 revision 的一个且仅一个 coverage span 覆盖，才可不再因“近期窗口”自动逐字注入；它仍是长期记忆来源候选。
 - 前沿之后的记录按完整轮次和配置预算直接注入；不得截断单条内容形成伪原文。
 - 若未整理记录已达到必须移出的边界，Controller 必须先完成整理；失败则本轮在 Provider 调用前停止，不能提前丢弃原文或越过预算。
-- 长期记忆按状态、相关性、时间和预算选择；未选中的有效项仍由类别/范围摘要表示且保留查询资格。
+- 有界 `MemoryCoverageOverview` 先表示全部已整理范围；长期记忆再按状态、相关性、时间和预算选择，未选中的有效项仍保留查询资格。
+- 若 `1..curated_through_sequence` 的 spans 有缺口/重叠，或前沿后的已确认记录不能完整留在近期窗口，Controller 必须在 Provider 调用前失败。
 - 来源原文从不因使用某条长期记忆而自动注入；仅显式调用 `memory_source_query` 后进入该 flow。
 
 ## 9. 只读来源读取
@@ -178,6 +183,6 @@ read_raw_records(record_ids)
 - 整理返回空、截断、非法 JSON、悬空/跨批次来源或覆盖人工项。
 - 人工编辑发生在加载与提交之间。
 - 两个进程同时启动，只允许一个取得锁。
-- 10,000 条原始记录/1,000 条长期记忆的 20—30 次冷启动 p95。
+- 指定 Windows 参考环境中，10,000 条永久原始记录/1,000 条长期记忆至少 100 次全新进程启动的 nearest-rank p95；从进程创建计时到配置、原始索引、长期 YAML 与覆盖概览可供首轮组装，网络调用为 0。
 
 每个崩溃测试恢复后只能观察到完整旧状态或完整新状态，不得出现半条记录、无来源记忆、提前前沿或原始记录减少。

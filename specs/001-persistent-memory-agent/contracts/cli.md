@@ -35,12 +35,12 @@ python -m bai_agent config validate --config-dir config
 python -m bai_agent memory validate
 ```
 
-行为：取得写锁或只读一致快照，验证所有原始段、全局顺序、长期 YAML、来源、哈希、修剪前沿、文件权限和凭据模式。不得修改主记忆文件；只有全部有效时才可原子刷新 last-valid 副本。
+行为：取得写锁或只读一致快照，验证所有原始段、全局顺序、长期 YAML、来源、哈希、`MemoryCoverageOverview` 连续覆盖、修剪前沿、文件权限和凭据模式。POSIX 目录/文件必须为 `0700`/`0600`；Windows DACL 的 `too_broad` 或 `unverifiable` 均返回安全失败。不得修改主记忆文件；只有全部有效时才可原子刷新 last-valid 副本。
 
 成功 JSON：
 
 ```json
-{"ok":true,"raw_records":10000,"long_term_items":1000,"curated_through_sequence":9950,"dangling_sources":0}
+{"ok":true,"raw_records":10000,"long_term_items":1000,"curated_through_sequence":9950,"coverage_spans":42,"coverage_gaps":0,"dangling_sources":0}
 ```
 
 ## 4. `memory source`
@@ -95,6 +95,15 @@ python -m bai_agent chat
 | 7 | 工具、权限或安全策略拒绝 |
 | 8 | 原子持久化失败 |
 | 130 | 用户取消/Ctrl+C |
+
+凭据事件命令：
+
+```powershell
+python -m bai_agent security incident check
+python -m bai_agent security incident acknowledge --rotation-reference REF --repository-scan-revision REV --runtime-scan-revision REV --disposition-record RECORD
+```
+
+`check` 在轮换引用、全仓库及全部可达 Git 历史扫描修订、运行数据/日志/追踪扫描修订和处置记录任一缺失时返回退出码 7；输出只含逻辑制品 ID、不可逆指纹、范围和确认状态，不含秘密值或真实绝对路径。该非零状态阻止阶段提交与交付。
 
 错误 JSON：
 

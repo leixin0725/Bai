@@ -1,4 +1,4 @@
-# Tasks: 持久记忆聊天 Agent
+﻿# Tasks: 持久记忆聊天 Agent
 
 **Input**: Design documents from `/specs/001-persistent-memory-agent/`
 
@@ -20,9 +20,9 @@
 
 **Purpose**: 建立 Python 包、测试目录和仓库忽略边界，不实现业务行为。
 
-- [ ] T001 在 `pyproject.toml` 定义 Python 3.13/3.14、`bai_agent` CLI 入口、运行依赖 `openai/pydantic/ruamel.yaml/filelock`、开发依赖 `pytest/pytest-asyncio/hypothesis/respx` 及 pytest markers
-- [ ] T002 [P] 按计划创建 `src/bai_agent/__init__.py`、`src/bai_agent/__main__.py` 与 `src/bai_agent/{domain,config,memory,prompting,providers,tools,states,runtime,security}/__init__.py`
-- [ ] T003 [P] 在 `.gitignore` 忽略 `.env`、虚拟环境、`data/`、运行日志、临时原子写文件、覆盖率产物和 Python 缓存，同时保留 `config/` 可提交
+- [X] T001 在 `pyproject.toml` 定义 Python 3.13/3.14、`bai_agent` CLI 入口、运行依赖 `openai/pydantic/ruamel.yaml/filelock`、开发依赖 `pytest/pytest-asyncio/hypothesis/respx` 及 pytest markers
+- [X] T002 [P] 按计划创建 `src/bai_agent/__init__.py`、`src/bai_agent/__main__.py` 与 `src/bai_agent/{domain,config,memory,prompting,providers,tools,states,runtime,security}/__init__.py`
+- [X] T003 [P] 在 `.gitignore` 忽略 `.env`、虚拟环境、`data/`、运行日志、临时原子写文件、覆盖率产物和 Python 缓存，同时保留 `config/` 可提交
 
 ---
 
@@ -34,34 +34,34 @@
 
 ### Design alignment gate（任何代码前完成）
 
-- [ ] T004 在 `specs/001-persistent-memory-agent/spec.md`、`specs/001-persistent-memory-agent/plan.md`、`specs/001-persistent-memory-agent/data-model.md`、`specs/001-persistent-memory-agent/contracts/configuration.md`、`specs/001-persistent-memory-agent/contracts/storage.md`、`specs/001-persistent-memory-agent/contracts/cli.md` 与 `specs/001-persistent-memory-agent/quickstart.md` 统一定义 MemoryCoverageOverview：它与长期记忆/来源/整理前沿保存在同一 `long_term.yaml` revision，由同一次 memory_curator 结构化响应更新而不新增 `memory_overview.md` 或第二次模型调用；每条已确认原始记录必须处于“尚在直接注入窗口”或“被连续 coverage span 覆盖”之一，空提取批次也扩展覆盖且缺口 fail-closed；同时统一 SC-008 为 10,000 条永久原始记录、规定 Windows 参考性能口径与三平台功能矩阵、定义确定性人格差异 oracle、POSIX/Windows DACL 判定、凭据事件阻塞命令、生产模块树，并消除 FR-026/FR-029 与 BR-004/BR-015 的重复措辞而不削弱不变量
+- [X] T004 在 `specs/001-persistent-memory-agent/spec.md`、`specs/001-persistent-memory-agent/plan.md`、`specs/001-persistent-memory-agent/data-model.md`、`specs/001-persistent-memory-agent/contracts/configuration.md`、`specs/001-persistent-memory-agent/contracts/storage.md`、`specs/001-persistent-memory-agent/contracts/cli.md` 与 `specs/001-persistent-memory-agent/quickstart.md` 统一定义 MemoryCoverageOverview：它与长期记忆/来源/整理前沿保存在同一 `long_term.yaml` revision，由同一次 memory_curator 结构化响应更新而不新增 `memory_overview.md` 或第二次模型调用；每条已确认原始记录必须处于“尚在直接注入窗口”或“被连续 coverage span 覆盖”之一，空提取批次也扩展覆盖且缺口 fail-closed；同时统一 SC-008 为 10,000 条永久原始记录、规定 Windows 参考性能口径与三平台功能矩阵、定义确定性人格差异 oracle、POSIX/Windows DACL 判定、凭据事件阻塞命令、生产模块树，并消除 FR-026/FR-029 与 BR-004/BR-015 的重复措辞而不削弱不变量
 
 ### Foundation tests（先写并确认失败）
 
-- [ ] T005 [P] 在 `tests/unit/test_domain_models.py` 为冻结 DTO、稳定 ID、UTC 时间、JSON 往返和非法枚举编写边界测试
-- [ ] T006 [P] 在 `tests/unit/test_config_validation.py` 为 TOML 类型、交叉字段约束、配置根路径边界、缺失外部凭据、ConfigSnapshot revision，以及入口清单引用的全部人格/提示文件存在、非空和引用图完整性编写测试
-- [ ] T007 [P] 在 `tests/unit/test_credentials.py` 与 `tests/unit/test_logging.py` 为凭据拒绝/不可逆脱敏及日志字段白名单编写泄露测试
-- [ ] T008 [P] 在 `tests/contract/test_ports.py` 为 ModelProvider、MemoryRepository、Tool、StateResolver 和 LoopPolicy 替身的结构契约与 JSON DTO 往返编写测试
+- [X] T005 [P] 在 `tests/unit/test_domain_models.py` 为冻结 DTO、稳定 ID、UTC 时间、JSON 往返和非法枚举编写边界测试
+- [X] T006 [P] 在 `tests/unit/test_config_validation.py` 为 TOML 类型、交叉字段约束、配置根路径边界、缺失外部凭据、ConfigSnapshot revision，以及入口清单引用的全部人格/提示文件存在、非空和引用图完整性编写测试
+- [X] T007 [P] 在 `tests/unit/test_credentials.py` 与 `tests/unit/test_logging.py` 为凭据拒绝/不可逆脱敏及日志字段白名单编写泄露测试
+- [X] T008 [P] 在 `tests/contract/test_ports.py` 为 ModelProvider、MemoryRepository、Tool、StateResolver 和 LoopPolicy 替身的结构契约与 JSON DTO 往返编写测试
 
 ### Foundation implementation
 
-- [ ] T009 [P] 在 `src/bai_agent/domain/models.py` 实现共享冻结 dataclass、Pydantic 边界模型、稳定 ID/时间/哈希值对象及 JSON 类型别名
-- [ ] T010 [P] 在 `src/bai_agent/domain/errors.py` 实现稳定领域错误码、安全消息和 retryable 语义，禁止泄漏正文、凭据和绝对路径
-- [ ] T011 在 `src/bai_agent/domain/ports.py` 定义存储、模型、工具、状态、配置时钟与循环 Protocol，保证核心层不导入供应商 SDK 类型
-- [ ] T012 在 `src/bai_agent/config/loader.py` 实现只读 TOML 基础加载、显式入口清单和每轮不可变 ConfigSnapshot
-- [ ] T013 在 `src/bai_agent/config/validation.py` 实现数值/引用/能力/本地数据根校验及配置根逃逸拒绝
-- [ ] T014 [P] 在 `src/bai_agent/security/credentials.py` 与 `src/bai_agent/security/redaction.py` 实现写入前凭据检测、拒绝/不可逆脱敏及秘密环境变量读取边界
-- [ ] T015 在 `src/bai_agent/runtime/tracing.py` 实现安全结构化日志基础设施，只允许稳定 ID、哈希、计数、时长、错误码和用量字段
-- [ ] T016 [P] 按已由 T004 对齐的 `specs/001-persistent-memory-agent/contracts/configuration.md` 创建无真实凭据的 `config/agent.toml`、`config/providers.toml`、`config/states.toml`、`config/tools.toml`、`config/logging.toml`、`config/personas/chat.md`、`config/personas/memory_curator.md`、`config/personas/states/default.md`、`config/prompts/chat_context.md`、`config/prompts/memory_curation.md` 与 `config/prompts/untrusted_memory_boundary.md` 基线文件
-- [ ] T017 在 `tests/conftest.py` 与 `tests/fakes.py` 实现隔离数据目录、确定性时钟/ID、FakeProvider、内存端口、输出捕获和故障注入共享 fixture
+- [X] T009 [P] 在 `src/bai_agent/domain/models.py` 实现共享冻结 dataclass、Pydantic 边界模型、稳定 ID/时间/哈希值对象及 JSON 类型别名
+- [X] T010 [P] 在 `src/bai_agent/domain/errors.py` 实现稳定领域错误码、安全消息和 retryable 语义，禁止泄漏正文、凭据和绝对路径
+- [X] T011 在 `src/bai_agent/domain/ports.py` 定义存储、模型、工具、状态、配置时钟与循环 Protocol，保证核心层不导入供应商 SDK 类型
+- [X] T012 在 `src/bai_agent/config/loader.py` 实现只读 TOML 基础加载、显式入口清单和每轮不可变 ConfigSnapshot
+- [X] T013 在 `src/bai_agent/config/validation.py` 实现数值/引用/能力/本地数据根校验及配置根逃逸拒绝
+- [X] T014 [P] 在 `src/bai_agent/security/credentials.py` 与 `src/bai_agent/security/redaction.py` 实现写入前凭据检测、拒绝/不可逆脱敏及秘密环境变量读取边界
+- [X] T015 在 `src/bai_agent/runtime/tracing.py` 实现安全结构化日志基础设施，只允许稳定 ID、哈希、计数、时长、错误码和用量字段
+- [X] T016 [P] 按已由 T004 对齐的 `specs/001-persistent-memory-agent/contracts/configuration.md` 创建无真实凭据的 `config/agent.toml`、`config/providers.toml`、`config/states.toml`、`config/tools.toml`、`config/logging.toml`、`config/personas/chat.md`、`config/personas/memory_curator.md`、`config/personas/states/default.md`、`config/prompts/chat_context.md`、`config/prompts/memory_curation.md` 与 `config/prompts/untrusted_memory_boundary.md` 基线文件
+- [X] T017 在 `tests/conftest.py` 与 `tests/fakes.py` 实现隔离数据目录、确定性时钟/ID、FakeProvider、内存端口、输出捕获和故障注入共享 fixture
 
 ### Foundation safety gates（首次提交前）
 
-- [ ] T018 [P] 在 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py` 扫描 `git ls-files` 覆盖的全部源码/注释/配置/人格/文档/测试、所有可达 Git 提交对象、工作区与暂存差异，以及存在时的 `build/`、`dist/`、运行日志、`data/runtime/prompt-traces/` 和隔离记忆 fixture；断言只允许明确无效占位符、可用凭据数量为 0，且扫描器自身输出不回显秘密值
-- [ ] T019 [P] 在 `tests/integration/test_credential_incident_response.py` 用仅写入临时隔离目录的受控假凭据覆盖源码/注释/文档、Git 历史替身、原始记忆、长期记忆、生成制品、日志和提示追踪的泄露定位；断言报告只含逻辑 ID、指纹和受影响范围，且 `security incident check` 在轮换、全仓库扫描、运行数据/日志扫描和处置记录全部确认前保持非零退出码
-- [ ] T020 在 `src/bai_agent/security/incidents.py` 与 `src/bai_agent/cli.py` 实现脱敏凭据指纹、受影响制品清单、处置 JSON、`security incident check` 和 `security incident acknowledge`：只有 rotation reference、repository scan revision、runtime/log scan revision 与处置记录齐全时才解除交付阻塞，任何输出均不得包含凭据或真实绝对路径
-- [ ] T021 在 `docs/security-incident-response.md` 编写停止传播、撤销/轮换 DeepSeek 及未来 Provider 凭据、检查全部 tracked files/可达 Git 历史/生成制品/记忆/日志/追踪、记录处置结果、执行 `security incident check` 和解除交付阻塞的操作手册
-- [ ] T022 运行 `tests/unit/test_domain_models.py`、`tests/unit/test_config_validation.py`、`tests/unit/test_credentials.py`、`tests/unit/test_logging.py`、`tests/contract/test_ports.py`、`tests/integration/test_repository_secret_safety.py`、`tests/integration/test_credential_incident_response.py` 与干净 fixture 上的 `python -m bai_agent security incident check`；仅暂存 `pyproject.toml`、`.gitignore`、`config/`、`docs/security-incident-response.md`、`specs/001-persistent-memory-agent/`、`src/bai_agent/domain/`、`src/bai_agent/config/`、`src/bai_agent/security/`、`src/bai_agent/cli.py`、`src/bai_agent/runtime/tracing.py` 及共享/Foundation 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 确认无无关文件且安全门禁未处于阻塞状态后创建 Foundation 原子提交
+- [X] T018 [P] 在 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py` 扫描 `git ls-files` 覆盖的全部源码/注释/配置/人格/文档/测试、所有可达 Git 提交对象、工作区与暂存差异，以及存在时的 `build/`、`dist/`、运行日志、`data/runtime/prompt-traces/` 和隔离记忆 fixture；断言只允许明确无效占位符、可用凭据数量为 0，且扫描器自身输出不回显秘密值
+- [X] T019 [P] 在 `tests/integration/test_credential_incident_response.py` 用仅写入临时隔离目录的受控假凭据覆盖源码/注释/文档、Git 历史替身、原始记忆、长期记忆、生成制品、日志和提示追踪的泄露定位；断言报告只含逻辑 ID、指纹和受影响范围，且 `security incident check` 在轮换、全仓库扫描、运行数据/日志扫描和处置记录全部确认前保持非零退出码
+- [X] T020 在 `src/bai_agent/security/incidents.py` 与 `src/bai_agent/cli.py` 实现脱敏凭据指纹、受影响制品清单、处置 JSON、`security incident check` 和 `security incident acknowledge`：只有 rotation reference、repository scan revision、runtime/log scan revision 与处置记录齐全时才解除交付阻塞，任何输出均不得包含凭据或真实绝对路径
+- [X] T021 在 `docs/security-incident-response.md` 编写停止传播、撤销/轮换 DeepSeek 及未来 Provider 凭据、检查全部 tracked files/可达 Git 历史/生成制品/记忆/日志/追踪、记录处置结果、执行 `security incident check` 和解除交付阻塞的操作手册
+- [X] T022 运行 `tests/unit/test_domain_models.py`、`tests/unit/test_config_validation.py`、`tests/unit/test_credentials.py`、`tests/unit/test_logging.py`、`tests/contract/test_ports.py`、`tests/integration/test_repository_secret_safety.py`、`tests/integration/test_credential_incident_response.py` 与干净 fixture 上的 `python -m bai_agent security incident check`；仅暂存 `pyproject.toml`、`.gitignore`、`config/`、`docs/security-incident-response.md`、`specs/001-persistent-memory-agent/`、`src/bai_agent/domain/`、`src/bai_agent/config/`、`src/bai_agent/security/`、`src/bai_agent/cli.py`、`src/bai_agent/runtime/tracing.py` 及共享/Foundation 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 确认无无关文件且安全门禁未处于阻塞状态后创建 Foundation 原子提交
 
 **Checkpoint**: 共享契约、非敏感配置、凭据事件处置和首次仓库安全门禁可用；用户故事实现可以按依赖关系开始。
 

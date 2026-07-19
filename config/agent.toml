@@ -1,0 +1,53 @@
+schema_version = 1
+agent_id = "bai"
+data_root = "../data"
+
+[personas]
+chat = "personas/chat.md"
+memory_curator = "personas/memory_curator.md"
+
+[prompts]
+chat_context = "prompts/chat_context.md"
+memory_curation = "prompts/memory_curation.md"
+untrusted_memory_boundary = "prompts/untrusted_memory_boundary.md"
+
+[archive]
+segment_max_records = 256
+segment_max_bytes = 1048576
+max_record_bytes = 262144
+
+[short_term]
+max_records = 48
+reserved_records = 8
+curation_batch_min_records = 8
+curation_batch_max_records = 24
+
+[context_budget]
+max_input_tokens = 65536
+trusted_instruction_tokens = 8192
+long_term_tokens = 16384
+short_term_tokens = 32768
+tool_result_tokens = 4096
+
+[memory_overview]
+max_chars = 12000
+max_spans = 2048
+
+[manual_memory]
+max_document_bytes = 8388608
+max_items = 10000
+reload_between_turns = true
+
+[autonomous_loop]
+enabled = false
+policy = "disabled"
+max_iterations = 0
+deadline_seconds = 0
+max_tokens = 0
+max_cost_units = 0
+
+[runtime]
+writer_lock_timeout_seconds = 0
+tool_deadline_seconds = 20
+max_tool_rounds = 4
+

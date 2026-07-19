@@ -6,7 +6,7 @@
 
 ## Summary
 
-实现一个面向单用户的 Python CLI 聊天 Agent。程序不创建会话或聊天线程，而是跨启动维护一个连续记忆空间：原始用户/Agent 记录永久明文归档，近期记录直接注入模型上下文；只有记录即将移出直接注入窗口时，才由独立的记忆整理人格批量提炼为便于人工维护的长期记忆，并在同一次原子提交中建立原始来源索引。
+实现一个面向单用户的 Python CLI 聊天 Agent。程序不创建会话或聊天线程，而是跨启动维护一个连续记忆空间：原始用户/Agent 记录永久明文归档，近期记录直接注入模型上下文；只有记录即将移出直接注入窗口时，才由独立的记忆整理人格通过一次结构化响应批量产生长期记忆候选与 `MemoryCoverageOverview` 更新，并将概览、来源索引、长期记忆和整理前沿在同一 `long_term.yaml` revision 原子提交。
 
 核心业务通过领域模型和端口隔离文件存储、模型供应商、提示组装、工具、状态解析与运行控制。首个模型适配器接入 DeepSeek 的 OpenAI 兼容接口；首版仅启用 `default` 状态、内置只读记忆来源查询工具和单轮控制器。所有提示词、模型名、URL、窗口/预算、重试和扩展开关均放在 `config/`，Python 代码不保存这些可变值。
 
@@ -16,7 +16,7 @@
 
 **Primary Dependencies**: `openai`（仅限 DeepSeek 适配器）、`pydantic`（配置与领域边界校验）、`ruamel.yaml`（保留人工注释的 YAML 往返编辑）、`filelock`（跨平台单写者锁）；标准库 `argparse`、`asyncio`、`tomllib`、`json`、`pathlib`、`logging`
 
-**Storage**: 本地明文文件；原始记录使用有界 JSONL 分段，长期记忆、来源索引及整理前沿使用单个可人工编辑的 YAML 文档，提示追踪使用不含正文的原子 JSON；不引入数据库
+**Storage**: 本地明文文件；原始记录使用有界 JSONL 分段，长期记忆、来源索引、`MemoryCoverageOverview` 及整理前沿使用单个可人工编辑的 YAML 文档，提示追踪使用不含正文的原子 JSON；不引入独立概览文件、第二事实来源或数据库
 
 **Testing**: `pytest`、`pytest-asyncio`、`hypothesis`、`respx`；包含单元、属性、契约、集成、故障注入与 10,000/1,000 规模测试
 
@@ -32,7 +32,7 @@
 
 **Project Type**: 可复用 Python 包 + CLI 应用
 
-**Performance Goals**: 10,000 条原始记录和 1,000 条长期记忆下，95% 冷启动在 3 秒内完成首轮可用加载；除模型网络时间外，持久化、记忆选择和提示组装保持线性于当前分段/候选集且不扫描原始正文全集
+**Performance Goals**: 指定 Windows 参考环境中，10,000 条永久原始记录和 1,000 条长期记忆下至少 100 次全新进程启动的 nearest-rank p95 不超过 3 秒；计时从进程创建到配置、原始索引、长期 YAML 与覆盖概览可供首轮组装，网络调用为 0。Windows/Ubuntu/macOS × Python 3.13/3.14 另运行功能矩阵，不在非参考环境判定 3 秒门槛
 
 **Constraints**: 所有可变参数与提示词配置化；原始记录永久保留；长期记忆可直接人工编辑；任何写入中断不得暴露半条确认记录；单次模型输入受配置预算限制；外部工具和自主循环默认禁用；明文记忆的安全边界必须明确可见
 
@@ -124,9 +124,12 @@ src/bai_agent/
 │   └── resolver.py
 ├── runtime/
 │   ├── controller.py
+│   ├── loops.py
 │   └── tracing.py
 └── security/
     ├── credentials.py
+    ├── incidents.py
+    ├── permissions.py
     └── redaction.py
 
 data/
@@ -147,6 +150,9 @@ tests/
 ├── fault_injection/
 ├── performance/
 └── fixtures/
+
+.github/workflows/
+└── compatibility.yml
 ```
 
 **Structure Decision**: 采用单一 Python 包，保持从 `application` 到领域端口、再到文件/供应商适配器的单向依赖。`config/` 是所有提示词和可变参数的唯一维护入口；`data/` 只保存运行数据，不混入人格或代码。工具、状态解析和运行控制各自只有一个首版实现，但接口允许未来新增实现而不改变记忆核心。

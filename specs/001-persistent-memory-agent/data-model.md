@@ -64,7 +64,8 @@ record_id -> (segment_path, byte_offset, byte_length, global_sequence)
 |---|---|---:|---|
 | `schema_version` | integer | yes | 未知版本 fail closed，不静默迁移 |
 | `revision` | integer | yes | 每次程序提交递增；人工修改需经校验后生成下一修订 |
-| `curation` | CurationCheckpoint | yes | 与 `memories` 在同一次原子替换中提交 |
+| `curation` | CurationCheckpoint | yes | 与 `memories`、`coverage_overview` 在同一次原子替换中提交 |
+| `coverage_overview` | MemoryCoverageOverview | yes | revision 必须与根文档相同；连续覆盖 `1..curated_through_sequence` |
 | `memories` | list[LongTermMemoryItem] | yes | ID 唯一；允许空列表 |
 
 加载规则：
@@ -91,7 +92,19 @@ record_id -> (segment_path, byte_offset, byte_length, global_sequence)
 - `curated_through_sequence` 只有在新的长期记忆/修正、全部来源关系和批次元数据共同写入成功后才生效。
 - 人工直接提高该字段而没有可验证批次时拒绝加载；人工降低会导致重复整理，也必须通过显式维护命令确认，首版普通加载不接受。
 
-## 5. LongTermMemoryItem（长期记忆项）
+## 5. MemoryCoverageOverview（记忆覆盖概览）
+
+`MemoryCoverageOverview` 不是独立文件或第二份摘要，而是 `long_term.yaml` 根对象的一部分；记忆整理人格的一次结构化响应同时返回长期候选和 overview update，宿主校验后联合提交。
+
+| Field | Type | Required | Rules |
+|---|---|---:|---|
+| `revision` | integer | yes | 必须等于根文档 `revision` |
+| `text` | string | yes | 有界概览；空提取批次也可保持/更新该文本 |
+| `coverage_spans` | list[CoverageSpan] | yes | 从 1 到整理前沿连续、无重叠、无缺口 |
+
+`CoverageSpan` 包含 `start_sequence`、`end_sequence`、`batch_id`、有序 `record_ids` 与 `records_sha256`。所有记录必须存在且范围、顺序和摘要一致。每条已确认记录必须满足：序号不大于整理前沿且被恰好一个 span 覆盖，或序号大于整理前沿且仍处于直接注入窗口；否则提示组装 fail closed。
+
+## 6. LongTermMemoryItem（长期记忆项）
 
 | Field | Type | Required | Rules |
 |---|---|---:|---|
@@ -114,7 +127,7 @@ record_id -> (segment_path, byte_offset, byte_length, global_sequence)
 - 稳定事实选择只使用 `active` 项；历史状态仍可查询和追溯。
 - YAML 注释由 round-trip 读写尽量保留；程序新增解释性注释使用简体中文日期/版本痕迹。
 
-## 6. SourceReference（来源引用）
+## 7. SourceReference（来源引用）
 
 | Field | Type | Required | Rules |
 |---|---|---:|---|
@@ -131,7 +144,7 @@ record_id -> referencing memory_id[]
 
 查询结果按对应 RawRecord 的 `global_sequence` 升序排列，稳定 ID 仅用于并列裁决。
 
-## 7. PersonaProfile（人格配置）
+## 8. PersonaProfile（人格配置）
 
 | Field | Type | Rules |
 |---|---|---|
@@ -145,7 +158,7 @@ record_id -> referencing memory_id[]
 
 人格提示只描述职责和行为，不保存记忆、凭据、窗口阈值或供应商秘密。聊天人格不能替代记忆整理人格执行自动长期记忆写入。
 
-## 8. AgentStateDefinition / StateResolution
+## 9. AgentStateDefinition / StateResolution
 
 `AgentStateDefinition` 来自 `states.toml`：
 
@@ -157,7 +170,7 @@ record_id -> referencing memory_id[]
 
 `StateResolution` 是每轮不可变结果：`state_id`、`ordered_persona_ids`、`resolver_id`、`resolver_version`、`reason_code`。首版 `StaticStateResolver` 只读配置，不因用户、记忆或模型文本改变结果。未来解析器也只能返回配置允许的状态/人格 ID，不能直接注入提示正文。
 
-## 9. ProviderProfile 与模型对象
+## 10. ProviderProfile 与模型对象
 
 ### ProviderProfile
 
@@ -171,7 +184,7 @@ record_id -> referencing memory_id[]
 
 规范化文本、工具调用、结束原因、用量和非敏感供应商元数据。`reasoning_content` 仅允许作为 DeepSeek 适配器内部的短期协议状态，不进入领域记录、提示追踪或普通日志。
 
-## 10. PromptContext
+## 11. PromptContext
 
 | Field | Type | Rules |
 |---|---|---|
@@ -190,7 +203,7 @@ record_id -> referencing memory_id[]
 
 固定组装顺序为可信基础人格、可信状态人格、长期记忆摘要/选中项、近期原始记录、工具定义、当前输入。来源工具返回只追加到发起调用的当前 `flow_id`。
 
-## 11. CurationBatch / CurationProposal
+## 12. CurationBatch / CurationProposal
 
 ### CurationBatch
 
@@ -208,7 +221,7 @@ record_id -> referencing memory_id[]
 - 关系和 `supersedes` 无环、无悬空引用。
 - 对人工项没有静默覆盖。
 
-## 12. 工具对象
+## 13. 工具对象
 
 ### ToolDefinition
 
@@ -226,7 +239,7 @@ record_id -> referencing memory_id[]
 
 输入仅含 `memory_id` 和可选不透明 `cursor`；页大小来自可信配置。输出包含记忆/索引修订、来源总数、有序来源、下一游标。不得返回磁盘路径或允许任意全文/路径查询。实现只获得只读仓库端口。
 
-## 13. Turn 与 Flow 状态转换
+## 14. Turn 与 Flow 状态转换
 
 ### 单轮转换
 
@@ -269,7 +282,7 @@ proposed -> parsed -> schema_validated -> authorized -> executed -> returned
 
 任何分支都产生稳定审计元数据；审计不复制来源正文或工具参数中的敏感文本。
 
-## 14. 扩展声明
+## 15. 扩展声明
 
 | Extension | First implementation | Default | Future replacement rule |
 |---|---|---|---|
@@ -279,7 +292,7 @@ proposed -> parsed -> schema_validated -> authorized -> executed -> returned
 | LoopPolicy | `DisabledLoopPolicy` | STOP | Runner 复用 SingleTurnController，必须有界 |
 | Storage | segmented files/YAML | local filesystem | 迁移实现须保持端口和不变量 |
 
-## 15. 业务规则测试映射
+## 16. 业务规则测试映射
 
 | Rules | Automated evidence |
 |---|---|

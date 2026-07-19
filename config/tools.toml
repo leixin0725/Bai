@@ -1,0 +1,17 @@
+schema_version = 1
+
+[[tools]]
+id = "memory_source_query"
+enabled = true
+implementation = "builtin.memory_source_query"
+allowed_personas = ["*"]
+read_only = true
+destructive = false
+idempotent = true
+open_world = false
+page_size = 16
+max_result_bytes = 131072
+
+[future_tools]
+default_enabled = false
+

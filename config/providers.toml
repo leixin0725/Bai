@@ -1,0 +1,41 @@
+schema_version = 1
+
+[[providers]]
+id = "deepseek"
+adapter = "deepseek_openai_compatible"
+base_url = "https://api.deepseek.com"
+api_key_env = "DEEPSEEK_API_KEY"
+local_concurrency = 1
+
+[providers.timeout]
+connect_seconds = 10
+read_seconds = 120
+total_seconds = 150
+
+[providers.retry]
+max_attempts = 3
+initial_backoff_seconds = 1
+max_backoff_seconds = 8
+jitter = true
+retryable_statuses = [429, 500, 503]
+
+[model_profiles.chat]
+provider = "deepseek"
+model = "deepseek-chat"
+stream = false
+thinking_enabled = false
+max_output_tokens = 8192
+temperature = 0.7
+tools_enabled = true
+structured_output = false
+
+[model_profiles.memory_curator]
+provider = "deepseek"
+model = "deepseek-chat"
+stream = false
+thinking_enabled = false
+max_output_tokens = 8192
+tools_enabled = true
+structured_output = true
+output_schema = "memory_curation_v1"
+

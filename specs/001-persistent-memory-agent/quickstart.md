@@ -112,8 +112,9 @@ python -m bai_agent --config-dir tests\fixtures\config-small-window --data-dir .
 1. 阈值前不调用 `memory_curator`。
 2. 边界处由 `config/personas/memory_curator.md` 批量生成结构化候选。
 3. `long_term.yaml` 中新项含一个或多个有效 `source_refs`。
-4. `curation.curated_through_sequence` 与新记忆/来源在同一次 revision 中推进。
-5. JSONL 原始记录数量和内容哈希不减少。
+4. `coverage_overview`、`curation.curated_through_sequence` 与新记忆/来源在同一次 revision 中推进；空提取批次也新增连续 coverage span。
+5. 从 sequence 1 到最新记录，每条记录均被 coverage span 覆盖或仍完整处于近期直接窗口；缺口必须阻止生成。
+6. JSONL 原始记录数量和内容哈希不减少。
 
 用故障注入配置令整理模型或 YAML replace 失败；本轮应在聊天 Provider 调用前停止，前沿不变。恢复故障后重试才允许修剪直接注入范围。
 
@@ -152,13 +153,13 @@ python -m bai_agent memory validate
 
 ## 9. 性能验收
 
-性能 fixture 生成 10,000 条原始记录和 1,000 条长期记忆，随后在目标 Windows 环境执行至少 20—30 次全新进程启动：
+性能 fixture 生成 10,000 条永久原始记录（仅配置上限内仍属近期直接窗口）和 1,000 条长期记忆，随后在指定 Windows 参考环境执行至少 100 次全新进程启动：
 
 ```powershell
 pytest tests\performance\test_startup.py -m performance
 ```
 
-预期 p95 在 3 秒内使首轮记忆可用。报告分别列出配置读取、JSONL 索引、YAML 解析和来源校验耗时；启动阶段不得发 DeepSeek 网络请求。只有实测失败后才考虑可重建索引缓存，缓存不能成为权威数据。
+计时从进程创建开始，到配置、JSONL 索引、长期 YAML 与 `MemoryCoverageOverview` 可供首轮组装为止；按 nearest-rank 计算的 p95 不超过 3 秒。报告记录 OS、CPU、内存、存储、Python 和缓存策略；启动阶段不得发 DeepSeek 网络请求。Windows/Ubuntu/macOS × Python 3.13/3.14 功能矩阵分别验证安装、入口、权限归一化、原子替换和 UTF-8，3 秒门槛只在 Windows 参考环境判定。只有实测失败后才考虑可重建索引缓存，缓存不能成为权威数据。
 
 ## 10. 提交门禁
 
@@ -168,6 +169,7 @@ pytest tests\performance\test_startup.py -m performance
 pytest
 python -m bai_agent config validate --config-dir config
 python -m bai_agent memory validate
+python -m bai_agent security incident check
 git diff --check
 git status --short
 ```

@@ -59,6 +59,10 @@ long_term_tokens = 16384
 short_term_tokens = 32768
 tool_result_tokens = 4096
 
+[memory_overview]
+max_chars = 12000
+max_spans = 2048
+
 [manual_memory]
 max_document_bytes = 8388608
 max_items = 10000
@@ -192,7 +196,7 @@ default_enabled = false
 
 - Markdown 只保存提示正文；职责、模型参数、权限和阈值留在 TOML。
 - `chat.md`、`memory_curator.md` 和每个状态人格为独立文件，统一由同一加载器处理。
-- 记忆整理人格必须明确要求 JSON、给出目标结构，并声明只处理当前批次。
+- 记忆整理人格必须明确要求一次完整 JSON 响应同时给出长期记忆候选与 `overview_update`，并声明只处理当前批次；不得通过 `memory_overview.md`、第二次模型调用或第二事实来源生成概览。
 - 所有运行时插槽使用 `string.Template` 标识符；实际标识符必须与入口清单允许集合完全一致。
 - 不使用 `safe_substitute()`；缺失、额外或畸形变量均 fail closed。
 - 历史记录、长期记忆、工具结果只能填入标记为 `untrusted_data` 的插槽，不得进入可信指令插槽。

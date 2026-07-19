@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+.venv/
+venv/
+.python-version
 *.key
 *.pem
 *.p12
@@ -18,3 +21,25 @@ Thumbs.db
 *.tmp
 *.swp
 *.log
+
+# [2026-07-19] 运行记忆、原子临时文件和诊断产物不得进入版本库；config/ 明确保留。
+data/
+*.tmp-atomic-*
+*.atomic.tmp
+build/
+dist/
+*.egg-info/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.hypothesis/
+__pycache__/
+*.py[cod]
+
+# [2026-07-19] 本地测试与类型检查缓存可以安全重建。
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
