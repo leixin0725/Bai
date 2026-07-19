@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 from pathlib import Path
 import sys
@@ -23,6 +24,14 @@ def _parser() -> argparse.ArgumentParser:
     config = commands.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command", required=True)
     config_sub.add_parser("validate")
+
+    chat = commands.add_parser("chat")
+    chat.add_argument("--resume-pending", action="store_true")
+
+    memory = commands.add_parser("memory")
+    memory_sub = memory.add_subparsers(dest="memory_command", required=True)
+    memory_sub.add_parser("validate")
+    commands.add_parser("doctor")
 
     security = commands.add_parser("security")
     security_sub = security.add_subparsers(dest="security_command", required=True)
@@ -67,12 +76,62 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = store.check()
             _print({"ok": report.cleared, **report.model_dump()})
             return 0 if report.cleared else 7
+        if args.command == "memory" and args.memory_command == "validate":
+            from bai_agent.memory.archive import RawRecordArchive
+
+            snapshot = load_config(args.config_dir, require_credentials=False)
+            archive = RawRecordArchive(args.data_dir / "memory")
+            records = archive.read_all()
+            archive.validate_permissions()
+            _print({"ok": True, "raw_records": len(records), "config_revision": snapshot.revision})
+            return 0
+        if args.command == "doctor":
+            from bai_agent.memory.archive import RawRecordArchive
+
+            snapshot = load_config(args.config_dir, require_credentials=False)
+            archive = RawRecordArchive(args.data_dir / "memory")
+            archive.read_all()
+            archive.validate_permissions()
+            _print(
+                {
+                    "ok": True,
+                    "config_revision": snapshot.revision,
+                    "state": snapshot.default_state_id,
+                    "network_probe": False,
+                }
+            )
+            return 0
+        if args.command == "chat":
+            from bai_agent.application import build_application
+
+            app = build_application(args.config_dir, args.data_dir, on_output=print)
+            try:
+                pending = app.archive.pending_turn()
+                if pending and not args.resume_pending:
+                    _print({"ok": False, "pending_turn_id": pending.turn_id, "resume_required": True})
+                    return 5
+                if pending and args.resume_pending:
+                    asyncio.run(app.run_turn(pending.content, resume_pending=True, turn_id=pending.turn_id))
+                for line in sys.stdin:
+                    content = line.rstrip("\r\n")
+                    if content:
+                        asyncio.run(app.run_turn(content))
+                return 0
+            finally:
+                app.close()
     except BaiError as exc:
         _print({"ok": False, "error": exc.as_dict()})
+        if exc.code == "WRITER_LOCKED":
+            return 4
+        if exc.code.startswith("RAW_") or exc.code.startswith("MEMORY_"):
+            return 5
+        if exc.code.startswith("PROVIDER_"):
+            return 6
         return 3 if exc.code.startswith("CREDENTIAL") else 2
+    except KeyboardInterrupt:
+        return 130
     return 2
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

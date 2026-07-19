@@ -75,32 +75,32 @@
 
 ### Tests for User Story 1（先写并确认失败）
 
-- [ ] T023 [P] [US1] 在 `tests/unit/test_raw_record_archive.py` 为 BR-001/BR-002 的 RawRecord 序列、turn 配对、Unicode/多行正文、校验和与分段滚动编写单元和 Hypothesis 属性测试
-- [ ] T024 [P] [US1] 在 `tests/integration/test_persistence_order.py` 为 BR-003 编写“用户输入早于 Provider 调用、Assistant 输出早于 stdout、失败内容不确认”的调用顺序测试
-- [ ] T025 [P] [US1] 在 `tests/fault_injection/test_raw_atomicity.py` 为 BR-001/BR-003 覆盖临时创建、写入、flush、fsync、replace 前后中断和尾段半行损坏恢复
-- [ ] T026 [P] [US1] 在 `tests/integration/test_restart_continuity.py` 为 BR-001/BR-002 实现 100 轮、10 次重启、空记忆、大量记忆及单一全局顺序验收测试
-- [ ] T027 [P] [US1] 在 `tests/integration/test_writer_lock.py` 验证两个子进程竞争 `data/memory/.state/writer.lock` 时恰好一个获得写权且失败方不改文件
-- [ ] T028 [P] [US1] 在 `tests/contract/test_deepseek_provider.py` 覆盖完整响应、错误归一化、有界重试、取消、截断、流中断不得成功及 `reasoning_content` 不外泄
-- [ ] T029 [P] [US1] 在 `tests/contract/test_cli_chat.py` 覆盖无会话/线程命令、稳定退出码、Ctrl+C/EOF、pending turn 报告和 `--resume-pending` 幂等语义
-- [ ] T030 [P] [US1] 在 `tests/unit/test_static_state_resolver.py` 验证任意用户/记忆/工具正文都不能改变默认状态，每轮 resolution 含 resolver/version/reason，且持久化 RawRecord 带 `state_id`
-- [ ] T031 [P] [US1] 在 `tests/contract/test_mvp_prompt_context.py` 为 BR-005 验证基础人格、默认状态、允许为空但结构有效的长期记忆段、近期原文和当前输入均按确定顺序存在，缺少任一强制段时生成前失败
-- [ ] T032 [P] [US1] 在 `tests/integration/test_raw_file_permissions.py` 验证新建目录/文件在 POSIX 分别收紧为 `0700`/`0600`；Windows DACL 仅允许当前用户、SYSTEM 与 Administrators，且 Everyone/Users/Authenticated Users 的读写 allow ACE 判为 `too_broad`，ACL 查询失败、网络共享或无法识别继承链判为 `unverifiable`；两种异常均必须产生稳定安全告警并使 `memory validate`/`doctor` 返回安全失败
+- [X] T023 [P] [US1] 在 `tests/unit/test_raw_record_archive.py` 为 BR-001/BR-002 的 RawRecord 序列、turn 配对、Unicode/多行正文、校验和与分段滚动编写单元和 Hypothesis 属性测试
+- [X] T024 [P] [US1] 在 `tests/integration/test_persistence_order.py` 为 BR-003 编写“用户输入早于 Provider 调用、Assistant 输出早于 stdout、失败内容不确认”的调用顺序测试
+- [X] T025 [P] [US1] 在 `tests/fault_injection/test_raw_atomicity.py` 为 BR-001/BR-003 覆盖临时创建、写入、flush、fsync、replace 前后中断和尾段半行损坏恢复
+- [X] T026 [P] [US1] 在 `tests/integration/test_restart_continuity.py` 为 BR-001/BR-002 实现 100 轮、10 次重启、空记忆、大量记忆及单一全局顺序验收测试
+- [X] T027 [P] [US1] 在 `tests/integration/test_writer_lock.py` 验证两个子进程竞争 `data/memory/.state/writer.lock` 时恰好一个获得写权且失败方不改文件
+- [X] T028 [P] [US1] 在 `tests/contract/test_deepseek_provider.py` 覆盖完整响应、错误归一化、有界重试、取消、截断、流中断不得成功及 `reasoning_content` 不外泄
+- [X] T029 [P] [US1] 在 `tests/contract/test_cli_chat.py` 覆盖无会话/线程命令、稳定退出码、Ctrl+C/EOF、pending turn 报告和 `--resume-pending` 幂等语义
+- [X] T030 [P] [US1] 在 `tests/unit/test_static_state_resolver.py` 验证任意用户/记忆/工具正文都不能改变默认状态，每轮 resolution 含 resolver/version/reason，且持久化 RawRecord 带 `state_id`
+- [X] T031 [P] [US1] 在 `tests/contract/test_mvp_prompt_context.py` 为 BR-005 验证基础人格、默认状态、允许为空但结构有效的长期记忆段、近期原文和当前输入均按确定顺序存在，缺少任一强制段时生成前失败
+- [X] T032 [P] [US1] 在 `tests/integration/test_raw_file_permissions.py` 验证新建目录/文件在 POSIX 分别收紧为 `0700`/`0600`；Windows DACL 仅允许当前用户、SYSTEM 与 Administrators，且 Everyone/Users/Authenticated Users 的读写 allow ACE 判为 `too_broad`，ACL 查询失败、网络共享或无法识别继承链判为 `unverifiable`；两种异常均必须产生稳定安全告警并使 `memory validate`/`doctor` 返回安全失败
 
 ### Implementation for User Story 1
 
-- [ ] T033 [P] [US1] 在 `src/bai_agent/memory/recovery.py` 实现同目录临时写、flush、fsync、replace、残留临时文件识别和平台目录同步的原子写基础
-- [ ] T034 [P] [US1] 在 `src/bai_agent/security/permissions.py` 实现 T004 契约规定的 POSIX mode 与 Windows DACL 检查/尽力收紧，拒绝跟随越界符号链接或 junction，并统一返回 `private`、`too_broad`、`unverifiable` 状态、稳定错误码和不含真实绝对路径的安全告警
-- [ ] T035 [US1] 在 `src/bai_agent/memory/archive.py` 实现有界 JSONL 尾段重写、段滚动、严格全局序列、RawRecord 校验和、永久归档追加及共享权限门禁
-- [ ] T036 [US1] 在 `src/bai_agent/memory/recovery.py` 实现正式段扫描、offset 派生索引、损坏隔离、序号缺口拒绝、单写者锁生命周期和 pending turn 恢复
-- [ ] T037 [P] [US1] 在 `src/bai_agent/providers/deepseek.py` 实现隔离 OpenAI SDK 的 DeepSeek 完整响应适配器、配置参数映射、错误归一化和供应商字段过滤
-- [ ] T038 [US1] 在 `src/bai_agent/providers/registry.py` 实现按配置选择 ModelProvider/profile、能力预检和未知适配器 fail-closed
-- [ ] T039 [P] [US1] 在 `src/bai_agent/states/resolver.py` 实现首版只返回配置默认状态的 StaticStateResolver，使每条 RawRecord 都带显式 `state_id`
-- [ ] T040 [P] [US1] 在 `src/bai_agent/prompting/assembler.py` 实现供 MVP 使用的基础人格、默认状态、有效长期记忆段、确定性近期原文和当前输入 PromptContext 组装，并通过端口接收全部内容而不硬编码提示词
-- [ ] T041 [US1] 在 `src/bai_agent/runtime/controller.py` 实现 SingleTurnController 的输入先存、状态解析、强制提示段校验、完整生成、输出先存、幂等 turn ID、失败保留输入和安全取消顺序
-- [ ] T042 [US1] 在 `src/bai_agent/application.py` 连接配置快照、写锁、原始归档、权限检查、状态解析、提示组装、Provider 与安全追踪用例
-- [ ] T043 [US1] 在 `src/bai_agent/cli.py` 实现 `chat` 与原始归档版 `memory validate`、全局路径选项、稳定 JSON/错误输出、权限告警和 `--resume-pending`
-- [ ] T044 [US1] 在 `src/bai_agent/__main__.py` 连接 CLI 入口、异步生命周期、Ctrl+C 退出码和锁释放，且不提供任何会话选择功能
-- [ ] T045 [US1] 运行 `tests/unit/test_raw_record_archive.py`、`tests/integration/test_persistence_order.py`、`tests/fault_injection/test_raw_atomicity.py`、`tests/integration/test_restart_continuity.py`、`tests/integration/test_writer_lock.py`、`tests/contract/test_deepseek_provider.py`、`tests/contract/test_cli_chat.py`、`tests/unit/test_static_state_resolver.py`、`tests/contract/test_mvp_prompt_context.py`、`tests/integration/test_raw_file_permissions.py`、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/memory/`、`src/bai_agent/providers/`、`src/bai_agent/security/permissions.py`、`src/bai_agent/states/resolver.py`、`src/bai_agent/prompting/assembler.py`、`src/bai_agent/runtime/controller.py`、`src/bai_agent/application.py`、`src/bai_agent/cli.py`、`src/bai_agent/__main__.py` 与 US1 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US1 原子提交
+- [X] T033 [P] [US1] 在 `src/bai_agent/memory/recovery.py` 实现同目录临时写、flush、fsync、replace、残留临时文件识别和平台目录同步的原子写基础
+- [X] T034 [P] [US1] 在 `src/bai_agent/security/permissions.py` 实现 T004 契约规定的 POSIX mode 与 Windows DACL 检查/尽力收紧，拒绝跟随越界符号链接或 junction，并统一返回 `private`、`too_broad`、`unverifiable` 状态、稳定错误码和不含真实绝对路径的安全告警
+- [X] T035 [US1] 在 `src/bai_agent/memory/archive.py` 实现有界 JSONL 尾段重写、段滚动、严格全局序列、RawRecord 校验和、永久归档追加及共享权限门禁
+- [X] T036 [US1] 在 `src/bai_agent/memory/recovery.py` 实现正式段扫描、offset 派生索引、损坏隔离、序号缺口拒绝、单写者锁生命周期和 pending turn 恢复
+- [X] T037 [P] [US1] 在 `src/bai_agent/providers/deepseek.py` 实现隔离 OpenAI SDK 的 DeepSeek 完整响应适配器、配置参数映射、错误归一化和供应商字段过滤
+- [X] T038 [US1] 在 `src/bai_agent/providers/registry.py` 实现按配置选择 ModelProvider/profile、能力预检和未知适配器 fail-closed
+- [X] T039 [P] [US1] 在 `src/bai_agent/states/resolver.py` 实现首版只返回配置默认状态的 StaticStateResolver，使每条 RawRecord 都带显式 `state_id`
+- [X] T040 [P] [US1] 在 `src/bai_agent/prompting/assembler.py` 实现供 MVP 使用的基础人格、默认状态、有效长期记忆段、确定性近期原文和当前输入 PromptContext 组装，并通过端口接收全部内容而不硬编码提示词
+- [X] T041 [US1] 在 `src/bai_agent/runtime/controller.py` 实现 SingleTurnController 的输入先存、状态解析、强制提示段校验、完整生成、输出先存、幂等 turn ID、失败保留输入和安全取消顺序
+- [X] T042 [US1] 在 `src/bai_agent/application.py` 连接配置快照、写锁、原始归档、权限检查、状态解析、提示组装、Provider 与安全追踪用例
+- [X] T043 [US1] 在 `src/bai_agent/cli.py` 实现 `chat` 与原始归档版 `memory validate`、全局路径选项、稳定 JSON/错误输出、权限告警和 `--resume-pending`
+- [X] T044 [US1] 在 `src/bai_agent/__main__.py` 连接 CLI 入口、异步生命周期、Ctrl+C 退出码和锁释放，且不提供任何会话选择功能
+- [X] T045 [US1] 运行 `tests/unit/test_raw_record_archive.py`、`tests/integration/test_persistence_order.py`、`tests/fault_injection/test_raw_atomicity.py`、`tests/integration/test_restart_continuity.py`、`tests/integration/test_writer_lock.py`、`tests/contract/test_deepseek_provider.py`、`tests/contract/test_cli_chat.py`、`tests/unit/test_static_state_resolver.py`、`tests/contract/test_mvp_prompt_context.py`、`tests/integration/test_raw_file_permissions.py`、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/memory/`、`src/bai_agent/providers/`、`src/bai_agent/security/permissions.py`、`src/bai_agent/states/resolver.py`、`src/bai_agent/prompting/assembler.py`、`src/bai_agent/runtime/controller.py`、`src/bai_agent/application.py`、`src/bai_agent/cli.py`、`src/bai_agent/__main__.py` 与 US1 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US1 原子提交
 
 **Checkpoint**: US1 可独立运行和验收；这是建议的首个可演示 MVP。
 

@@ -134,6 +134,7 @@ class CompletionResult(FrozenModel):
 
 class StateResolutionContext(FrozenModel):
     turn_id: str
+    untrusted_text: str = ""
 
 
 class StateResolutionResult(FrozenModel):
@@ -142,6 +143,22 @@ class StateResolutionResult(FrozenModel):
     resolver_id: str
     resolver_version: str
     reason_code: str
+
+
+class PromptSegment(FrozenModel):
+    segment_id: str
+    trust: TrustLevel
+    content: str
+    source_ids: tuple[str, ...] = ()
+
+
+class PromptContext(FrozenModel):
+    flow_id: str
+    turn_id: str
+    config_revision: str
+    state_resolution: StateResolutionResult
+    segments: tuple[PromptSegment, ...]
+    source_manifest: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
