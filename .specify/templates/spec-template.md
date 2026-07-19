@@ -119,6 +119,18 @@
 - **CR-001**: System MUST [inject, restrict, rotate, redact, or otherwise protect the credential]
 - **CR-002**: System MUST NOT expose credentials through [repository, logs, UI, exports, or errors]
 
+### Documentation Requirements *(mandatory for major updates)*
+
+<!--
+  Identify the README, quickstart, runbook, configuration guide, public contract, or
+  other project documentation that must change with a major update. Describe the
+  user/operator-visible content and validation outcome, not prose-writing details.
+  Remove this subsection only when the feature is not a major update; the plan must
+  then record the documentation impact as N/A with a reason.
+-->
+
+- **DR-001**: [Affected project documentation MUST reflect the updated behavior, commands, configuration, compatibility, migration/recovery, and validation details that apply]
+
 ### Key Entities *(include if feature involves data)*
 
 - **[Entity 1]**: [What it represents, key attributes without implementation]

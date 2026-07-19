@@ -131,6 +131,9 @@ Given that feature description, do this:
        If no clear user flow: ERROR "Cannot determine user scenarios"
     5. Generate Functional Requirements
        Each requirement must be testable
+       If the feature is a major update, identify affected project documentation and the
+       behavior, commands, configuration, compatibility, migration/recovery, and validation
+       details it must reflect; otherwise let planning record documentation impact as N/A with a reason
        Use reasonable defaults for unspecified details (document assumptions in Assumptions section)
     6. Define Success Criteria
        Create measurable, technology-agnostic outcomes

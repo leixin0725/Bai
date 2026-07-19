@@ -105,6 +105,7 @@ Load only the minimal necessary context from each artifact:
 **From spec.md:**
 
 - Functional Requirements (FR-###)
+- Documentation Requirements (DR-###), when present
 - Success Criteria (SC-###) — include only items requiring buildable work; exclude
   post-launch outcome metrics and business KPIs
 - User Stories and their Acceptance Scenarios
@@ -130,7 +131,7 @@ Load only the minimal necessary context from each artifact:
 
 Create an internal model (do not echo raw artifacts):
 
-- **Requirements inventory**: one stable key per FR-### / SC-### / user-story acceptance
+- **Requirements inventory**: one stable key per FR-### / DR-### / SC-### / user-story acceptance
   scenario (e.g. `US1/AC2`), plus the plan decisions and constitution principles that
   impose buildable obligations.
 - **Code-scope map**: from the file paths named in `plan.md` and `tasks.md`, plus a keyword

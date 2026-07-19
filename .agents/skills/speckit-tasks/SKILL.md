@@ -68,6 +68,9 @@ You **MUST** consider the user input before proceeding (if not empty).
    - If data-model.md exists: Extract entities and map to user stories
    - If contracts/ exists: Map interface contracts to user stories
    - If research.md exists: Extract decisions for setup tasks
+   - Extract Documentation Impact and Documentation Requirements; for every major update,
+     generate documentation-update and validation tasks with exact affected paths in the
+     same phase, before its completion checkpoint and atomic commit
    - Generate tasks organized by user story (see Task Generation Rules below)
    - Generate dependency graph showing user story completion order
    - Create parallel execution examples per user story
@@ -144,6 +147,12 @@ business rule identified in the specification, even when the user did not explic
 for tests. Generate other test tasks when required by the specification, plan, contracts,
 or risk. Test tasks MUST precede their corresponding implementation tasks.
 
+**Major-update documentation sync is MANDATORY**: For every major update, generate tasks
+that update and validate all affected README, quickstart, runbook, configuration, public
+contract, specification, plan, and task documents in the same phase. These tasks MUST
+precede that phase's completion checkpoint and MUST share the update's atomic commit;
+a final polish task does not satisfy this requirement.
+
 ### Checklist Format (REQUIRED)
 
 Every task MUST strictly follow this format:
@@ -211,6 +220,8 @@ Every task MUST strictly follow this format:
   - Within each story: Core business tests → other required tests → Models → Services → Endpoints → Integration
   - Each phase should be a complete, independently testable increment
 - **Final Phase**: Polish & Cross-Cutting Concerns
+  - Cross-cutting documentation polish belongs here, but milestone-specific documentation
+    sync remains in the phase that performs the corresponding major update
 
 ## Done When
 

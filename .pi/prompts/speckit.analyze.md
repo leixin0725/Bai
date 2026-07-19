@@ -76,6 +76,7 @@ Load only the minimal necessary context from each artifact:
 
 - Overview/Context
 - Functional Requirements
+- Documentation Requirements (DR-###), when present
 - Success Criteria (measurable outcomes — e.g., performance, security, availability, user success, business impact)
 - User Stories
 - Edge Cases (if present)
@@ -103,7 +104,7 @@ Load only the minimal necessary context from each artifact:
 
 Create internal representations (do not include raw artifacts in output):
 
-- **Requirements inventory**: For each Functional Requirement (FR-###) and Success Criterion (SC-###), record a stable key. Use the explicit FR-/SC- identifier as the primary key when present, and optionally also derive an imperative-phrase slug for readability (e.g., "User can upload file" → `user-can-upload-file`). Include only Success Criteria items that require buildable work (e.g., load-testing infrastructure, security audit tooling), and exclude post-launch outcome metrics and business KPIs (e.g., "Reduce support tickets by 50%").
+- **Requirements inventory**: For each Functional Requirement (FR-###), Documentation Requirement (DR-###), and Success Criterion (SC-###), record a stable key. Use the explicit FR-/DR-/SC- identifier as the primary key when present, and optionally also derive an imperative-phrase slug for readability (e.g., "User can upload file" → `user-can-upload-file`). Include only Success Criteria items that require buildable work (e.g., load-testing infrastructure, security audit tooling), and exclude post-launch outcome metrics and business KPIs (e.g., "Reduce support tickets by 50%").
 - **User story/action inventory**: Discrete user actions with acceptance criteria
 - **Task coverage mapping**: Map each task to one or more requirements or stories (inference by keyword / explicit reference patterns like IDs or key phrases)
 - **Constitution rule set**: Extract principle names and MUST/SHOULD normative statements

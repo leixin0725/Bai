@@ -16,7 +16,8 @@ business logic are included when required by the specification, plan, risk, or c
 
 **Constitution Gates**: Tasks MUST preserve the I → II → III design priority, include
 traceable zh-CN comment work where needed, protect credentials, and define validated Git
-commit checkpoints for every major modification.
+commit checkpoints for every major modification. Every major modification MUST also include
+the affected project-documentation updates and validation in the same phase and atomic commit.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -40,11 +41,16 @@ commit checkpoints for every major modification.
   - Feature requirements from plan.md
   - Entities from data-model.md
   - Endpoints from contracts/
+  - Documentation impact and affected paths from spec.md and plan.md
 
   Tasks MUST be organized by user story so each story can be:
   - Implemented independently
   - Tested independently
   - Delivered as an MVP increment
+
+  For every major modification, add documentation tasks with exact affected paths in the
+  same phase, before that phase's completion checkpoint. A final documentation-polish task
+  does not replace documentation synchronization at the relevant milestone.
 
   DO NOT keep these sample tasks in the generated tasks.md file.
   ============================================================================
@@ -104,6 +110,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
+Before this checkpoint, any affected README, quickstart, runbook, configuration guide, or
+public contract MUST be updated and validated in the same atomic commit as the major change.
+
 ---
 
 ## Phase 4: User Story 2 - [Title] (Priority: P2)
@@ -126,6 +135,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
+Before this checkpoint, any documentation affected by this story's major changes MUST be
+updated and validated in the same atomic commit.
+
 ---
 
 ## Phase 5: User Story 3 - [Title] (Priority: P3)
@@ -147,6 +159,9 @@ Examples of foundational tasks (adjust based on your project):
 
 **Checkpoint**: All user stories should now be independently functional
 
+Before this checkpoint, any documentation affected by this story's major changes MUST be
+updated and validated in the same atomic commit.
+
 ---
 
 [Add more user story phases as needed, following the same pattern]
@@ -157,7 +172,7 @@ Examples of foundational tasks (adjust based on your project):
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] TXXX [P] Documentation updates in docs/
+- [ ] TXXX [P] Cross-cutting documentation polish in docs/ (does not replace milestone-specific documentation tasks)
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories
 - [ ] TXXX [P] Fill identified core-business test coverage gaps in tests/unit/
@@ -256,6 +271,7 @@ With multiple developers:
 - Each user story should be independently completable and testable
 - Verify core business tests fail before implementing and pass before completion
 - After each major modification, validate and create an atomic commit containing only related files
+- Keep affected project documentation synchronized, validated, and in the same atomic commit as each major modification
 - Never place usable credentials in tasks, examples, fixtures, logs, comments, or commits
 - Write new code comments in zh-CN and add a date or version trace when comments are added or corrected
 - Stop at any checkpoint to validate story independently

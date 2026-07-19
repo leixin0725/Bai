@@ -34,6 +34,8 @@
 
 **Git Milestones**: [major-change boundaries that require validated, atomic commits]
 
+**Documentation Impact**: [affected README/quickstart/runbook/config/contract/spec paths, required updates and validation; or N/A with reason]
+
 **Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
 
 **Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
@@ -57,9 +59,10 @@
 | V. Git discipline | Major-change milestones and atomic commit boundaries are identified | [PASS/FAIL with evidence] |
 | VI. Core business tests | Every core business rule maps to automated success, boundary, and critical-failure tests | [PASS/FAIL with evidence] |
 | VII. Credential protection | Credential flow is N/A or protected through injection, least privilege, redaction, and leak prevention | [PASS/FAIL with evidence] |
+| VIII. Major-update documentation sync | Every major update identifies affected project docs, required content, validation, and same-commit boundary; or records N/A with reason | [PASS/FAIL with evidence] |
 
 Any FAIL blocks implementation. Complexity exceptions MUST be documented in Complexity
-Tracking; principles IV–VII cannot be waived by a feature-level exception.
+Tracking; principles IV–VIII cannot be waived by a feature-level exception.
 
 ## Project Structure
 

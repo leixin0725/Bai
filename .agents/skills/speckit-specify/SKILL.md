@@ -133,6 +133,9 @@ Given that feature description, do this:
        Identify every core business rule in the template's mandatory Core Business Rules section
        Describe observable normal, boundary, and critical-failure outcomes for downstream automated tests
        If credentials are in scope, document protection requirements without recording any usable value
+       If the feature is a major update, identify the affected project documentation and the
+       behavior, commands, configuration, compatibility, migration/recovery, and validation
+       details it must reflect; otherwise let planning record documentation impact as N/A with a reason
        Use reasonable defaults for unspecified details (document assumptions in Assumptions section)
     6. Define Success Criteria
        Create measurable, technology-agnostic outcomes

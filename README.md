@@ -52,6 +52,12 @@ python -m bai_agent --data-dir data security incident check
 
 程序会尽力把 POSIX 权限收紧到目录 `0700`、文件 `0600`，并在 Windows 检查和收紧 DACL；无法证明为私有时验证失败关闭。若凭据可能进入 Git、配置、日志或运行记忆，立即停止聊天/整理，并按[凭据泄露事件处置流程](docs/security-incident-response.md)完成轮换、全仓库与历史扫描、运行数据扫描和显式解除门禁。
 
+## 开发与文档维护
+
+项目工程约束以[项目宪章](.specify/memory/constitution.md)为准。每次完成核心业务逻辑、公共契约、架构或模块边界、数据结构、安全控制、关键依赖或平台迁移等重大更新时，必须在同一交付中同步更新受影响的 README、quickstart、运行手册、配置说明和契约文档。计划或评审若判定无需改文档，必须记录 `N/A` 及理由。
+
+重大更新只有在适用测试通过、文档中的命令/路径/链接/示例与当前实现一致，并且相关代码与文档进入同一个原子提交后才算完成。详细验收步骤见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
+
 ## 验证
 
 ```powershell

@@ -159,10 +159,14 @@ You **MUST** consider the user input before proceeding (if not empty).
    - **Design priority**: Prefer clarity/extensibility/maintainability, then decoupling/readability, then the simplest understandable implementation
    - **Comments**: Write new code comments in zh-CN; do not rewrite or remove existing comments unless stale, wrong, or misleading, and add a date/version trace to comment additions or corrections
    - **Credential safety**: Never write usable credentials to source, comments, logs, fixtures, examples, generated artifacts, or commits; use controlled injection and redaction
+   - **Documentation sync**: For every major update, update and validate all affected project
+     documentation in the same implementation phase; if the plan records N/A, preserve its
+     reason in review evidence. Do not mark the milestone complete while documentation is stale
    - **Core development**: Implement models, services, CLI commands, endpoints
    - **Integration work**: Database connections, middleware, logging, external services
    - **Polish and validation**: Unit tests, performance optimization, documentation
-   - **Git milestones**: After each validated major modification, stage only related files and create an atomic commit with a message that states the intent
+   - **Git milestones**: After each validated major modification and its documentation sync,
+     stage only related code and documentation files and create one atomic commit with a message that states the intent
 
 8. Progress tracking and error handling:
    - Report progress after each completed task
@@ -177,7 +181,9 @@ You **MUST** consider the user input before proceeding (if not empty).
    - Check that implemented features match the original specification
    - Validate that tests pass and coverage meets requirements
    - Confirm the implementation follows the technical plan
-   - Confirm every major modification has a validated, atomic Git commit and no credential leakage
+   - Confirm every major modification has synchronized and validated affected documentation
+     (or an approved N/A reason), a validated atomic commit containing that documentation,
+     and no credential leakage
 
 Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `/speckit-tasks` first to regenerate the task list.
 

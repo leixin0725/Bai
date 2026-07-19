@@ -1,27 +1,33 @@
 <!--
 Sync Impact Report
-- Version change: unratified template → 1.0.0
+- Version change: 1.0.0 → 1.1.0
 - Modified principles:
-  - Template Principle 1 → I. 清晰、可扩展、可维护（最高优先级）
-  - Template Principle 2 → II. 模块解耦与可读性
-  - Template Principle 3 → III. 简单且易懂的实现
-  - Template Principle 4 → IV. 简体中文与可追溯注释
-  - Template Principle 5 → V. Git 仓库与重大修改提交
+  - Engineering Priority Order: 独立强制门禁范围由 IV–VII 扩展为 IV–VIII
+  - Development Workflow and Quality Gates: 在规格、计划、任务、实现、验证和提交阶段加入文档同步要求
+  - Governance: 重大评审新增文档同步检查
 - Added principles:
-  - VI. 核心业务逻辑测试（不可妥协）
-  - VII. 敏感凭据保护（不可妥协）
-- Added sections:
-  - Engineering Priority Order
-  - Development Workflow and Quality Gates
-- Removed sections: None; template placeholders were replaced with concrete sections.
+  - VIII. 重大更新与文档同步（不可妥协）
+- Added sections: None.
+- Removed sections: None.
 - Templates requiring updates:
   - ✅ .specify/templates/plan-template.md
   - ✅ .specify/templates/spec-template.md
   - ✅ .specify/templates/tasks-template.md
+  - ✅ .agents/skills/speckit-analyze/SKILL.md
+  - ✅ .agents/skills/speckit-converge/SKILL.md
   - ✅ .agents/skills/speckit-specify/SKILL.md
+  - ✅ .agents/skills/speckit-plan/SKILL.md
   - ✅ .agents/skills/speckit-tasks/SKILL.md
   - ✅ .agents/skills/speckit-implement/SKILL.md
+  - ✅ .pi/prompts/speckit.analyze.md
+  - ✅ .pi/prompts/speckit.converge.md
+  - ✅ .pi/prompts/speckit.specify.md
+  - ✅ .pi/prompts/speckit.plan.md
   - ✅ .pi/prompts/speckit.tasks.md
+  - ✅ .pi/prompts/speckit.implement.md
+- Runtime documentation updated:
+  - ✅ README.md
+  - ✅ specs/001-persistent-memory-agent/quickstart.md
 - Follow-up TODOs: None.
 -->
 # Bai Constitution
@@ -72,20 +78,31 @@ MUST 执行适用的测试和质量检查；无法通过时不得以“稍后修
 隔离、可轮换和输出脱敏要求。示例配置 MUST 仅使用明确的无效占位符；计划和评审 MUST 识别凭据流向及泄露
 风险。发现疑似泄露时 MUST 停止传播、撤销或轮换受影响凭据、记录处置结果，并在继续交付前完成仓库与日志检查。
 
+### VIII. 重大更新与文档同步（不可妥协）
+每次重大更新 MUST 在同一交付里评估并同步维护所有受影响的项目文档；重大更新的范围采用原则 V 的定义。
+受影响文档包括但不限于 README、quickstart、运行手册、配置说明、公共接口与存储契约，以及对应功能的规格、
+计划和任务。文档 MUST 准确反映更新后的行为、命令、配置、兼容性、迁移或恢复步骤和验证方法中适用的内容，
+且示例 MUST 可执行或明确标注为示意。若评估后无需修改文档，计划或评审记录 MUST 写明 `N/A` 及理由；不得以
+“代码已经清晰”替代文档影响评估。受影响文档未完成更新和适用验证时，重大更新 MUST NOT 被视为完成，也不得
+按原则 V 创建完成提交；文档变更 MUST 与对应重大更新位于同一原子提交中。
+
 ## Engineering Priority Order
 
 当设计目标发生冲突时，决策顺序 MUST 为：原则 I（清晰、可扩展、可维护）优先于原则 II（解耦与可读性），
-原则 II 优先于原则 III（简单实现）。原则 IV 至 VII 是独立的强制质量门禁，不得通过上述排序予以削弱。
+原则 II 优先于原则 III（简单实现）。原则 IV 至 VIII 是独立的强制质量门禁，不得通过上述排序予以削弱。
 所有复杂度例外 MUST 在实现前写入计划的 Complexity Tracking，包含具体收益、风险、被否决的简单方案和复核条件。
 
 ## Development Workflow and Quality Gates
 
-1. 规格阶段 MUST 标识核心业务规则、可测验收结果，以及功能是否接触敏感凭据；规格不得包含真实凭据。
+1. 规格阶段 MUST 标识核心业务规则、可测验收结果、功能是否接触敏感凭据，以及重大更新预期影响的项目文档；
+   规格不得包含真实凭据。
 2. 计划阶段 MUST 说明模块职责与依赖、最简单可行方案、核心测试策略、注释影响和凭据保护方案；宪章检查失败
-   时不得开始实现。
-3. 任务阶段 MUST 为每项核心业务逻辑安排自动化测试，并为适用的凭据保护、注释更新和质量验证安排具体工作。
-4. 实现与评审阶段 MUST 按原则 I、II、III 的顺序评估设计，并校验 zh-CN 注释、测试覆盖和凭据安全。
-5. 完成重大修改后 MUST 先运行适用检查，再按原则 V 创建原子提交；提交哈希或提交信息作为阶段完成证据。
+   时不得开始实现；重大更新还 MUST 列出受影响文档、所需内容和验证方式，或记录 `N/A` 及理由。
+3. 任务阶段 MUST 为每项核心业务逻辑安排自动化测试，并为适用的凭据保护、注释更新、文档同步和质量验证安排
+   具体工作；重大更新的文档任务 MUST 位于对应实现阶段且先于其完成检查点，不得仅推迟到最终润色阶段。
+4. 实现与评审阶段 MUST 按原则 I、II、III 的顺序评估设计，并校验 zh-CN 注释、测试覆盖、凭据安全和文档同步。
+5. 完成重大修改后 MUST 验证代码和受影响文档的一致性及适用命令、链接和示例，再按原则 V 和 VIII 创建包含
+   对应文档的原子提交；提交哈希或提交信息作为阶段完成证据。
 
 ## Governance
 
@@ -97,7 +114,7 @@ MUST 执行适用的测试和质量检查；无法通过时不得以“稍后修
 Sync Impact Report、版本号和 Last Amended 日期，并同步检查所有 Spec Kit 模板和命令说明。
 
 每个功能计划在研究前和设计后 MUST 完成 Constitution Check；每次重大代码评审 MUST 验证核心业务测试、
-注释可追溯性、凭据保护和 Git 提交边界。违反 MUST 条款的工作不得合并或发布；若条款本身需要改变，必须先按
-本节完成宪章修订，不得通过功能级例外绕过。
+注释可追溯性、凭据保护、文档同步和 Git 提交边界。违反 MUST 条款的工作不得合并或发布；若条款本身需要改变，
+必须先按本节完成宪章修订，不得通过功能级例外绕过。
 
-**Version**: 1.0.0 | **Ratified**: 2026-07-17 | **Last Amended**: 2026-07-17
+**Version**: 1.1.0 | **Ratified**: 2026-07-17 | **Last Amended**: 2026-07-19

@@ -60,6 +60,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 3. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")
+   - Fill Documentation Impact with affected project-documentation paths, required content,
+     validation, and same-commit boundaries for every major update; otherwise record N/A with a reason
    - Fill Constitution Check section from constitution
    - Evaluate gates (ERROR if violations unjustified)
    - Phase 0: Generate research.md (resolve all NEEDS CLARIFICATION)
@@ -151,6 +153,8 @@ Command ends after Phase 1 design. Report branch, IMPL_PLAN path, and generated 
    - Use links or references to contracts and data model details instead of duplicating them
    - Do not include full implementation code, model/service/controller bodies, migrations, or complete test suites
    - Keep this artifact as a validation/run guide; implementation details belong in `tasks.md` and the implementation phase
+   - Record other existing README, runbook, configuration, and contract documents affected
+     by planned major updates so task generation can update them at the matching milestone
 
 **Output**: data-model.md, /contracts/*, quickstart.md
 
