@@ -203,21 +203,21 @@
 
 ### Tests for User Story 5（先写并确认失败）
 
-- [ ] T087 [P] [US5] 在 `tests/contract/test_tool_registry.py` 为 BR-009/BR-010 覆盖未知/禁用/虚构工具、非法 JSON、额外/缺失参数、权限伪造、超时、结果过大和稳定错误码
-- [ ] T088 [P] [US5] 在 `tests/contract/test_deepseek_tool_calls.py` 覆盖工具定义映射、多个调用、重复 call ID、无效 arguments、tool_call_id 回传和供应商 SDK 类型不外泄
-- [ ] T089 [P] [US5] 在 `tests/integration/test_tool_extension.py` 为 BR-009/BR-010 验证默认仅来源查询可用、无副作用测试工具显式启用/禁用、每次调用/结果可关联触发 RawRecord、persona、flow、turn 与 `state_id`，且失败不破坏聊天/记忆
-- [ ] T090 [P] [US5] 在 `tests/integration/test_autonomous_loop.py` 为 BR-009/BR-010 覆盖 DisabledLoopPolicy 零调用、最大迭代、deadline、token/成本预算、人工停止、取消重抛和幂等检查点恢复
-- [ ] T091 [P] [US5] 在 `tests/integration/test_extension_security.py` 为 CR-001—CR-006 和 BR-010 覆盖工具/循环无凭据参数、提示注入不能扩大权限/修改配置/开启无限循环及安全诊断
+- [X] T087 [P] [US5] 在 `tests/contract/test_tool_registry.py` 为 BR-009/BR-010 覆盖未知/禁用/虚构工具、非法 JSON、额外/缺失参数、权限伪造、超时、结果过大和稳定错误码
+- [X] T088 [P] [US5] 在 `tests/contract/test_deepseek_tool_calls.py` 覆盖工具定义映射、多个调用、重复 call ID、无效 arguments、tool_call_id 回传和供应商 SDK 类型不外泄
+- [X] T089 [P] [US5] 在 `tests/integration/test_tool_extension.py` 为 BR-009/BR-010 验证默认仅来源查询可用、无副作用测试工具显式启用/禁用、每次调用/结果可关联触发 RawRecord、persona、flow、turn 与 `state_id`，且失败不破坏聊天/记忆
+- [X] T090 [P] [US5] 在 `tests/integration/test_autonomous_loop.py` 为 BR-009/BR-010 覆盖 DisabledLoopPolicy 零调用、最大迭代、deadline、token/成本预算、人工停止、取消重抛和幂等检查点恢复
+- [X] T091 [P] [US5] 在 `tests/integration/test_extension_security.py` 为 CR-001—CR-006 和 BR-010 覆盖工具/循环无凭据参数、提示注入不能扩大权限/修改配置/开启无限循环及安全诊断
 
 ### Implementation for User Story 5
 
-- [ ] T092 [US5] 在 `src/bai_agent/domain/models.py` 与 `src/bai_agent/tools/registry.py` 完善 Provider-neutral ToolDefinition/Call/ExecutionContext/Result、安全 annotations 和本地 input/output JSON Schema
-- [ ] T093 [US5] 在 `src/bai_agent/tools/executor.py` 实现宿主创建上下文、启用/人格权限交集、串行调用、deadline/轮数/结果大小限制和无正文审计
-- [ ] T094 [US5] 在 `src/bai_agent/providers/deepseek.py` 与 `src/bai_agent/runtime/controller.py` 实现工具定义/调用/结果适配及配置有界工具子循环，拒绝重复/未知调用
-- [ ] T095 [US5] 在 `src/bai_agent/runtime/loops.py` 实现 DisabledLoopPolicy、可替换 AutonomousLoopRunner 边界、单次复用 SingleTurnController、停止预算、检查点和取消清理
-- [ ] T096 [US5] 在 `config/tools.toml` 与 `config/agent.toml` 完善未来工具默认关闭、来源查询例外、循环 disabled 和所有限制参数
-- [ ] T097 [US5] 在 `src/bai_agent/runtime/tracing.py` 实现工具/循环调用的 trigger record/persona/flow/turn/`state_id`/结果码/预算审计，并过滤 arguments、result 正文和凭据
-- [ ] T098 [US5] 运行 `tests/contract/test_tool_registry.py`、`tests/contract/test_deepseek_tool_calls.py`、`tests/integration/test_tool_extension.py`、`tests/integration/test_autonomous_loop.py`、`tests/integration/test_extension_security.py`、来源查询回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/domain/models.py`、`src/bai_agent/tools/`、`src/bai_agent/providers/deepseek.py`、`src/bai_agent/runtime/`、`config/agent.toml`、`config/tools.toml` 与 US5 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US5 原子提交
+- [X] T092 [US5] 在 `src/bai_agent/domain/models.py` 与 `src/bai_agent/tools/registry.py` 完善 Provider-neutral ToolDefinition/Call/ExecutionContext/Result、安全 annotations 和本地 input/output JSON Schema
+- [X] T093 [US5] 在 `src/bai_agent/tools/executor.py` 实现宿主创建上下文、启用/人格权限交集、串行调用、deadline/轮数/结果大小限制和无正文审计
+- [X] T094 [US5] 在 `src/bai_agent/providers/deepseek.py` 与 `src/bai_agent/runtime/controller.py` 实现工具定义/调用/结果适配及配置有界工具子循环，拒绝重复/未知调用
+- [X] T095 [US5] 在 `src/bai_agent/runtime/loops.py` 实现 DisabledLoopPolicy、可替换 AutonomousLoopRunner 边界、单次复用 SingleTurnController、停止预算、检查点和取消清理
+- [X] T096 [US5] 在 `config/tools.toml` 与 `config/agent.toml` 完善未来工具默认关闭、来源查询例外、循环 disabled 和所有限制参数
+- [X] T097 [US5] 在 `src/bai_agent/runtime/tracing.py` 实现工具/循环调用的 trigger record/persona/flow/turn/`state_id`/结果码/预算审计，并过滤 arguments、result 正文和凭据
+- [X] T098 [US5] 运行 `tests/contract/test_tool_registry.py`、`tests/contract/test_deepseek_tool_calls.py`、`tests/integration/test_tool_extension.py`、`tests/integration/test_autonomous_loop.py`、`tests/integration/test_extension_security.py`、来源查询回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/domain/models.py`、`src/bai_agent/tools/`、`src/bai_agent/providers/deepseek.py`、`src/bai_agent/runtime/`、`config/agent.toml`、`config/tools.toml` 与 US5 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US5 原子提交
 
 **Checkpoint**: 所有扩展默认安全；测试工具和循环能接入但不能绕过核心门禁。
 

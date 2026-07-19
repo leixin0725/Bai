@@ -65,6 +65,7 @@ class Message(FrozenModel):
     role: str
     content: str = Field(min_length=1)
     trust: TrustLevel = TrustLevel.UNTRUSTED_DATA
+    tool_call_id: str | None = None
 
 
 class RawRecord(FrozenModel):
@@ -413,7 +414,7 @@ class ToolOutcome(StrEnum):
 
 class ToolDefinition(FrozenModel):
     tool_id: str
-    name: str
+    name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     description: str
     input_schema: dict[str, JsonValue]
     output_schema: dict[str, JsonValue]

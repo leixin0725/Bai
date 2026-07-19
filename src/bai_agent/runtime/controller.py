@@ -35,6 +35,7 @@ class SingleTurnController:
         tool_executor=None,
         max_tool_rounds: int = 0,
         memory_budgets: dict[str, int] | None = None,
+        tool_definitions: tuple[dict, ...] = (),
     ) -> None:
         self.repository = repository
         self.provider = provider
@@ -47,6 +48,7 @@ class SingleTurnController:
         self.tool_executor = tool_executor
         self.max_tool_rounds = max_tool_rounds
         self.memory_budgets = memory_budgets or {}
+        self.tool_definitions = tool_definitions
 
     async def run_turn(
         self,
@@ -142,6 +144,7 @@ class SingleTurnController:
                 )
                 for item in context.segments
             ),
+            tool_definitions=self.tool_definitions,
         )
         try:
             result = await self.provider.complete(request)
@@ -173,6 +176,7 @@ class SingleTurnController:
                             role="tool",
                             content=canonical_json(tool_result.model_dump(mode="json")),
                             trust=TrustLevel.UNTRUSTED_DATA,
+                            tool_call_id=call.call_id,
                         )
                     )
                 request = request.model_copy(update={"messages": (*request.messages, *tool_messages)})

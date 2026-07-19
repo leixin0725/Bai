@@ -144,7 +144,12 @@ def build_application(
             provider_config = next(item for item in providers["providers"] if item["id"] == chat_profile["provider"])
             provider = create_provider(provider_config, chat_profile)
             curator_profile = providers["model_profiles"]["memory_curator"]
-            curator_provider = create_provider(provider_config, curator_profile)
+            curator_config = next(
+                item
+                for item in providers["providers"]
+                if item["id"] == curator_profile["provider"]
+            )
+            curator_provider = create_provider(curator_config, curator_profile)
         else:
             curator_provider = provider
         short = settings["agent.toml"]["short_term"]
@@ -181,6 +186,7 @@ def build_application(
             registry,
             deadline_seconds=float(settings["agent.toml"]["runtime"]["tool_deadline_seconds"]),
             max_result_bytes=int(tool_config["max_result_bytes"]),
+            tracer=tracer,
         )
         budgets = settings["agent.toml"]["context_budget"]
         controller = SingleTurnController(
@@ -199,6 +205,10 @@ def build_application(
                 "long_term_chars": int(budgets["long_term_tokens"]) * 4,
                 "recent_chars": int(budgets["short_term_tokens"]) * 4,
             },
+            tool_definitions=tuple(
+                definition.model_dump(mode="json")
+                for definition in registry.definitions_for("chat")
+            ),
         )
         return AgentApplication(
             snapshot,

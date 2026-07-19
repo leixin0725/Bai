@@ -35,6 +35,11 @@ ALLOWED_FIELDS = frozenset(
         "trigger_record_id",
         "call_id",
         "cursor_present",
+        "tool_id",
+        "iteration",
+        "stop_reason",
+        "token_budget",
+        "cost_budget",
     }
 )
 
