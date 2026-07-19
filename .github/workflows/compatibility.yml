@@ -1,0 +1,60 @@
+name: Compatibility
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_windows_reference_performance:
+        description: Run the 100-launch Windows reference performance gate
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        python: ['3.13', '3.14']
+    steps:
+      # [2026-07-19] 完整历史供仓库凭据扫描使用，六个组合执行相同功能门禁。
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Verify module entry
+        run: python -m bai_agent --help
+      - name: Run cross-platform functional suite
+        run: pytest -m "not performance"
+
+  windows-reference-performance:
+    name: Windows reference startup performance
+    if: github.event_name == 'workflow_dispatch' && inputs.run_windows_reference_performance
+    runs-on: windows-latest
+    env:
+      BAI_RUN_WINDOWS_REFERENCE: '1'
+      BAI_REFERENCE_MEMORY: GitHub-hosted windows-latest runner
+      BAI_REFERENCE_STORAGE: GitHub-hosted runner storage
+    steps:
+      # [2026-07-19] 3 秒门槛只在显式参考作业判定，普通兼容矩阵不混入机器性能差异。
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Run 100 fresh-process launches
+        run: pytest tests/performance/test_startup.py -m performance -q -s

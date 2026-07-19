@@ -1,10 +1,10 @@
-# Quickstart: 实现与验证持久记忆聊天 Agent
+# Quickstart: 持久记忆聊天 Agent
 
-> 本文描述计划完成后的开发/验收路径；当前 `/speckit-plan` 阶段尚未生成实现代码。
+本文给出当前实现的安装、运行、维护和验收路径。Bai Agent 只有一条连续历史，不提供 session、thread 或选择旧对话的操作。
 
 ## 1. 开发环境
 
-PowerShell：
+Python 3.13/3.14 均受支持。PowerShell：
 
 ```powershell
 py -3.13 -m venv .venv
@@ -22,156 +22,142 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 ```
 
-实际依赖版本由 `pyproject.toml` 和锁文件固定；不得在业务模块内按需安装依赖。
+依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。
 
-## 2. 配置检查
+## 2. 配置与外部凭据
 
-所有提示词和可变参数在 `config/`。先检查至少存在：
+可维护内容统一位于：
 
 ```text
-config/agent.toml
-config/providers.toml
-config/states.toml
-config/tools.toml
-config/logging.toml
-config/personas/chat.md
-config/personas/memory_curator.md
-config/personas/states/default.md
-config/prompts/*.md
+config/agent.toml                 # 路径、窗口、预算、运行限制
+config/providers.toml             # Provider 与模型 profile
+config/states.toml                # 状态和有序状态人格
+config/tools.toml                 # 工具启用、权限与边界
+config/logging.toml               # 安全日志设置
+config/personas/chat.md           # 基础聊天人格
+config/personas/memory_curator.md # 记忆整理人格
+config/personas/states/*.md       # 状态人格
+config/prompts/*.md               # 带变量声明的提示模板
 ```
 
-API Key 由进程环境或秘密管理器注入。下面只有明显不可用的占位说明，不要把真实值写进命令历史、配置、人格或记忆文件：
+由秘密管理器向 Agent 进程注入 `DEEPSEEK_API_KEY`。不要把真实值写入仓库文件、shell 命令历史、测试 fixture、提示词或记忆；`providers.toml` 只保存环境变量名。
 
-```powershell
-$env:DEEPSEEK_API_KEY = "<由秘密管理器注入的值>"
-```
-
-验证配置：
+注入后验证引用图：
 
 ```powershell
 python -m bai_agent config validate --config-dir config
-python -m bai_agent doctor
+python -m bai_agent --config-dir config --data-dir data doctor
 ```
 
-预期：输出配置 revision、`default` 状态、聊天/整理模型 profile 和唯一内置工具 `memory_source_query`；不输出 Key 值或提示正文。
+输出只含 revision、职责、状态、模板和启用工具，不回显 Key 或提示正文。修改人格、状态、模板或模型参数后再次验证；新配置只在下一轮边界生效，历史记录不会被重写。
 
-## 3. 自动化测试
+## 3. 聊天与 pending 恢复
 
-不需要真实 DeepSeek 凭据的默认测试：
+```powershell
+python -m bai_agent --config-dir config --data-dir data chat
+```
+
+逐行输入，使用 EOF 或 Ctrl+C 退出。再次运行同一命令会直接继承全部记忆，不会询问对话 ID。每轮持久化顺序是：用户输入落盘、模型调用、Assistant 输出落盘、向终端显示输出。
+
+模型失败时，已经确认的用户输入仍保留为 pending turn。普通启动只报告待恢复状态；确认再次调用模型时显式执行：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data chat --resume-pending
+```
+
+该命令复用原 `turn_id`，不会重复追加用户记录。
+
+## 4. 记忆组织与完整覆盖
+
+`data/memory/raw/*.jsonl` 永久保存所有确认的用户/Assistant 原文，分段只影响物理存储。`data/memory/long_term.yaml` 在同一个 revision 内保存：
+
+- 记忆整理前沿；
+- `MemoryCoverageOverview` 和连续 coverage spans；
+- 长期记忆及其 `source_refs`；
+- 每个来源的原始记录 ID 与内容哈希。
+
+近期直接窗口大小来自 `config/agent.toml`。仅当最旧完整轮次将离开窗口时，`memory_curator` 才批量整理一次；空提取也必须扩展 coverage span。每条原始记录始终恰好处于“已由连续 span 表示”或“仍完整直接注入”范围，出现缺口会在模型调用前失败。
+
+检查权威记录、来源和覆盖：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data memory validate
+```
+
+成功 JSON 包含 `raw_records`、`long_term_items`、`curated_through_sequence`、`coverage_spans`、`coverage_gaps: 0`、`dangling_sources: 0` 和 `direct_range`。
+
+## 5. 来源查询
+
+从 `long_term.yaml` 选择 `memory_id`：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
+```
+
+结果按 `global_sequence` 返回来源原文并支持游标分页，不暴露存储路径。`memory_source_query` 对聊天人格、整理人格和获准的辅助人格使用同一 Schema、权限和错误语义。未调用工具时，来源原文不会因长期记忆被自动注入；工具结果只属于发起查询的当前 flow。
+
+## 6. 人工维护、备份与恢复
+
+人工操作前：
+
+1. 停止所有 Agent 进程，避免与单写者锁竞争。
+2. 复制整个 `data/memory/` 到受保护位置；不要只备份 YAML，因为来源依赖永久 JSONL。
+3. 用 UTF-8 文本编辑器修改 `long_term.yaml`。新条目必须有唯一 `memory_id`、至少一个真实 `source_ref`、有效哈希和 `created_by: manual`；不要直接改整理前沿或 coverage spans。
+4. 执行 `memory validate`，确认权限、Schema、关系图、来源哈希和完整覆盖均有效后再启动聊天。
+
+有效人工变更在下次加载时进入新 revision，并尽量保留 YAML 注释和顺序。无效格式、悬空来源、摘要不符、重复 ID、关系环或前沿修改会被拒绝；主文件原样保留，程序可读取 `.state/long_term.last-valid.yaml`，但处于只读回退时禁止自动整理。
+
+恢复备份时同样停止 Agent、整体恢复 `data/memory/`，并运行：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data memory validate
+python -m bai_agent --config-dir config --data-dir data doctor
+```
+
+POSIX 预期目录为 `0700`、文件为 `0600`；Windows 预期 DACL 仅允许当前用户、SYSTEM 和 Administrators。程序会尽力收紧本地路径，网络共享、符号链接/junction 或无法验证的权限会 fail-closed。
+
+## 7. Provider、工具、状态与自主循环扩展
+
+DeepSeek 通过 Provider-neutral DTO 接入。新增供应商时实现 `ModelProvider` adapter 并复用 Provider 契约测试，不能把 SDK 对象带入 Controller、Memory 或 Tool 层。
+
+新增工具时在注册器声明本地 input/output JSON Schema、安全 annotations、启用开关和获准人格，并保留 deadline、轮数、结果大小和无正文审计限制。状态解析器只能返回可信配置中已定义的人格 ID 与顺序。自主循环默认 `disabled`；测试 Runner 也必须受迭代、deadline、token/成本、人工停止、取消和幂等检查点约束。
+
+## 8. 自动化与兼容性矩阵
+
+默认本地门禁不需要真实 Provider 调用：
 
 ```powershell
 pytest
 pytest tests\unit tests\contract
 pytest tests\integration tests\fault_injection
-pytest tests\performance -m performance
-```
-
-关键门禁：
-
-- BR-001—BR-018 的成功、边界和关键失败路径均有测试。
-- 用户输入写入发生在 Provider 替身被调用前；Assistant 输出写入发生在 stdout 替身收到文本前。
-- 窗口阈值前整理调用为 0；到边界后按最旧完整轮次批量整理。
-- 整理/Schema/YAML 写入任一步失败时，`curated_through_sequence` 和直接注入范围不变。
-- 每个临时写、fsync、replace 故障点恢复后只有完整旧状态或完整新状态。
-- 多人格同参调用来源工具得到相同有序结果，调用前后权威文件哈希不变。
-- 默认自主循环调用 Provider/Tool 次数为 0。
-- 测试凭据不出现在 data、stdout/stderr、日志、提示追踪或 Git diff。
-
-真实 DeepSeek smoke test 必须通过显式 marker/环境开关运行，不进入默认 CI，且只使用隔离测试数据目录和最小 token 配额。
-
-## 4. 首次聊天与跨启动连续性
-
-```powershell
-python -m bai_agent memory validate
-python -m bai_agent chat
-```
-
-输入两条可核对信息，使用 EOF/Ctrl+C 退出，再运行同一命令继续提问。预期：
-
-- 没有创建/选择会话的交互；
-- `data/memory/raw/` 中用户和 Assistant 记录按一个全局序列增长；
-- 重启后直接继承最近原文与已有长期记忆；
-- Assistant 文本只在记录完整落盘后显示。
-
-在模型调用期间模拟网络失败后，原用户输入仍存在；重启时程序报告 pending turn。只有显式运行以下命令才重试同一轮，且不会重复写用户记录：
-
-```powershell
-python -m bai_agent chat --resume-pending
-```
-
-## 5. 验证窗口整理
-
-使用专用测试配置目录，把窗口、保留量和批次值调小；不要改 Python 常量：
-
-```powershell
-python -m bai_agent --config-dir tests\fixtures\config-small-window --data-dir .tmp\memory-window chat
-```
-
-持续输入直到一批最旧完整轮次即将离开直接注入窗口。预期：
-
-1. 阈值前不调用 `memory_curator`。
-2. 边界处由 `config/personas/memory_curator.md` 批量生成结构化候选。
-3. `long_term.yaml` 中新项含一个或多个有效 `source_refs`。
-4. `coverage_overview`、`curation.curated_through_sequence` 与新记忆/来源在同一次 revision 中推进；空提取批次也新增连续 coverage span。
-5. 从 sequence 1 到最新记录，每条记录均被 coverage span 覆盖或仍完整处于近期直接窗口；缺口必须阻止生成。
-6. JSONL 原始记录数量和内容哈希不减少。
-
-用故障注入配置令整理模型或 YAML replace 失败；本轮应在聊天 Provider 调用前停止，前沿不变。恢复故障后重试才允许修剪直接注入范围。
-
-## 6. 验证来源查询
-
-从 `long_term.yaml` 选择一个 `memory_id`：
-
-```powershell
-python -m bai_agent memory source mem-EXAMPLE
-```
-
-预期按 `global_sequence` 返回全部来源（必要时分页），而不是暴露文件路径。相同 ID/游标通过聊天人格、整理人格和测试辅助人格调用 `memory_source_query` 时，结果顺序、权限和错误码相同。
-
-未显式调用工具时，长期记忆的来源原文自动注入数量必须为 0；调用结果只存在于发起调用的当前 flow。
-
-## 7. 人工维护长期记忆
-
-1. 停止 Agent。
-2. 备份整个 `data/memory/`。
-3. 用普通文本编辑器修改 `data/memory/long_term.yaml`。
-4. 人工新增项使用 `created_by: manual`，并引用至少一条真实原始记录。
-5. 不直接修改 `curation` 系统字段。
-6. 执行：
-
-```powershell
-python -m bai_agent memory validate
-```
-
-有效修改在下次启动生效，并尽量保留 YAML 注释/顺序。无效来源、重复 ID、关系环或非法前沿应失败，原文件不被覆盖；程序只读回退 last-valid，并阻止自动整理直到修复。
-
-## 8. 更换人格和 Provider
-
-更换聊天或整理人格只编辑各自 Markdown 或 `agent.toml` 引用，再运行 `config validate`。历史记忆不得随人格变化而重写。
-
-切换 DeepSeek 模型只编辑 `providers.toml` 的 model profile。新增其他供应商时实现 `ModelProvider` adapter 并复用契约测试；不得让新的 SDK 对象进入 Controller、Memory 或 Tool 层。
-
-## 9. 性能验收
-
-性能 fixture 生成 10,000 条永久原始记录（仅配置上限内仍属近期直接窗口）和 1,000 条长期记忆，随后在指定 Windows 参考环境执行至少 100 次全新进程启动：
-
-```powershell
-pytest tests\performance\test_startup.py -m performance
-```
-
-计时从进程创建开始，到配置、JSONL 索引、长期 YAML 与 `MemoryCoverageOverview` 可供首轮组装为止；按 nearest-rank 计算的 p95 不超过 3 秒。报告记录 OS、CPU、内存、存储、Python 和缓存策略；启动阶段不得发 DeepSeek 网络请求。Windows/Ubuntu/macOS × Python 3.13/3.14 功能矩阵分别验证安装、入口、权限归一化、原子替换和 UTF-8，3 秒门槛只在 Windows 参考环境判定。只有实测失败后才考虑可重建索引缓存，缓存不能成为权威数据。
-
-## 10. 提交门禁
-
-每个重大里程碑提交前执行：
-
-```powershell
-pytest
-python -m bai_agent config validate --config-dir config
-python -m bai_agent memory validate
-python -m bai_agent security incident check
+python -m bai_agent --data-dir .tmp\validation security incident check
 git diff --check
-git status --short
 ```
 
-再运行仓库采用的秘密扫描器，确认配置、人格、记忆 fixture、日志和测试中没有可用凭据。只 stage 当前里程碑文件；用户已有或无关的未跟踪文件不得混入提交。
+`.github/workflows/compatibility.yml` 在 Windows、Ubuntu、macOS 上分别以 Python 3.13 和 3.14 安装项目，验证模块入口、权限结果归一化、本地原子替换、UTF-8 和全部非性能功能。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
+
+## 9. Windows 参考性能复现
+
+性能 fixture 含 10,000 条永久原始记录、1,000 条长期记忆和配置上限内的 48 条近期直接原文。显式开启后执行至少 100 次全新 Python 进程：
+
+```powershell
+$env:BAI_RUN_WINDOWS_REFERENCE = "1"
+$env:BAI_REFERENCE_MEMORY = "记录参考机内存规格"
+$env:BAI_REFERENCE_STORAGE = "记录参考机存储规格"
+pytest tests\performance\test_startup.py -m performance -q -s
+```
+
+计时从进程创建到配置、原始索引、长期 YAML、覆盖概览和首轮 `PromptContext` 可用；报告 OS、CPU、内存、存储、Python、缓存策略和 nearest-rank p95。门槛为 3 秒且网络调用为 0，只在指定 Windows 参考环境判定，其他平台只跑功能矩阵。
+
+## 10. 凭据事件处置
+
+常规检查：
+
+```powershell
+pytest tests\integration\test_repository_secret_safety.py
+python -m bai_agent --data-dir data security incident check
+```
+
+若凭据可能进入工作树、可达 Git 历史、生成制品、日志或运行数据，立即停止聊天和整理。按照[全仓库凭据泄露事件处置流程](../../docs/security-incident-response.md)撤销/轮换凭据，扫描工作树与全部可达历史，检查运行数据和制品，并提供四项处置证据后再显式解除门禁。不得仅删除当前文件就继续运行。
+
+> [2026-07-19] 本 quickstart 与当前 CLI、性能基线和六组合兼容矩阵同步。

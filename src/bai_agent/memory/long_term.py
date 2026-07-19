@@ -116,6 +116,9 @@ class LongTermStore:
                 raise BaiError("SOURCE_HASH_MISMATCH", "覆盖概览的记录摘要不匹配。")
 
     def _refresh_last_valid(self, payload: bytes) -> None:
+        # [2026-07-19] 内容未变时保留现有恢复点，避免每次启动产生无意义原子写与权限调整。
+        if self.last_valid_path.exists() and self.last_valid_path.read_bytes() == payload:
+            return
         atomic_write(self.last_valid_path, payload)
         ensure_private_path(self.last_valid_path, is_directory=False)
 
@@ -143,8 +146,9 @@ class LongTermStore:
         # [2026-07-19] 只有长期记忆语义发生外部变化时才标记 manual；纯注释编辑原样保留。
         if self.last_valid_path.exists():
             try:
-                previous = self._parse_bytes(self.last_valid_path.read_bytes())
-                if document.memories != previous.memories:
+                previous_payload = self.last_valid_path.read_bytes()
+                previous = self._parse_bytes(previous_payload) if previous_payload != payload else None
+                if previous is not None and document.memories != previous.memories:
                     if document.curation != previous.curation or document.coverage_overview.coverage_spans != previous.coverage_overview.coverage_spans:
                         raise BaiError("MEMORY_DOCUMENT_INVALID", "人工维护不能直接修改整理前沿或覆盖区间。")
                     old = {item.memory_id: item for item in previous.memories}

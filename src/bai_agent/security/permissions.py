@@ -115,6 +115,10 @@ def ensure_private_path(path: Path, *, is_directory: bool) -> PermissionResult:
                 "明文记忆路径不能使用符号链接或 junction。",
             )
         if os.name == "nt":
+            # [2026-07-19] 已满足私有 DACL 时不重写 ACL，既保留显式授权也缩短只读启动路径。
+            current = _query_windows(path)
+            if current.status == PermissionStatus.PRIVATE:
+                return current
             _tighten_windows(path, is_directory)
             return _query_windows(path)
         os.chmod(path, 0o700 if is_directory else 0o600)
