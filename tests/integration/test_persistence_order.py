@@ -23,7 +23,7 @@ async def test_input_precedes_provider_and_output_precedes_stdout(tmp_path: Path
         events.append(f"saved:{record.role.value}")
         return record
 
-    archive.append = append  # type: ignore[method-assign]
+    archive.append = append  # type: ignore[method-assign]  # [2026-07-19] 测试记录调用顺序。
     provider = FakeProvider(response="完整回答")
     original_complete = provider.complete
 
@@ -31,7 +31,7 @@ async def test_input_precedes_provider_and_output_precedes_stdout(tmp_path: Path
         events.append("provider")
         return await original_complete(request)
 
-    provider.complete = complete  # type: ignore[method-assign]
+    provider.complete = complete  # type: ignore[method-assign]  # [2026-07-19] 测试记录调用顺序。
     controller = SingleTurnController(
         archive,
         provider,
@@ -55,4 +55,3 @@ async def test_provider_failure_keeps_only_confirmed_user(tmp_path: Path) -> Non
     with pytest.raises(BaiError, match="模型调用失败"):
         await controller.run_turn("仍应保存")
     assert [item.role.value for item in archive.read_all()] == ["user"]
-

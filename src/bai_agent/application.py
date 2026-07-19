@@ -7,17 +7,23 @@ from typing import Any
 
 from bai_agent.config.loader import load_config
 from bai_agent.memory.archive import RawRecordArchive
+from bai_agent.memory.curation import CurationPolicy, CurationService
+from bai_agent.memory.long_term import LongTermStore
 from bai_agent.memory.recovery import WriterLease
 from bai_agent.prompting.assembler import PromptAssembler
 from bai_agent.providers.registry import create_provider
 from bai_agent.runtime.controller import SingleTurnController
 from bai_agent.states.resolver import StaticStateResolver
+from bai_agent.tools.executor import ToolExecutor
+from bai_agent.tools.memory_source import MemorySourceQueryTool
+from bai_agent.tools.registry import ToolRegistry
 
 
 class AgentApplication:
-    def __init__(self, snapshot, archive, controller, lease: WriterLease) -> None:
+    def __init__(self, snapshot, archive, long_term_store, controller, lease: WriterLease) -> None:
         self.snapshot = snapshot
         self.archive = archive
+        self.long_term_store = long_term_store
         self.controller = controller
         self.lease = lease
 
@@ -50,6 +56,20 @@ def build_application(
         archive_settings = settings["agent.toml"]["archive"]
         archive = RawRecordArchive(memory_root, **archive_settings)
         archive.validate_permissions()
+        manual = settings["agent.toml"]["manual_memory"]
+        long_term_store = LongTermStore(
+            memory_root,
+            archive,
+            max_document_bytes=int(manual["max_document_bytes"]),
+            max_items=int(manual["max_items"]),
+            max_overview_chars=int(settings["agent.toml"]["memory_overview"]["max_chars"]),
+        )
+        long_term_store.initialize()
+        permission = long_term_store.validate_permissions()
+        if permission.status.value != "private":
+            from bai_agent.domain.errors import BaiError
+
+            raise BaiError(permission.error_code or "MEMORY_PERMISSION_INVALID", permission.warning or "长期记忆权限无效。")
         states_doc = settings["states.toml"]
         states = {str(item["id"]): tuple(item["ordered_persona_ids"]) for item in states_doc["states"] if item.get("enabled", False)}
         resolver = StaticStateResolver(snapshot.default_state_id, states)
@@ -58,13 +78,67 @@ def build_application(
         assembler = PromptAssembler.mvp(personas["chat"], state_prompts)
         if provider is None:
             providers = settings["providers.toml"]
-            profile = providers["model_profiles"]["chat"]
-            provider_config = next(item for item in providers["providers"] if item["id"] == profile["provider"])
-            provider = create_provider(provider_config, profile)
-        controller = SingleTurnController(
-            archive, provider, resolver, assembler, on_output=on_output, tracer=tracer
+            chat_profile = providers["model_profiles"]["chat"]
+            provider_config = next(item for item in providers["providers"] if item["id"] == chat_profile["provider"])
+            provider = create_provider(provider_config, chat_profile)
+            curator_profile = providers["model_profiles"]["memory_curator"]
+            curator_provider = create_provider(provider_config, curator_profile)
+        else:
+            curator_provider = provider
+        short = settings["agent.toml"]["short_term"]
+        curation_service = CurationService(
+            archive,
+            long_term_store,
+            curator_provider,
+            CurationPolicy(
+                max_records=int(short["max_records"]),
+                reserved_records=int(short["reserved_records"]),
+                min_batch_records=int(short["curation_batch_min_records"]),
+                max_batch_records=int(short["curation_batch_max_records"]),
+            ),
+            curator_persona=personas["memory_curator"],
+            prompt_template=snapshot.prompts["memory_curation"],
+            config_revision=snapshot.revision,
+            tracer=tracer,
         )
-        return AgentApplication(snapshot, archive, controller, lease)
+        tool_config = next(item for item in settings["tools.toml"]["tools"] if item["id"] == "memory_source_query")
+        source_tool = MemorySourceQueryTool(
+            long_term_store,
+            archive,
+            page_size=int(tool_config["page_size"]),
+            tracer=tracer,
+        )
+        registry = ToolRegistry()
+        registry.register(
+            source_tool.definition,
+            source_tool,
+            enabled=bool(tool_config["enabled"]),
+            allowed_personas=tuple(tool_config["allowed_personas"]),
+        )
+        tool_executor = ToolExecutor(
+            registry,
+            deadline_seconds=float(settings["agent.toml"]["runtime"]["tool_deadline_seconds"]),
+            max_result_bytes=int(tool_config["max_result_bytes"]),
+        )
+        budgets = settings["agent.toml"]["context_budget"]
+        controller = SingleTurnController(
+            archive,
+            provider,
+            resolver,
+            assembler,
+            on_output=on_output,
+            tracer=tracer,
+            long_term_store=long_term_store,
+            curation_service=curation_service,
+            tool_executor=tool_executor,
+            max_tool_rounds=int(settings["agent.toml"]["runtime"]["max_tool_rounds"]),
+            memory_budgets={
+                "overview_chars": int(settings["agent.toml"]["memory_overview"]["max_chars"]),
+                "long_term_chars": int(budgets["long_term_tokens"]) * 4,
+                "recent_chars": int(budgets["short_term_tokens"]) * 4,
+            },
+        )
+        return AgentApplication(snapshot, archive, long_term_store, controller, lease)
     except Exception:
         lease.release()
         raise

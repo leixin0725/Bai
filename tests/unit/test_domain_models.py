@@ -25,7 +25,7 @@ def test_raw_record_is_frozen_and_json_round_trips() -> None:
     assert restored == record
     assert restored.content_sha256 == content_hash("你好\n世界")
     with pytest.raises(ValidationError):
-        record.content = "不能修改"  # type: ignore[misc]
+        record.content = "不能修改"  # type: ignore[misc]  # [2026-07-19] 测试冻结赋值边界。
 
 
 @pytest.mark.parametrize("prefix", ["rec", "turn", "flow", "mem", "batch"])
@@ -53,4 +53,3 @@ def test_invalid_role_and_naive_time_are_rejected() -> None:
     }
     with pytest.raises(ValidationError):
         RawRecord.model_validate(payload)
-

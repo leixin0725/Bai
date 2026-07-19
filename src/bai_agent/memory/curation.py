@@ -1,0 +1,268 @@
+"""[2026-07-19] 整理只在窗口边界运行一次模型调用，并在本地校验后联合提交。"""
+
+from __future__ import annotations
+
+from collections import OrderedDict
+import json
+from string import Template
+from uuid import NAMESPACE_URL, uuid5
+
+from pydantic import ValidationError
+
+from bai_agent.domain.errors import BaiError
+from bai_agent.domain.models import (
+    CompletionRequest,
+    CreatedBy,
+    CoverageSpan,
+    CurationBatch,
+    CurationProposal,
+    CurationCheckpoint,
+    LongTermMemoryDocument,
+    LongTermMemoryItem,
+    MemoryCoverageOverview,
+    MemoryKind,
+    MemoryStatus,
+    Message,
+    SourceReference,
+    SourceRelation,
+    TrustLevel,
+    content_hash,
+)
+
+
+class CurationPolicy:
+    def __init__(
+        self,
+        *,
+        max_records: int,
+        reserved_records: int,
+        min_batch_records: int,
+        max_batch_records: int,
+    ) -> None:
+        self.max_records = max_records
+        self.reserved_records = reserved_records
+        self.min_batch_records = min_batch_records
+        self.max_batch_records = max_batch_records
+
+    def next_batch(
+        self,
+        records,
+        *,
+        curated_through: int,
+        config_revision: str,
+        force: bool = False,
+    ) -> CurationBatch | None:
+        uncurated = [item for item in records if item.global_sequence > curated_through]
+        direct_limit = self.max_records - self.reserved_records
+        if not force and len(uncurated) <= direct_limit:
+            return None
+        grouped: OrderedDict[str, list] = OrderedDict()
+        for record in uncurated:
+            grouped.setdefault(record.turn_id, []).append(record)
+        selected = []
+        for turn_records in grouped.values():
+            roles = {item.role.value for item in turn_records}
+            if roles != {"user", "assistant"}:
+                break
+            if len(selected) + len(turn_records) > self.max_batch_records:
+                break
+            selected.extend(turn_records)
+            if len(selected) >= self.min_batch_records and len(selected) >= max(1, len(uncurated) - direct_limit):
+                break
+        if len(selected) < self.min_batch_records:
+            return None
+        identity = "|".join(f"{item.record_id}:{item.content_sha256}" for item in selected)
+        batch_uuid = uuid5(NAMESPACE_URL, identity)
+        return CurationBatch(
+            batch_id=f"batch-{batch_uuid}",
+            old_frontier=curated_through,
+            new_frontier=selected[-1].global_sequence,
+            record_ids=tuple(item.record_id for item in selected),
+            config_revision=config_revision,
+            content_sha256=content_hash(identity),
+        )
+
+    @staticmethod
+    def committed_frontier(old: int, *, proposed: int, committed: bool) -> int:
+        return proposed if committed else old
+
+
+class CurationService:
+    def __init__(
+        self,
+        archive,
+        store,
+        provider,
+        policy: CurationPolicy,
+        *,
+        curator_persona: str,
+        prompt_template: str,
+        config_revision: str,
+        max_attempts: int = 1,
+        tracer=None,
+    ) -> None:
+        self.archive = archive
+        self.store = store
+        self.provider = provider
+        self.policy = policy
+        self.curator_persona = curator_persona
+        self.prompt_template = prompt_template
+        self.config_revision = config_revision
+        self.max_attempts = max(1, max_attempts)
+        self.tracer = tracer
+
+    async def curate_if_needed(self, *, force: bool = False) -> LongTermMemoryDocument | None:
+        document = self.store.load()
+        records = self.archive.read_all()
+        batch = self.policy.next_batch(
+            records,
+            curated_through=document.curation.curated_through_sequence,
+            config_revision=self.config_revision,
+            force=force,
+        )
+        if batch is None:
+            return None
+        indexed = {item.record_id: item for item in records}
+        batch_records = tuple(indexed[item] for item in batch.record_ids)
+        rendered_records = json.dumps(
+            [
+                {
+                    "record_id": item.record_id,
+                    "global_sequence": item.global_sequence,
+                    "role": item.role.value,
+                    "content": item.content,
+                    "content_sha256": item.content_sha256,
+                }
+                for item in batch_records
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        try:
+            prompt = Template(self.prompt_template).substitute(
+                batch_records=rendered_records,
+                batch_metadata=json.dumps(batch.model_dump(mode="json"), ensure_ascii=False),
+                existing_memories=json.dumps(
+                    [item.model_dump(mode="json") for item in document.memories], ensure_ascii=False
+                ),
+                current_overview=json.dumps(
+                    document.coverage_overview.model_dump(mode="json"), ensure_ascii=False
+                ),
+                curator_persona=self.curator_persona,
+                untrusted_boundary="untrusted_data",
+                output_schema="memory_curation_v1",
+            )
+        except (KeyError, ValueError) as exc:
+            raise BaiError("PROMPT_TEMPLATE_INVALID", "记忆整理模板变量无效。") from exc
+        request = CompletionRequest(
+            flow_id=f"curation-{batch.batch_id}",
+            turn_id=f"curation-{batch.batch_id}",
+            model_profile_id="memory_curator",
+            messages=(
+                Message(role="system", content=self.curator_persona, trust=TrustLevel.TRUSTED_INSTRUCTION),
+                Message(role="user", content=prompt, trust=TrustLevel.UNTRUSTED_DATA),
+            ),
+            metadata={"batch_id": batch.batch_id, "record_ids": list(batch.record_ids)},
+        )
+        last_error: Exception | None = None
+        proposal = None
+        for _ in range(self.max_attempts):
+            try:
+                response = await self.provider.complete(request)
+                proposal = self._validate_response(response.text, batch)
+                break
+            except Exception as exc:
+                last_error = exc
+        if proposal is None:
+            if isinstance(last_error, BaiError):
+                raise last_error
+            raise BaiError("CURATION_FAILED", "记忆整理失败，原记录仍保留在直接窗口。", retryable=True) from last_error
+        committed = self._merge_and_commit(document, batch, batch_records, proposal)
+        if self.tracer:
+            self.tracer.emit(
+                "memory.curation_committed",
+                batch_id=batch.batch_id,
+                revision=committed.revision,
+                overview_revision=committed.coverage_overview.revision,
+                count=len(batch.record_ids),
+                covered_range=str((batch.old_frontier + 1, batch.new_frontier)),
+            )
+        return committed
+
+    def _validate_response(self, text: str, batch: CurationBatch) -> dict:
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise BaiError("CURATION_SCHEMA_INVALID", "记忆整理响应不是完整 JSON。", retryable=True) from exc
+        try:
+            proposal = CurationProposal.model_validate(payload)
+        except ValidationError as exc:
+            raise BaiError("CURATION_SCHEMA_INVALID", "记忆整理响应字段不符合 Schema。") from exc
+        if proposal.overview_update.record_ids != batch.record_ids:
+            raise BaiError("CURATION_COVERAGE_INVALID", "整理概览必须覆盖且仅覆盖当前批次。")
+        allowed = set(batch.record_ids)
+        for candidate in proposal.memory_candidates:
+            sources = candidate.source_record_ids
+            if not sources or not set(sources).issubset(allowed):
+                raise BaiError("CURATION_SOURCE_INVALID", "长期记忆候选来源不属于当前批次。")
+            self.store.guard.ensure_safe(candidate.text)
+        self.store.guard.ensure_safe(proposal.overview_update.text)
+        return proposal.model_dump(mode="python")
+
+    def _merge_and_commit(self, document, batch, records, proposal) -> LongTermMemoryDocument:
+        by_id = {item.record_id: item for item in records}
+        memories = list(document.memories)
+        manual_texts = {
+            item.text for item in memories if item.created_by == CreatedBy.MANUAL and item.status == MemoryStatus.ACTIVE
+        }
+        now = records[-1].created_at
+        for index, candidate in enumerate(proposal["memory_candidates"]):
+            if candidate["text"] in manual_texts:
+                continue
+            memory_uuid = uuid5(NAMESPACE_URL, f"{batch.batch_id}:{index}:{candidate['text']}")
+            memories.append(
+                LongTermMemoryItem(
+                    memory_id=f"mem-{memory_uuid}",
+                    kind=MemoryKind(candidate["kind"]),
+                    text=candidate["text"],
+                    status=MemoryStatus.ACTIVE,
+                    source_refs=tuple(
+                        SourceReference(
+                            record_id=record_id,
+                            relation=SourceRelation.SUPPORTS,
+                            record_sha256=by_id[record_id].content_sha256,
+                        )
+                        for record_id in candidate["source_record_ids"]
+                    ),
+                    created_by=CreatedBy.MEMORY_CURATOR,
+                    created_at=now,
+                    updated_at=now,
+                    supersedes=(),
+                    tags=tuple(candidate["tags"]),
+                )
+            )
+        revision = document.revision + 1
+        span = CoverageSpan(
+            start_sequence=batch.old_frontier + 1,
+            end_sequence=batch.new_frontier,
+            batch_id=batch.batch_id,
+            record_ids=batch.record_ids,
+            record_hashes=tuple(by_id[item].content_sha256 for item in batch.record_ids),
+        )
+        updated = LongTermMemoryDocument(
+            schema_version=1,
+            revision=revision,
+            curation=CurationCheckpoint(
+                curated_through_sequence=batch.new_frontier,
+                last_batch_id=batch.batch_id,
+                updated_at=now,
+                covered_record_ids=batch.record_ids,
+            ),
+            coverage_overview=MemoryCoverageOverview(
+                revision=revision,
+                text=proposal["overview_update"]["text"],
+                coverage_spans=(*document.coverage_overview.coverage_spans, span),
+            ),
+            memories=tuple(memories),
+        )
+        return self.store.commit(updated)

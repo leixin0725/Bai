@@ -114,32 +114,32 @@
 
 ### Tests for User Story 2（先写并确认失败）
 
-- [ ] T046 [P] [US2] 在 `tests/unit/test_long_term_models.py` 为 BR-006/BR-012/BR-016 的 active/superseded/retracted、人工优先、来源非空、关系无环和悬空引用拒绝编写测试
-- [ ] T047 [P] [US2] 在 `tests/integration/test_long_term_store.py` 为 BR-012/BR-014/BR-016 编写 YAML 注释往返、有效人工修改、无效文件不覆盖、last-valid 只读回退、来源哈希校验及长期文件权限测试
-- [ ] T048 [P] [US2] 在 `tests/unit/test_curation_policy.py` 为 BR-011/BR-013 编写阈值前零调用、最旧连续完整轮次、批次上限、空提取可推进和失败不推进测试
-- [ ] T049 [P] [US2] 在 `tests/fault_injection/test_long_term_atomicity.py` 为 BR-004/BR-013/BR-016 覆盖单次整理响应、Schema、外部并发编辑、YAML flush/fsync/replace，以及长期记忆/来源/MemoryCoverageOverview/前沿同 revision 联合提交各故障点
-- [ ] T050 [P] [US2] 在 `tests/unit/test_memory_selection.py` 为 BR-004/BR-006/BR-007/BR-015 覆盖冲突优先、完整轮次选择、未选项候选资格、原始段不变，并证明从 sequence 1 到最新确认记录无缺口地满足“`<= curated_through_sequence` 被 coverage span 覆盖”或“`> curated_through_sequence` 仍在近期直接注入范围”；覆盖空提取批次、重叠/缺口拒绝、概览预算有界和 span 到 batch/record hash 可追溯
-- [ ] T051 [P] [US2] 在 `tests/contract/test_prompt_context.py` 为 BR-005/BR-007/BR-018 覆盖有界 MemoryCoverageOverview 先于按相关性选择的长期明细、近期原文、预算/信任/coverage/source manifest、强制段缺失或覆盖有缺口时生成前失败，以及未调用工具时自动注入来源原文数量为 0
-- [ ] T052 [P] [US2] 在 `tests/contract/test_memory_source_tool.py` 为 BR-017/BR-018 覆盖聊天/整理/状态/两个辅助人格同参结果、稳定分页/错误、当前 flow 隔离和调用前后权威文件哈希不变
-- [ ] T053 [P] [US2] 在 `tests/integration/test_curation_workflow.py` 为 BR-011/BR-012/BR-013/BR-016 实现窗口整理、一次模型调用、有界重试、人工优先、重启去重、多来源、空提取连续覆盖，以及长期记忆/来源/MemoryCoverageOverview/前沿同 revision 端到端测试
-- [ ] T054 [P] [US2] 在 `tests/integration/test_plaintext_permissions.py` 为 BR-014 和 CR-002/CR-005/CR-006 验证明文可读、长期 YAML/last-valid 复用 T032 的精确权限判定，以及原始/长期/概览/工具结果均不能持久化测试凭据
+- [X] T046 [P] [US2] 在 `tests/unit/test_long_term_models.py` 为 BR-006/BR-012/BR-016 的 active/superseded/retracted、人工优先、来源非空、关系无环和悬空引用拒绝编写测试
+- [X] T047 [P] [US2] 在 `tests/integration/test_long_term_store.py` 为 BR-012/BR-014/BR-016 编写 YAML 注释往返、有效人工修改、无效文件不覆盖、last-valid 只读回退、来源哈希校验及长期文件权限测试
+- [X] T048 [P] [US2] 在 `tests/unit/test_curation_policy.py` 为 BR-011/BR-013 编写阈值前零调用、最旧连续完整轮次、批次上限、空提取可推进和失败不推进测试
+- [X] T049 [P] [US2] 在 `tests/fault_injection/test_long_term_atomicity.py` 为 BR-004/BR-013/BR-016 覆盖单次整理响应、Schema、外部并发编辑、YAML flush/fsync/replace，以及长期记忆/来源/MemoryCoverageOverview/前沿同 revision 联合提交各故障点
+- [X] T050 [P] [US2] 在 `tests/unit/test_memory_selection.py` 为 BR-004/BR-006/BR-007/BR-015 覆盖冲突优先、完整轮次选择、未选项候选资格、原始段不变，并证明从 sequence 1 到最新确认记录无缺口地满足“`<= curated_through_sequence` 被 coverage span 覆盖”或“`> curated_through_sequence` 仍在近期直接注入范围”；覆盖空提取批次、重叠/缺口拒绝、概览预算有界和 span 到 batch/record hash 可追溯
+- [X] T051 [P] [US2] 在 `tests/contract/test_prompt_context.py` 为 BR-005/BR-007/BR-018 覆盖有界 MemoryCoverageOverview 先于按相关性选择的长期明细、近期原文、预算/信任/coverage/source manifest、强制段缺失或覆盖有缺口时生成前失败，以及未调用工具时自动注入来源原文数量为 0
+- [X] T052 [P] [US2] 在 `tests/contract/test_memory_source_tool.py` 为 BR-017/BR-018 覆盖聊天/整理/状态/两个辅助人格同参结果、稳定分页/错误、当前 flow 隔离和调用前后权威文件哈希不变
+- [X] T053 [P] [US2] 在 `tests/integration/test_curation_workflow.py` 为 BR-011/BR-012/BR-013/BR-016 实现窗口整理、一次模型调用、有界重试、人工优先、重启去重、多来源、空提取连续覆盖，以及长期记忆/来源/MemoryCoverageOverview/前沿同 revision 端到端测试
+- [X] T054 [P] [US2] 在 `tests/integration/test_plaintext_permissions.py` 为 BR-014 和 CR-002/CR-005/CR-006 验证明文可读、长期 YAML/last-valid 复用 T032 的精确权限判定，以及原始/长期/概览/工具结果均不能持久化测试凭据
 
 ### Implementation for User Story 2
 
-- [ ] T055 [US2] 在 `src/bai_agent/domain/models.py` 增加 LongTermMemoryDocument/Item、SourceReference、MemoryCoverageOverview/CoverageSpan、CurationCheckpoint/Batch/Proposal、PromptSegment/Context 与 Tool DTO，强制 span 连续不重叠、绑定 batch/sequence/record hash、覆盖到整理前沿且与文档 revision 一致
-- [ ] T056 [US2] 在 `src/bai_agent/memory/long_term.py` 实现 ruamel.yaml round-trip 加载、完整验证、长期记忆/来源/MemoryCoverageOverview/前沿联合原子提交、revision/hash 检查及共享权限门禁
-- [ ] T057 [US2] 在 `src/bai_agent/memory/long_term.py` 实现人工修改识别、manual 来源、last-valid 原子刷新、无效主文件只读回退及禁止自动整理状态
-- [ ] T058 [US2] 在 `src/bai_agent/memory/selection.py` 实现短期窗口追踪、完整轮次/批次选择、长期记忆冲突优先、配置预算内的相关明细选择，以及无需扫描原始正文全集的 coverage span/近期窗口完整性判定
-- [ ] T059 [US2] 在 `src/bai_agent/memory/long_term.py` 实现 MemoryCoverageOverview 的持久化、连续 coverage span 校验、有界 overview text 与 source manifest；人工修改只改变经校验的长期项并按同一 revision 更新其覆盖引用，不创建独立概览文件或第二事实来源
-- [ ] T060 [US2] 在 `src/bai_agent/memory/curation.py` 实现边界触发、稳定 batch ID、最旧连续批次、结构化候选本地 Schema/来源/凭据/人工优先校验
-- [ ] T061 [US2] 在 `src/bai_agent/memory/curation.py` 实现使用既有 `config/prompts/memory_curation.md` 和专用 persona/model profile 的单次非流式 JSON 整理，使同一响应同时给出长期记忆候选与有界 overview update；执行 Schema/覆盖/来源/凭据校验、有界安全重试，并仅在长期记忆、来源、MemoryCoverageOverview 联合提交成功后推进前沿
-- [ ] T062 [P] [US2] 在 `src/bai_agent/prompting/assembler.py` 扩展固定顺序的可信人格、不可信 MemoryCoverageOverview、相关长期明细、近期原文、预算降级、coverage/source manifest 和显式数据边界组装
-- [ ] T063 [P] [US2] 在 `src/bai_agent/tools/registry.py` 与 `src/bai_agent/tools/executor.py` 实现统一 ToolDefinition/Context/Result 注册、参数 Schema、人格权限和稳定错误基础
-- [ ] T064 [US2] 在 `src/bai_agent/tools/memory_source.py` 实现只读 `memory_source_query`、revision 绑定游标、稳定排序分页、来源哈希校验和当前 flow 审计
-- [ ] T065 [US2] 在 `src/bai_agent/runtime/controller.py` 集成整理前置门禁、MemoryCoverageOverview/相关明细/短期上下文、来源查询工具子轮次，并在 coverage 缺口或整理失败时禁止 Provider 调用和提前修剪
-- [ ] T066 [US2] 在 `src/bai_agent/cli.py` 实现完整 `memory validate` 与复用同一只读服务的 `memory source MEMORY_ID --cursor` 命令，并报告 coverage span 缺口/重叠、来源和权限异常
-- [ ] T067 [US2] 在 `src/bai_agent/runtime/tracing.py` 实现不含正文的 prompt source manifest、overview revision、covered/direct sequence 范围、整理批次和来源查询审计字段
-- [ ] T068 [US2] 运行 `tests/unit/test_long_term_models.py`、`tests/integration/test_long_term_store.py`、`tests/unit/test_curation_policy.py`、`tests/fault_injection/test_long_term_atomicity.py`、`tests/unit/test_memory_selection.py`、`tests/contract/test_prompt_context.py`、`tests/contract/test_memory_source_tool.py`、`tests/integration/test_curation_workflow.py`、`tests/integration/test_plaintext_permissions.py`、US1 回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/domain/models.py`、`src/bai_agent/memory/`、`src/bai_agent/prompting/assembler.py`、`src/bai_agent/tools/`、`src/bai_agent/runtime/`、`src/bai_agent/cli.py` 与 US2 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US2 原子提交
+- [X] T055 [US2] 在 `src/bai_agent/domain/models.py` 增加 LongTermMemoryDocument/Item、SourceReference、MemoryCoverageOverview/CoverageSpan、CurationCheckpoint/Batch/Proposal、PromptSegment/Context 与 Tool DTO，强制 span 连续不重叠、绑定 batch/sequence/record hash、覆盖到整理前沿且与文档 revision 一致
+- [X] T056 [US2] 在 `src/bai_agent/memory/long_term.py` 实现 ruamel.yaml round-trip 加载、完整验证、长期记忆/来源/MemoryCoverageOverview/前沿联合原子提交、revision/hash 检查及共享权限门禁
+- [X] T057 [US2] 在 `src/bai_agent/memory/long_term.py` 实现人工修改识别、manual 来源、last-valid 原子刷新、无效主文件只读回退及禁止自动整理状态
+- [X] T058 [US2] 在 `src/bai_agent/memory/selection.py` 实现短期窗口追踪、完整轮次/批次选择、长期记忆冲突优先、配置预算内的相关明细选择，以及无需扫描原始正文全集的 coverage span/近期窗口完整性判定
+- [X] T059 [US2] 在 `src/bai_agent/memory/long_term.py` 实现 MemoryCoverageOverview 的持久化、连续 coverage span 校验、有界 overview text 与 source manifest；人工修改只改变经校验的长期项并按同一 revision 更新其覆盖引用，不创建独立概览文件或第二事实来源
+- [X] T060 [US2] 在 `src/bai_agent/memory/curation.py` 实现边界触发、稳定 batch ID、最旧连续批次、结构化候选本地 Schema/来源/凭据/人工优先校验
+- [X] T061 [US2] 在 `src/bai_agent/memory/curation.py` 实现使用既有 `config/prompts/memory_curation.md` 和专用 persona/model profile 的单次非流式 JSON 整理，使同一响应同时给出长期记忆候选与有界 overview update；执行 Schema/覆盖/来源/凭据校验、有界安全重试，并仅在长期记忆、来源、MemoryCoverageOverview 联合提交成功后推进前沿
+- [X] T062 [P] [US2] 在 `src/bai_agent/prompting/assembler.py` 扩展固定顺序的可信人格、不可信 MemoryCoverageOverview、相关长期明细、近期原文、预算降级、coverage/source manifest 和显式数据边界组装
+- [X] T063 [P] [US2] 在 `src/bai_agent/tools/registry.py` 与 `src/bai_agent/tools/executor.py` 实现统一 ToolDefinition/Context/Result 注册、参数 Schema、人格权限和稳定错误基础
+- [X] T064 [US2] 在 `src/bai_agent/tools/memory_source.py` 实现只读 `memory_source_query`、revision 绑定游标、稳定排序分页、来源哈希校验和当前 flow 审计
+- [X] T065 [US2] 在 `src/bai_agent/runtime/controller.py` 集成整理前置门禁、MemoryCoverageOverview/相关明细/短期上下文、来源查询工具子轮次，并在 coverage 缺口或整理失败时禁止 Provider 调用和提前修剪
+- [X] T066 [US2] 在 `src/bai_agent/cli.py` 实现完整 `memory validate` 与复用同一只读服务的 `memory source MEMORY_ID --cursor` 命令，并报告 coverage span 缺口/重叠、来源和权限异常
+- [X] T067 [US2] 在 `src/bai_agent/runtime/tracing.py` 实现不含正文的 prompt source manifest、overview revision、covered/direct sequence 范围、整理批次和来源查询审计字段
+- [X] T068 [US2] 运行 `tests/unit/test_long_term_models.py`、`tests/integration/test_long_term_store.py`、`tests/unit/test_curation_policy.py`、`tests/fault_injection/test_long_term_atomicity.py`、`tests/unit/test_memory_selection.py`、`tests/contract/test_prompt_context.py`、`tests/contract/test_memory_source_tool.py`、`tests/integration/test_curation_workflow.py`、`tests/integration/test_plaintext_permissions.py`、US1 回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/domain/models.py`、`src/bai_agent/memory/`、`src/bai_agent/prompting/assembler.py`、`src/bai_agent/tools/`、`src/bai_agent/runtime/`、`src/bai_agent/cli.py` 与 US2 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US2 原子提交
 
 **Checkpoint**: US2 可在 FakeProvider/fixture 人格下独立验收，完整记忆范围始终参与上下文，且不会因容量或整理丢失任何原始记录。
 

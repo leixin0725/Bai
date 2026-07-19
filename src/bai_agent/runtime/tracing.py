@@ -29,6 +29,12 @@ ALLOWED_FIELDS = frozenset(
         "output_tokens",
         "covered_range",
         "direct_range",
+        "source_manifest",
+        "source_count",
+        "revision",
+        "trigger_record_id",
+        "call_id",
+        "cursor_present",
     }
 )
 
@@ -43,4 +49,3 @@ class SafeTracer:
             raise BaiError("UNSAFE_LOG_FIELD", "日志字段不在安全白名单中。")
         payload = {"event": event, **fields}
         self._output.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
-

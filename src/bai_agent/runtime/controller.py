@@ -6,17 +6,47 @@ import asyncio
 from collections.abc import Callable
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import CompletionRequest, Message, Role, StateResolutionContext, TrustLevel, new_id
+from bai_agent.domain.models import (
+    CompletionRequest,
+    Message,
+    Role,
+    StateResolutionContext,
+    ToolCall,
+    ToolExecutionContext,
+    TrustLevel,
+    canonical_json,
+    new_id,
+)
+from bai_agent.memory.selection import select_long_term
 
 
 class SingleTurnController:
-    def __init__(self, repository, provider, state_resolver, prompt_assembler, *, on_output: Callable[[str], None] | None = None, tracer=None) -> None:
+    def __init__(
+        self,
+        repository,
+        provider,
+        state_resolver,
+        prompt_assembler,
+        *,
+        on_output: Callable[[str], None] | None = None,
+        tracer=None,
+        long_term_store=None,
+        curation_service=None,
+        tool_executor=None,
+        max_tool_rounds: int = 0,
+        memory_budgets: dict[str, int] | None = None,
+    ) -> None:
         self.repository = repository
         self.provider = provider
         self.state_resolver = state_resolver
         self.prompt_assembler = prompt_assembler
         self.on_output = on_output
         self.tracer = tracer
+        self.long_term_store = long_term_store
+        self.curation_service = curation_service
+        self.tool_executor = tool_executor
+        self.max_tool_rounds = max_tool_rounds
+        self.memory_budgets = memory_budgets or {}
 
     async def run_turn(
         self,
@@ -52,17 +82,55 @@ class SingleTurnController:
                     state_id=resolution.state_id,
                     config_revision=config_revision,
                 )
-        recent = tuple(item for item in self.repository.read_all() if item.record_id != user_record.record_id)
+        if self.curation_service:
+            await self.curation_service.curate_if_needed()
+        all_records = self.repository.read_all()
+        if self.long_term_store:
+            long_document = self.long_term_store.load()
+            recent = tuple(
+                item
+                for item in all_records
+                if item.global_sequence > long_document.curation.curated_through_sequence
+            )
+            selected_memories = select_long_term(
+                long_document.memories,
+                content,
+                max_chars=self.memory_budgets.get("long_term_chars", 16_384),
+            )
+            memory_overview = long_document.coverage_overview
+            long_term_texts = tuple(item.text for item in selected_memories)
+            curated_through = long_document.curation.curated_through_sequence
+            coverage_records = all_records
+        else:
+            recent = tuple(item for item in all_records if item.record_id != user_record.record_id)
+            memory_overview = "[]"
+            long_term_texts = ()
+            curated_through = 0
+            coverage_records = None
         context = self.prompt_assembler.assemble(
             flow_id=new_id("flow"),
             turn_id=resolved_turn_id,
             config_revision=config_revision,
             state_resolution=resolution,
-            memory_overview="[]",
-            long_term_memories=(),
+            memory_overview=memory_overview,
+            long_term_memories=long_term_texts,
             recent_records=recent,
             current_input=content,
+            all_raw_records=coverage_records,
+            curated_through=curated_through,
+            budgets=self.memory_budgets,
         )
+        if self.tracer:
+            self.tracer.emit(
+                "prompt.ready",
+                turn_id=resolved_turn_id,
+                flow_id=context.flow_id,
+                state_id=resolution.state_id,
+                config_revision=config_revision,
+                source_manifest=list(context.source_manifest),
+                covered_range=str(context.coverage.get("covered_range", [])),
+                direct_range=str(context.coverage.get("direct_range", [])),
+            )
         request = CompletionRequest(
             flow_id=context.flow_id,
             turn_id=resolved_turn_id,
@@ -77,6 +145,40 @@ class SingleTurnController:
         )
         try:
             result = await self.provider.complete(request)
+            seen_call_ids: set[str] = set()
+            for _ in range(self.max_tool_rounds):
+                if not result.tool_calls:
+                    break
+                if self.tool_executor is None:
+                    raise BaiError("TOOL_DISABLED", "模型请求了未启用的工具。")
+                tool_messages = []
+                for raw_call in result.tool_calls:
+                    call = ToolCall.model_validate(raw_call)
+                    if call.call_id in seen_call_ids:
+                        raise BaiError("TOOL_CALL_DUPLICATE", "模型返回了重复工具调用 ID。")
+                    seen_call_ids.add(call.call_id)
+                    tool_result = await self.tool_executor.execute(
+                        call,
+                        ToolExecutionContext(
+                            flow_id=context.flow_id,
+                            turn_id=resolved_turn_id,
+                            persona_id="chat",
+                            state_id=resolution.state_id,
+                            config_revision=config_revision,
+                            trigger_record_id=user_record.record_id,
+                        ),
+                    )
+                    tool_messages.append(
+                        Message(
+                            role="tool",
+                            content=canonical_json(tool_result.model_dump(mode="json")),
+                            trust=TrustLevel.UNTRUSTED_DATA,
+                        )
+                    )
+                request = request.model_copy(update={"messages": (*request.messages, *tool_messages)})
+                result = await self.provider.complete(request)
+            if result.tool_calls:
+                raise BaiError("TOOL_ROUND_LIMIT", "工具调用超过配置轮数限制。")
         except asyncio.CancelledError:
             raise
         assistant = self.repository.append(
@@ -95,6 +197,15 @@ class SingleTurnController:
                 state_id=resolution.state_id,
                 config_revision=config_revision,
             )
+            if self.long_term_store:
+                self.tracer.emit(
+                    "prompt.coverage",
+                    turn_id=resolved_turn_id,
+                    flow_id=context.flow_id,
+                    overview_revision=self.long_term_store.load().revision,
+                    covered_range=str(context.coverage.get("covered_range", [])),
+                    direct_range=str(context.coverage.get("direct_range", [])),
+                )
         if self.on_output:
             self.on_output(assistant.content)
         return assistant.content
