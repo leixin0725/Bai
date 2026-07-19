@@ -11,6 +11,18 @@ chat_context = "prompts/chat_context.md"
 memory_curation = "prompts/memory_curation.md"
 untrusted_memory_boundary = "prompts/untrusted_memory_boundary.md"
 
+[template_variables.chat_context]
+allowed = ["trusted_personas", "untrusted_boundary", "memory_overview", "long_term_memories", "recent_records", "current_input"]
+untrusted = ["memory_overview", "long_term_memories", "recent_records", "current_input"]
+
+[template_variables.memory_curation]
+allowed = ["curator_persona", "untrusted_boundary", "batch_metadata", "batch_records", "existing_memories", "current_overview", "output_schema"]
+untrusted = ["batch_metadata", "batch_records", "existing_memories", "current_overview"]
+
+[template_variables.untrusted_memory_boundary]
+allowed = []
+untrusted = []
+
 [archive]
 segment_max_records = 256
 segment_max_bytes = 1048576
@@ -50,4 +62,3 @@ max_cost_units = 0
 writer_lock_timeout_seconds = 0
 tool_deadline_seconds = 20
 max_tool_rounds = 4
-

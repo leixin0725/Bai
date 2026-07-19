@@ -153,20 +153,20 @@
 
 ### Tests for User Story 3（先写并确认失败）
 
-- [ ] T069 [P] [US3] 在 `tests/unit/test_persona_config.py`、`tests/fixtures/config-persona-a/` 与 `tests/fixtures/config-persona-b/` 为独立角色、两个含不同稳定标记的合法聊天人格、缺失/空白/重复引用、非法 UTF-8、文件过大和聊天人格不得替代整理人格编写测试
-- [ ] T070 [P] [US3] 在 `tests/unit/test_prompt_templates.py` 为严格 `string.Template.substitute()`、允许变量完全匹配、绝对/`..`/符号链接逃逸、不可信数据插槽，以及 `memory_curation.md` 的长期候选/overview update 单次结构化输出变量编写测试
-- [ ] T071 [P] [US3] 在 `tests/integration/test_persona_reload.py` 为 BR-008 使用 FakeProvider 捕获最终 PromptContext，断言 persona A/B 稳定标记和 config revision 只在轮次间确定性切换、当前轮固定且历史原始/长期记忆哈希不变，不以真实模型自然语言输出作为行为差异 oracle
-- [ ] T072 [P] [US3] 在 `tests/contract/test_cli_config.py` 覆盖 `config validate`、`doctor`、完整提示引用图、可操作错误、秘密只检查存在性及输出不含提示正文/API Key 的 CLI 契约
+- [X] T069 [P] [US3] 在 `tests/unit/test_persona_config.py`、`tests/fixtures/config-persona-a/` 与 `tests/fixtures/config-persona-b/` 为独立角色、两个含不同稳定标记的合法聊天人格、缺失/空白/重复引用、非法 UTF-8、文件过大和聊天人格不得替代整理人格编写测试
+- [X] T070 [P] [US3] 在 `tests/unit/test_prompt_templates.py` 为严格 `string.Template.substitute()`、允许变量完全匹配、绝对/`..`/符号链接逃逸、不可信数据插槽，以及 `memory_curation.md` 的长期候选/overview update 单次结构化输出变量编写测试
+- [X] T071 [P] [US3] 在 `tests/integration/test_persona_reload.py` 为 BR-008 使用 FakeProvider 捕获最终 PromptContext，断言 persona A/B 稳定标记和 config revision 只在轮次间确定性切换、当前轮固定且历史原始/长期记忆哈希不变，不以真实模型自然语言输出作为行为差异 oracle
+- [X] T072 [P] [US3] 在 `tests/contract/test_cli_config.py` 覆盖 `config validate`、`doctor`、完整提示引用图、可操作错误、秘密只检查存在性及输出不含提示正文/API Key 的 CLI 契约
 
 ### Implementation for User Story 3
 
-- [ ] T073 [US3] 在 `src/bai_agent/config/loader.py` 实现 agent 入口引用图、人格/提示文件加载、内容哈希和轮次间原子 ConfigSnapshot 重载
-- [ ] T074 [US3] 在 `src/bai_agent/config/validation.py` 实现 PersonaProfile 角色唯一性、严格模板标识符、编码/大小、配置根路径和跨文件引用完整校验
-- [ ] T075 [US3] 在 `src/bai_agent/prompting/personas.py` 实现基础/状态/整理人格按职责读取与可信指令段生成，任何缺失均 fail-closed
-- [ ] T076 [P] [US3] 完善 `config/personas/chat.md`、`config/personas/memory_curator.md`、`config/personas/states/default.md`、`config/prompts/chat_context.md`、`config/prompts/memory_curation.md` 与 `config/prompts/untrusted_memory_boundary.md` 的独立职责、严格变量、不可信数据边界及单次整理响应中的 overview update 结构要求
-- [ ] T077 [US3] 在 `src/bai_agent/application.py` 实现轮次边界配置重载、persona/model profile 绑定及配置失败不生成响应且不改记忆
-- [ ] T078 [US3] 在 `src/bai_agent/cli.py` 实现 `config validate` 与默认无网络的 `doctor`，输出 config revision、角色、提示、状态和启用工具但不输出正文/秘密
-- [ ] T079 [US3] 运行 `tests/unit/test_persona_config.py`、`tests/unit/test_prompt_templates.py`、`tests/integration/test_persona_reload.py`、`tests/contract/test_cli_config.py`、既有记忆回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `config/`、`src/bai_agent/config/`、`src/bai_agent/prompting/personas.py`、`src/bai_agent/application.py`、`src/bai_agent/cli.py`、persona fixtures 与 US3 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US3 原子提交
+- [X] T073 [US3] 在 `src/bai_agent/config/loader.py` 实现 agent 入口引用图、人格/提示文件加载、内容哈希和轮次间原子 ConfigSnapshot 重载
+- [X] T074 [US3] 在 `src/bai_agent/config/validation.py` 实现 PersonaProfile 角色唯一性、严格模板标识符、编码/大小、配置根路径和跨文件引用完整校验
+- [X] T075 [US3] 在 `src/bai_agent/prompting/personas.py` 实现基础/状态/整理人格按职责读取与可信指令段生成，任何缺失均 fail-closed
+- [X] T076 [P] [US3] 完善 `config/personas/chat.md`、`config/personas/memory_curator.md`、`config/personas/states/default.md`、`config/prompts/chat_context.md`、`config/prompts/memory_curation.md` 与 `config/prompts/untrusted_memory_boundary.md` 的独立职责、严格变量、不可信数据边界及单次整理响应中的 overview update 结构要求
+- [X] T077 [US3] 在 `src/bai_agent/application.py` 实现轮次边界配置重载、persona/model profile 绑定及配置失败不生成响应且不改记忆
+- [X] T078 [US3] 在 `src/bai_agent/cli.py` 实现 `config validate` 与默认无网络的 `doctor`，输出 config revision、角色、提示、状态和启用工具但不输出正文/秘密
+- [X] T079 [US3] 运行 `tests/unit/test_persona_config.py`、`tests/unit/test_prompt_templates.py`、`tests/integration/test_persona_reload.py`、`tests/contract/test_cli_config.py`、既有记忆回归、`tests/integration/test_repository_secret_safety.py` 及 `python -m bai_agent security incident check`；仅暂存 `config/`、`src/bai_agent/config/`、`src/bai_agent/prompting/personas.py`、`src/bai_agent/application.py`、`src/bai_agent/cli.py`、persona fixtures 与 US3 测试，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建 US3 原子提交
 
 **Checkpoint**: US3 可独立通过配置替换人格和提示模板；人格修改不改变任何历史记忆。
 

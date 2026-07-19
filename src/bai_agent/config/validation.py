@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from string import Template
 from typing import Any
 
 from bai_agent.domain.errors import BaiError
 
 
 def resolve_inside(root: Path, reference: str) -> Path:
-    candidate = (root / reference).resolve()
+    unresolved = root / reference
+    if unresolved.is_symlink():
+        raise BaiError("CONFIG_PATH_ESCAPE", "配置引用不能使用符号链接。")
+    candidate = unresolved.resolve()
     resolved_root = root.resolve()
     if Path(reference).is_absolute() or not candidate.is_relative_to(resolved_root):
         raise BaiError("CONFIG_PATH_ESCAPE", "配置引用越过配置根。")
@@ -65,3 +69,29 @@ def read_utf8_nonempty(path: Path, max_bytes: int = 262_144) -> str:
         raise BaiError("CONFIG_INVALID", "配置引用文件不得为空白。")
     return text
 
+
+def validate_template(
+    template: str,
+    *,
+    allowed_variables: tuple[str, ...],
+    untrusted_variables: tuple[str, ...],
+) -> None:
+    """[2026-07-19] Template 标识符必须与配置清单完全一致，禁止安全降级替换。"""
+    found: list[str] = []
+    for match in Template.pattern.finditer(template):
+        if match.group("invalid") is not None:
+            raise BaiError("PROMPT_TEMPLATE_INVALID", "提示模板包含畸形变量。")
+        name = match.group("named") or match.group("braced")
+        if name:
+            found.append(name)
+    if set(found) != set(allowed_variables) or len(found) != len(set(found)):
+        raise BaiError("PROMPT_TEMPLATE_INVALID", "提示模板变量与允许清单不完全匹配。")
+    if not set(untrusted_variables).issubset(set(allowed_variables)):
+        raise BaiError("PROMPT_TEMPLATE_INVALID", "不可信数据变量未包含在允许清单中。")
+    trusted_only = {"trusted_personas", "curator_persona", "untrusted_boundary", "output_schema"}
+    if trusted_only & set(untrusted_variables):
+        raise BaiError("PROMPT_TEMPLATE_INVALID", "可信指令变量不能标记为不可信数据。")
+    try:
+        Template(template).substitute({name: "fixture" for name in allowed_variables})
+    except (KeyError, ValueError) as exc:
+        raise BaiError("PROMPT_TEMPLATE_INVALID", "提示模板无法严格替换。") from exc

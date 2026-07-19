@@ -428,6 +428,8 @@ class PersonaProfile:
     prompt: str
     model_profile_id: str
     allowed_tool_ids: tuple[str, ...] = ()
+    allowed_template_variables: tuple[str, ...] = ()
+    prompt_sha256: str = ""
 
 
 def _freeze(value: Any) -> Any:

@@ -8,9 +8,14 @@ from pathlib import Path
 import tomllib
 from typing import Mapping
 
-from bai_agent.config.validation import read_utf8_nonempty, resolve_inside, validate_agent
+from bai_agent.config.validation import (
+    read_utf8_nonempty,
+    resolve_inside,
+    validate_agent,
+    validate_template,
+)
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import ConfigSnapshot, PersonaProfile
+from bai_agent.domain.models import ConfigSnapshot, PersonaProfile, content_hash
 
 
 MANIFESTS = ("agent.toml", "providers.toml", "states.toml", "tools.toml", "logging.toml")
@@ -60,14 +65,26 @@ def load_config(
 
     loaded_paths: dict[str, Path] = {name: root / name for name in MANIFESTS}
     persona_values: list[PersonaProfile] = []
+    persona_paths: set[Path] = set()
     for persona_id, role in (("chat", "chat"), ("memory_curator", "memory_curator")):
         reference = agent.get("personas", {}).get(persona_id)
         if not isinstance(reference, str):
             raise BaiError("CONFIG_INVALID", "人格入口引用缺失。")
         path = resolve_inside(root, reference)
+        if path in persona_paths:
+            raise BaiError("CONFIG_INVALID", "不同人格职责不能引用同一提示文件。")
+        persona_paths.add(path)
         loaded_paths[reference] = path
+        prompt = read_utf8_nonempty(path)
         persona_values.append(
-            PersonaProfile(persona_id, role, reference, read_utf8_nonempty(path), persona_id)
+            PersonaProfile(
+                persona_id,
+                role,
+                reference,
+                prompt,
+                persona_id,
+                prompt_sha256=content_hash(prompt),
+            )
         )
 
     states = documents["states.toml"]
@@ -82,14 +99,19 @@ def load_config(
         if not isinstance(reference, str):
             raise BaiError("CONFIG_INVALID", "状态人格提示引用缺失。")
         path = resolve_inside(root, reference)
+        if path in persona_paths:
+            raise BaiError("CONFIG_INVALID", "不同人格职责不能引用同一提示文件。")
+        persona_paths.add(path)
         loaded_paths[reference] = path
+        prompt = read_utf8_nonempty(path)
         persona_values.append(
             PersonaProfile(
                 persona_id,
                 "state",
                 reference,
-                read_utf8_nonempty(path),
+                prompt,
                 str(item.get("model_profile", "chat")),
+                prompt_sha256=content_hash(prompt),
             )
         )
     known_personas = {item.persona_id for item in persona_values}
@@ -98,13 +120,37 @@ def load_config(
         if len(refs) != len(set(refs)) or any(ref not in known_personas for ref in refs):
             raise BaiError("CONFIG_INVALID", "状态人格引用缺失或重复。")
 
+    model_profiles = documents["providers.toml"].get("model_profiles", {})
+    if not isinstance(model_profiles, dict):
+        raise BaiError("CONFIG_INVALID", "模型 profile 清单无效。")
+    provider_ids = {item.get("id") for item in providers}
+    for profile_id, profile in model_profiles.items():
+        if not isinstance(profile, dict) or profile.get("provider") not in provider_ids:
+            raise BaiError("CONFIG_INVALID", f"模型 profile {profile_id} 的 Provider 引用无效。")
+    if any(item.model_profile_id not in model_profiles for item in persona_values):
+        raise BaiError("CONFIG_INVALID", "人格引用的模型 profile 不存在。")
+
     prompts: dict[str, str] = {}
+    template_definitions = agent.get("template_variables", {})
     for prompt_id, reference in agent.get("prompts", {}).items():
         if not isinstance(reference, str):
             raise BaiError("CONFIG_INVALID", "提示模板引用必须是相对路径。")
         path = resolve_inside(root, reference)
         loaded_paths[reference] = path
-        prompts[prompt_id] = read_utf8_nonempty(path)
+        prompt_text = read_utf8_nonempty(path)
+        definition = template_definitions.get(prompt_id)
+        if not isinstance(definition, dict):
+            raise BaiError("CONFIG_INVALID", "每个提示模板必须声明变量清单。")
+        allowed = tuple(definition.get("allowed", ()))
+        untrusted = tuple(definition.get("untrusted", ()))
+        if not all(isinstance(item, str) for item in (*allowed, *untrusted)):
+            raise BaiError("CONFIG_INVALID", "提示模板变量清单类型无效。")
+        validate_template(
+            prompt_text,
+            allowed_variables=allowed,
+            untrusted_variables=untrusted,
+        )
+        prompts[prompt_id] = prompt_text
 
     digest = sha256()
     for logical_name, path in sorted(loaded_paths.items()):
@@ -122,4 +168,3 @@ def load_config(
         prompts=prompts,
         settings=documents,
     )
-

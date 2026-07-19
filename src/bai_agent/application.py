@@ -11,6 +11,7 @@ from bai_agent.memory.curation import CurationPolicy, CurationService
 from bai_agent.memory.long_term import LongTermStore
 from bai_agent.memory.recovery import WriterLease
 from bai_agent.prompting.assembler import PromptAssembler
+from bai_agent.prompting.personas import PersonaPromptSet
 from bai_agent.providers.registry import create_provider
 from bai_agent.runtime.controller import SingleTurnController
 from bai_agent.states.resolver import StaticStateResolver
@@ -20,14 +21,74 @@ from bai_agent.tools.registry import ToolRegistry
 
 
 class AgentApplication:
-    def __init__(self, snapshot, archive, long_term_store, controller, lease: WriterLease) -> None:
+    def __init__(
+        self,
+        snapshot,
+        archive,
+        long_term_store,
+        controller,
+        lease: WriterLease,
+        *,
+        config_dir: Path,
+        managed_provider: bool,
+    ) -> None:
         self.snapshot = snapshot
         self.archive = archive
         self.long_term_store = long_term_store
         self.controller = controller
         self.lease = lease
+        self.config_dir = config_dir
+        self.managed_provider = managed_provider
+
+    def _reload_config(self) -> None:
+        fresh = load_config(self.config_dir, require_credentials=self.managed_provider)
+        if fresh.revision == self.snapshot.revision:
+            return
+        settings = fresh.settings
+        states_doc = settings["states.toml"]
+        states = {
+            str(item["id"]): tuple(item["ordered_persona_ids"])
+            for item in states_doc["states"]
+            if item.get("enabled", False)
+        }
+        resolver = StaticStateResolver(fresh.default_state_id, states)
+        persona_prompts = PersonaPromptSet.from_snapshot(fresh)
+        assembler = PromptAssembler.mvp(
+            persona_prompts.trusted_chat_instruction,
+            persona_prompts.state_prompts(states[fresh.default_state_id]),
+        )
+        chat_provider = self.controller.provider
+        curator_provider = self.controller.curation_service.provider
+        if self.managed_provider:
+            providers = settings["providers.toml"]
+            chat_profile = providers["model_profiles"]["chat"]
+            chat_config = next(
+                item for item in providers["providers"] if item["id"] == chat_profile["provider"]
+            )
+            chat_provider = create_provider(chat_config, chat_profile)
+            curator_profile = providers["model_profiles"]["memory_curator"]
+            curator_config = next(
+                item for item in providers["providers"] if item["id"] == curator_profile["provider"]
+            )
+            curator_provider = create_provider(curator_config, curator_profile)
+        # [2026-07-19] 所有新对象先完整校验构造，再一次替换轮次边界快照。
+        self.controller.state_resolver = resolver
+        self.controller.prompt_assembler = assembler
+        self.controller.provider = chat_provider
+        self.controller.curation_service.provider = curator_provider
+        self.controller.curation_service.curator_persona = persona_prompts.memory_curator
+        self.controller.curation_service.prompt_template = fresh.prompts["memory_curation"]
+        self.controller.curation_service.config_revision = fresh.revision
+        budget = settings["agent.toml"]["context_budget"]
+        self.controller.memory_budgets = {
+            "overview_chars": int(settings["agent.toml"]["memory_overview"]["max_chars"]),
+            "long_term_chars": int(budget["long_term_tokens"]) * 4,
+            "recent_chars": int(budget["short_term_tokens"]) * 4,
+        }
+        self.snapshot = fresh
 
     async def run_turn(self, content: str, *, resume_pending: bool = False, turn_id: str | None = None) -> str:
+        self._reload_config()
         return await self.controller.run_turn(
             content,
             resume_pending=resume_pending,
@@ -73,10 +134,11 @@ def build_application(
         states_doc = settings["states.toml"]
         states = {str(item["id"]): tuple(item["ordered_persona_ids"]) for item in states_doc["states"] if item.get("enabled", False)}
         resolver = StaticStateResolver(snapshot.default_state_id, states)
-        personas = {item.persona_id: item.prompt for item in snapshot.personas}
-        state_prompts = tuple(personas[item] for item in states[snapshot.default_state_id])
-        assembler = PromptAssembler.mvp(personas["chat"], state_prompts)
-        if provider is None:
+        persona_prompts = PersonaPromptSet.from_snapshot(snapshot)
+        state_prompts = persona_prompts.state_prompts(states[snapshot.default_state_id])
+        assembler = PromptAssembler.mvp(persona_prompts.trusted_chat_instruction, state_prompts)
+        managed_provider = provider is None
+        if managed_provider:
             providers = settings["providers.toml"]
             chat_profile = providers["model_profiles"]["chat"]
             provider_config = next(item for item in providers["providers"] if item["id"] == chat_profile["provider"])
@@ -96,7 +158,7 @@ def build_application(
                 min_batch_records=int(short["curation_batch_min_records"]),
                 max_batch_records=int(short["curation_batch_max_records"]),
             ),
-            curator_persona=personas["memory_curator"],
+            curator_persona=persona_prompts.memory_curator,
             prompt_template=snapshot.prompts["memory_curation"],
             config_revision=snapshot.revision,
             tracer=tracer,
@@ -138,7 +200,15 @@ def build_application(
                 "recent_chars": int(budgets["short_term_tokens"]) * 4,
             },
         )
-        return AgentApplication(snapshot, archive, long_term_store, controller, lease)
+        return AgentApplication(
+            snapshot,
+            archive,
+            long_term_store,
+            controller,
+            lease,
+            config_dir=config_dir,
+            managed_provider=managed_provider,
+        )
     except Exception:
         lease.release()
         raise

@@ -23,7 +23,8 @@ def _parser() -> argparse.ArgumentParser:
 
     config = commands.add_parser("config")
     config_sub = config.add_subparsers(dest="config_command", required=True)
-    config_sub.add_parser("validate")
+    config_validate = config_sub.add_parser("validate")
+    config_validate.add_argument("--config-dir", dest="command_config_dir", type=Path)
 
     chat = commands.add_parser("chat")
     chat.add_argument("--resume-pending", action="store_true")
@@ -57,13 +58,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "config" and args.config_command == "validate":
-            snapshot = load_config(args.config_dir)
+            config_dir = args.command_config_dir or args.config_dir
+            snapshot = load_config(config_dir)
+            settings = snapshot.settings
             _print(
                 {
                     "ok": True,
                     "config_revision": snapshot.revision,
                     "personas": [item.persona_id for item in snapshot.personas],
+                    "roles": sorted({item.role for item in snapshot.personas}),
+                    "prompts": sorted(snapshot.prompts),
+                    "provider_profiles": sorted(settings["providers.toml"]["model_profiles"]),
                     "states": [snapshot.default_state_id],
+                    "tools": sorted(
+                        item["id"] for item in settings["tools.toml"]["tools"] if item["enabled"]
+                    ),
                 }
             )
             return 0
@@ -138,17 +147,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0 if result.outcome.value == "success" else 5
         if args.command == "doctor":
             from bai_agent.memory.archive import RawRecordArchive
+            from bai_agent.memory.long_term import LongTermStore
 
             snapshot = load_config(args.config_dir, require_credentials=False)
             archive = RawRecordArchive(args.data_dir / "memory")
             archive.read_all()
             archive.validate_permissions()
+            long_term = LongTermStore(args.data_dir / "memory", archive)
+            document = long_term.initialize()
+            permission = long_term.validate_permissions()
+            if permission.status.value != "private":
+                raise BaiError(permission.error_code or "MEMORY_PERMISSION_INVALID", permission.warning or "长期记忆权限无效。")
             _print(
                 {
                     "ok": True,
                     "config_revision": snapshot.revision,
                     "state": snapshot.default_state_id,
                     "network_probe": False,
+                    "roles": sorted({item.role for item in snapshot.personas}),
+                    "prompts": sorted(snapshot.prompts),
+                    "tools": sorted(
+                        item["id"]
+                        for item in snapshot.settings["tools.toml"]["tools"]
+                        if item["enabled"]
+                    ),
+                    "long_term_revision": document.revision,
                 }
             )
             return 0
