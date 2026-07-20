@@ -13,6 +13,7 @@ from bai_agent.domain.models import (
     MemoryCoverageOverview,
     MemoryStatus,
     RawRecord,
+    SourceRef,
 )
 
 
@@ -92,3 +93,7 @@ def select_long_term(
         used += size
     return tuple(selected)
 
+
+def selected_long_term_source_refs(store, memories: Iterable[LongTermMemoryItem]) -> tuple[SourceRef, ...]:
+    """[2026-07-20] 选择器保留稳定 memory/record id，并由存储层给出真实文件身份。"""
+    return store.source_refs_for(tuple(memories))

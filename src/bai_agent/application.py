@@ -6,10 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from bai_agent.config.loader import load_config
+from bai_agent.debug.tui import TextualApprovalPresenter
+from bai_agent.domain.models import SourceKind, SourceRef
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.curation import CurationPolicy, CurationService
 from bai_agent.memory.long_term import LongTermStore
 from bai_agent.memory.recovery import WriterLease
+from bai_agent.memory.transaction import TurnUnitOfWork
+from bai_agent.model_calls.gateway import LegacyProviderAdapter, ModelCallGateway
 from bai_agent.prompting.assembler import PromptAssembler
 from bai_agent.prompting.personas import PersonaPromptSet
 from bai_agent.providers.registry import create_provider
@@ -31,6 +35,7 @@ class AgentApplication:
         *,
         config_dir: Path,
         managed_provider: bool,
+        debug_prompts: bool,
     ) -> None:
         self.snapshot = snapshot
         self.archive = archive
@@ -39,6 +44,7 @@ class AgentApplication:
         self.lease = lease
         self.config_dir = config_dir
         self.managed_provider = managed_provider
+        self.debug_prompts = debug_prompts
 
     def _reload_config(self) -> None:
         fresh = load_config(self.config_dir, require_credentials=self.managed_provider)
@@ -53,9 +59,17 @@ class AgentApplication:
         }
         resolver = StaticStateResolver(fresh.default_state_id, states)
         persona_prompts = PersonaPromptSet.from_snapshot(fresh)
+        assets = {item.asset_id: item for item in fresh.assets}
+        state_asset_values = tuple(
+            assets[f"persona:{persona_id}"]
+            for persona_id in states[fresh.default_state_id]
+            if f"persona:{persona_id}" in assets
+        )
         assembler = PromptAssembler.mvp(
             persona_prompts.trusted_chat_instruction,
             persona_prompts.state_prompts(states[fresh.default_state_id]),
+            base_asset=assets.get("persona:chat"),
+            state_assets=state_asset_values,
         )
         chat_provider = self.controller.provider
         curator_provider = self.controller.curation_service.provider
@@ -65,12 +79,24 @@ class AgentApplication:
             chat_config = next(
                 item for item in providers["providers"] if item["id"] == chat_profile["provider"]
             )
-            chat_provider = create_provider(chat_config, chat_profile)
+            chat_adapter = create_provider(chat_config, chat_profile)
+            chat_provider = ModelCallGateway(
+                chat_adapter,
+                debug_enabled=self.debug_prompts,
+                presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
+                max_attempts=int(chat_config.get("retry", {}).get("max_attempts", 1)),
+            )
             curator_profile = providers["model_profiles"]["memory_curator"]
             curator_config = next(
                 item for item in providers["providers"] if item["id"] == curator_profile["provider"]
             )
-            curator_provider = create_provider(curator_config, curator_profile)
+            curator_adapter = create_provider(curator_config, curator_profile)
+            curator_provider = ModelCallGateway(
+                curator_adapter,
+                debug_enabled=self.debug_prompts,
+                presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
+                max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
+            )
         # [2026-07-19] 所有新对象先完整校验构造，再一次替换轮次边界快照。
         self.controller.state_resolver = resolver
         self.controller.prompt_assembler = assembler
@@ -107,6 +133,8 @@ def build_application(
     provider: Any | None = None,
     on_output=None,
     tracer=None,
+    debug_prompts: bool = False,
+    presenter=None,
 ) -> AgentApplication:
     snapshot = load_config(config_dir, require_credentials=provider is None)
     settings = snapshot.settings
@@ -131,27 +159,57 @@ def build_application(
             from bai_agent.domain.errors import BaiError
 
             raise BaiError(permission.error_code or "MEMORY_PERMISSION_INVALID", permission.warning or "长期记忆权限无效。")
+        # [2026-07-20] 启动恢复必须先于 pending 读取、新输入、配置调用和 provider 访问。
+        TurnUnitOfWork(memory_root, archive, long_term_store).recover()
         states_doc = settings["states.toml"]
         states = {str(item["id"]): tuple(item["ordered_persona_ids"]) for item in states_doc["states"] if item.get("enabled", False)}
         resolver = StaticStateResolver(snapshot.default_state_id, states)
         persona_prompts = PersonaPromptSet.from_snapshot(snapshot)
         state_prompts = persona_prompts.state_prompts(states[snapshot.default_state_id])
-        assembler = PromptAssembler.mvp(persona_prompts.trusted_chat_instruction, state_prompts)
+        assets = {item.asset_id: item for item in snapshot.assets}
+        assembler = PromptAssembler.mvp(
+            persona_prompts.trusted_chat_instruction,
+            state_prompts,
+            base_asset=assets.get("persona:chat"),
+            state_assets=tuple(
+                assets[f"persona:{persona_id}"]
+                for persona_id in states[snapshot.default_state_id]
+                if f"persona:{persona_id}" in assets
+            ),
+        )
         managed_provider = provider is None
         if managed_provider:
             providers = settings["providers.toml"]
             chat_profile = providers["model_profiles"]["chat"]
             provider_config = next(item for item in providers["providers"] if item["id"] == chat_profile["provider"])
-            provider = create_provider(provider_config, chat_profile)
+            chat_adapter = create_provider(provider_config, chat_profile)
             curator_profile = providers["model_profiles"]["memory_curator"]
             curator_config = next(
                 item
                 for item in providers["providers"]
                 if item["id"] == curator_profile["provider"]
             )
-            curator_provider = create_provider(curator_config, curator_profile)
+            curator_adapter = create_provider(curator_config, curator_profile)
         else:
-            curator_provider = provider
+            chat_adapter = provider if all(hasattr(provider, name) for name in ("prepare", "materialize_sdk_kwargs", "send_once")) else LegacyProviderAdapter(provider, {"model": "test-model", "max_output_tokens": 8192})
+            curator_adapter = chat_adapter
+            provider_config = {"retry": {"max_attempts": 1}}
+            curator_config = provider_config
+        color_policy = str(settings["agent.toml"]["debug_prompt"]["color"])
+        chat_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
+        curator_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
+        provider = ModelCallGateway(
+            chat_adapter,
+            debug_enabled=debug_prompts,
+            presenter=chat_presenter,
+            max_attempts=int(provider_config.get("retry", {}).get("max_attempts", 1)),
+        )
+        curator_provider = ModelCallGateway(
+            curator_adapter,
+            debug_enabled=debug_prompts,
+            presenter=curator_presenter,
+            max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
+        )
         short = settings["agent.toml"]["short_term"]
         curation_service = CurationService(
             archive,
@@ -182,6 +240,17 @@ def build_application(
             enabled=bool(tool_config["enabled"]),
             allowed_personas=tuple(tool_config["allowed_personas"]),
             read_only=bool(tool_config["read_only"]),
+            source_refs=(
+                SourceRef(
+                    source_kind=SourceKind.CONFIG_FILE,
+                    source_id="config:tools",
+                    project_relative_path="config/tools.toml",
+                    content_sha256=assets["config:tools"].content_sha256,
+                    revision=snapshot.revision,
+                    entity_ids=(source_tool.definition.tool_id,),
+                    producer="config_loader",
+                ),
+            ),
         )
         tool_executor = ToolExecutor(
             registry,
@@ -210,6 +279,7 @@ def build_application(
                 definition.model_dump(mode="json")
                 for definition in registry.definitions_for("chat")
             ),
+            transaction_root=memory_root,
         )
         return AgentApplication(
             snapshot,
@@ -219,6 +289,7 @@ def build_application(
             lease,
             config_dir=config_dir,
             managed_provider=managed_provider,
+            debug_prompts=debug_prompts,
         )
     except Exception:
         lease.release()

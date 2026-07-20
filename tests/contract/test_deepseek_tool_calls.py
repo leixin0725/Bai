@@ -7,6 +7,14 @@ import pytest
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import CompletionRequest, Message
 from bai_agent.providers.deepseek import DeepSeekProvider
+from tests.prompt_debug_fakes import make_draft
+
+
+async def send(provider: DeepSeekProvider, request: CompletionRequest):
+    draft = make_draft(request.messages[0].content if request.messages else "测试")
+    draft = draft.model_copy(update={"request": request, "parts": draft.parts if request.messages else ()})
+    prepared = provider.prepare(draft, 1)
+    return await provider.send_once(provider.materialize_sdk_kwargs(prepared))
 
 
 class Completions:
@@ -35,7 +43,7 @@ def response(calls):
 async def test_multiple_tool_calls_and_definition_mapping_are_domain_dtos() -> None:
     completions = Completions(response([tool_call("c1", '{"memory_id":"mem-a"}'), tool_call("c2", '{"memory_id":"mem-b"}')]))
     provider = DeepSeekProvider(SimpleNamespace(chat=SimpleNamespace(completions=completions)), {"model": "m", "stream": False})
-    result = await provider.complete(
+    result = await send(provider,
         CompletionRequest(
             flow_id="f", turn_id="t",
             tool_definitions=({"type": "function", "function": {"name": "memory_source_query", "parameters": {"type": "object"}}},),
@@ -61,7 +69,7 @@ async def test_duplicate_call_id_and_invalid_arguments_fail_before_execution(cal
         {"model": "m", "stream": False},
     )
     with pytest.raises(BaiError) as raised:
-        await provider.complete(CompletionRequest(flow_id="f", turn_id="t"))
+        await send(provider, CompletionRequest(flow_id="f", turn_id="t"))
     assert raised.value.code == "PROVIDER_TOOL_CALL_INVALID"
 
 
@@ -74,11 +82,10 @@ async def test_tool_call_id_is_returned_to_provider() -> None:
         )
     )
     provider = DeepSeekProvider(SimpleNamespace(chat=SimpleNamespace(completions=completions)), {"model": "m", "stream": False})
-    await provider.complete(
+    await send(provider,
         CompletionRequest(
             flow_id="f", turn_id="t",
             messages=(Message(role="tool", content='{"ok":true}', tool_call_id="call-1"),),
         )
     )
     assert completions.kwargs["messages"][0]["tool_call_id"] == "call-1"
-

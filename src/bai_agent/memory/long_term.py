@@ -20,6 +20,8 @@ from bai_agent.domain.models import (
     MemoryStatus,
     SourceReference,
     SourceRelation,
+    SourceKind,
+    SourceRef,
     canonical_json,
     content_hash,
     new_id,
@@ -236,6 +238,23 @@ class LongTermStore:
         if current.revision != baseline_revision or current_identity != baseline_sha256:
             raise BaiError("TURN_TRANSACTION_CONFLICT", "长期记忆基线已变化，未覆盖人工修改。")
         return self.commit(target)
+
+    def source_refs_for(self, items: tuple[LongTermMemoryItem, ...]) -> tuple[SourceRef, ...]:
+        """[2026-07-20] 长期记忆来源绑定当前文档身份与完整 memory/record id 集合。"""
+        document = self.load()
+        revision = content_hash(canonical_json(document.model_dump(mode="json")))
+        return tuple(
+            SourceRef(
+                source_kind=SourceKind.DATA_FILE,
+                source_id=f"memory:{item.memory_id}",
+                project_relative_path="data/memory/long_term.yaml",
+                content_sha256=content_hash(item.text),
+                revision=revision,
+                entity_ids=(item.memory_id, *(ref.record_id for ref in item.source_refs)),
+                producer="long_term_selector",
+            )
+            for item in items
+        )
 
     def initialize_with_manual_memory(self, text: str, records: tuple) -> LongTermMemoryDocument:
         safe_text = self.guard.ensure_safe(text)

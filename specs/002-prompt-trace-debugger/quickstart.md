@@ -52,6 +52,8 @@ Windows 次要环境推荐沿用项目启动脚本的隐藏输入能力：
 
 ## 3. 验收单次聊天与来源
 
+> 实现验收说明（2026-07-20）：默认自动化使用三方法 fake adapter 经过唯一 `ModelCallGateway`，不会读取 `DEEPSEEK_API_KEY` 或访问真实 DeepSeek；`tests/contract/test_prompt_trace_provider.py` 单独捕获 SDK kwargs 证明物化与发送字段一致。
+
 1. 输入一句包含唯一标记的消息，例如 `验收-运行时来源-001`。
 2. 在 provider 收到请求前，TUI 应显示调用用途 `chat`、persona/state/provider/model/config revision/attempt。
 3. 展开最终请求，核对：

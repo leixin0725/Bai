@@ -28,6 +28,7 @@ def _parser() -> argparse.ArgumentParser:
 
     chat = commands.add_parser("chat")
     chat.add_argument("--resume-pending", action="store_true")
+    chat.add_argument("--debug-prompts", action="store_true")
 
     memory = commands.add_parser("memory")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
@@ -201,7 +202,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "chat":
             from bai_agent.application import build_application
 
-            app = build_application(args.config_dir, args.data_dir, on_output=print)
+            if args.debug_prompts and not (sys.stdin.isatty() and sys.stdout.isatty()):
+                raise BaiError(
+                    "DEBUG_TTY_REQUIRED",
+                    "提示调试需要 stdin/stdout 均为交互式 TTY；请移除重定向后重试。",
+                )
+            app = build_application(
+                args.config_dir,
+                args.data_dir,
+                on_output=print,
+                debug_prompts=bool(args.debug_prompts),
+            )
             try:
                 pending = app.archive.pending_turn()
                 if pending and not args.resume_pending:
@@ -212,7 +223,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for line in sys.stdin:
                     content = line.rstrip("\r\n")
                     if content:
-                        asyncio.run(app.run_turn(content))
+                        try:
+                            asyncio.run(app.run_turn(content))
+                        except BaiError as exc:
+                            if exc.code != "TURN_REJECTED":
+                                raise
                 return 0
             finally:
                 app.close()

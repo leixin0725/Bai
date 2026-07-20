@@ -102,6 +102,10 @@ python -m bai_agent chat
 - 记忆整理或长期 YAML 写入失败且即将越过窗口时，本轮在 Provider 调用前停止。
 - 不在终端状态行显示提示正文、API Key、Authorization 或 DeepSeek 推理内容。
 
+### 7.1 `chat --debug-prompts`（2026-07-20）
+
+该开关只对当前 chat 进程有效，要求 stdin/stdout 都是 TTY。每个最终 provider 请求由短生命周期 Textual 界面完整展示来源并等待 `A` 批准或 `R`/`Esc` 拒绝；`Enter` 不默认批准。批准后 TUI 在发送前清除，明确拒绝返回输入界面且不形成 pending，普通 provider/网络失败仍形成一条可由 `--resume-pending` 恢复的 USER pending。非 TTY、界面初始化失败或来源不完整均在任何持久化/发送前安全失败。
+
 ## 8. 稳定退出码
 
 | Code | Meaning |

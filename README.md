@@ -36,6 +36,18 @@ python -m bai_agent --config-dir config --data-dir data chat
 python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 ```
 
+## 提示词调试批准
+
+仅在本地交互式 TTY 中按当前进程启用：
+
+```bash
+python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
+```
+
+每个聊天、记忆整理、工具续接与 provider retry 都通过唯一 `ModelCallGateway`，在 DeepSeek `prepare()` 和唯一 `materialize_sdk_kwargs()` 后展示最终模型可见字段、完整正文及 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]` 来源。界面会提醒私人记忆只在本机临时显示；按 `A` 逐请求批准，按 `R`/`Esc` 明确拒绝并无痕撤销整轮。批准绑定 call、attempt 与物化载荷摘要，不修改请求；批准后、网络发送前 TUI 清除正文和来源，`send_once()` 无论成功或失败都在 `finally` 释放 sender 载荷。
+
+明确拒绝不会形成历史或 pending；已经批准的请求若因普通 provider/网络错误且重试结束，则只发布一条 USER pending，可用 `--resume-pending` 恢复。该模式默认关闭、退出即失效，也不会保存原始追踪。stdin/stdout 任一不是 TTY 时以 `DEBUG_TTY_REQUIRED` 在任何持久化和模型发送前失败。
+
 ## 记忆与安全
 
 运行数据默认位于 `data/memory/`：`raw/*.jsonl` 是不可变原始记录，`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：

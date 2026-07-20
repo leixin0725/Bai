@@ -1,1 +1,5 @@
 """[2026-07-20] 调试包只负责短生命周期展示，不拥有请求或持久状态。"""
+
+from bai_agent.debug.tui import TextualApprovalPresenter
+
+__all__ = ["TextualApprovalPresenter"]

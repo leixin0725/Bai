@@ -5,16 +5,21 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 
-from bai_agent.domain.errors import BaiError
+from bai_agent.domain.errors import BaiError, TurnRejected
 from bai_agent.domain.models import (
     CompletionRequest,
     Message,
+    ModelCallDraft,
+    Participation,
+    RequestPart,
     Role,
     RawRecord,
     StateResolutionContext,
     ToolCall,
     ToolExecutionContext,
     TrustLevel,
+    SourceKind,
+    SourceRef,
     canonical_json,
     new_id,
     utc_now,
@@ -54,6 +59,24 @@ class SingleTurnController:
         self.memory_budgets = memory_budgets or {}
         self.tool_definitions = tool_definitions
         self.transaction_root = transaction_root
+
+    async def _complete(self, request: CompletionRequest, parts: tuple[RequestPart, ...], *, sequence: int, purpose: str, state_id: str, config_revision: str):
+        if getattr(self.provider, "is_model_call_gateway", False):
+            draft = ModelCallDraft(
+                call_id=new_id("call"),
+                turn_id=request.turn_id,
+                flow_id=request.flow_id,
+                call_sequence=sequence,
+                purpose=purpose,
+                persona_id="chat",
+                state_id=state_id,
+                config_revision=config_revision,
+                model_profile_id=request.model_profile_id or "chat",
+                request=request,
+                parts=parts,
+            )
+            return await self.provider.complete(draft)
+        return await self.provider.complete(request)
 
     async def run_turn(
         self,
@@ -108,8 +131,25 @@ class SingleTurnController:
                     state_id=resolution.state_id,
                     config_revision=config_revision,
                 )
+        curation_proposal = None
         if self.curation_service:
-            await self.curation_service.curate_if_needed()
+            try:
+                if uow is not None and hasattr(self.curation_service, "propose"):
+                    curation_proposal = await self.curation_service.propose(
+                        turn_id=resolved_turn_id,
+                        call_sequence=1,
+                    )
+                else:
+                    await self.curation_service.curate_if_needed()
+            except TurnRejected:
+                if uow is not None:
+                    uow.discard()
+                raise
+            except BaiError as exc:
+                if uow is not None and (exc.retryable or exc.code.startswith(("PROVIDER_", "NETWORK_"))):
+                    uow.pending(exc.code)
+                    uow.commit()
+                raise
         all_records = self.repository.read_all()
         if self.long_term_store:
             long_document = self.long_term_store.load()
@@ -125,12 +165,14 @@ class SingleTurnController:
             )
             memory_overview = long_document.coverage_overview
             long_term_texts = tuple(item.text for item in selected_memories)
+            long_term_source_ids = tuple(item.memory_id for item in selected_memories)
             curated_through = long_document.curation.curated_through_sequence
             coverage_records = all_records
         else:
             recent = tuple(item for item in all_records if item.record_id != user_record.record_id)
             memory_overview = "[]"
             long_term_texts = ()
+            long_term_source_ids = ()
             curated_through = 0
             coverage_records = None
         context = self.prompt_assembler.assemble(
@@ -140,6 +182,7 @@ class SingleTurnController:
             state_resolution=resolution,
             memory_overview=memory_overview,
             long_term_memories=long_term_texts,
+            long_term_source_ids=long_term_source_ids,
             recent_records=recent,
             current_input=content,
             all_raw_records=coverage_records,
@@ -169,9 +212,15 @@ class SingleTurnController:
                 for item in context.segments
             ),
             tool_definitions=self.tool_definitions,
+            model_profile_id="chat",
         )
+        parts = self.prompt_assembler.request_parts(context)
+        call_sequence = 2 if curation_proposal is not None else 1
         try:
-            result = await self.provider.complete(request)
+            result = await self._complete(
+                request, parts, sequence=call_sequence, purpose="chat",
+                state_id=resolution.state_id, config_revision=config_revision,
+            )
             seen_call_ids: set[str] = set()
             for _ in range(self.max_tool_rounds):
                 if not result.tool_calls:
@@ -204,10 +253,40 @@ class SingleTurnController:
                         )
                     )
                 request = request.model_copy(update={"messages": (*request.messages, *tool_messages)})
-                result = await self.provider.complete(request)
+                for message in tool_messages:
+                    index = len(request.messages) - len(tool_messages) + tool_messages.index(message)
+                    parts = (
+                        *parts,
+                        RequestPart(
+                            part_id=f"tool-result:{message.tool_call_id}",
+                            order=len(parts),
+                            participation=Participation.INCLUDED,
+                            trust=message.trust,
+                            payload_pointer=f"/messages/{index}/content",
+                            text_span=(0, len(message.content)),
+                            content=message.content,
+                            sources=(
+                                SourceRef(
+                                    source_kind=SourceKind.RUNTIME,
+                                    source_id=f"tool-result:{message.tool_call_id}",
+                                    entity_ids=(message.tool_call_id or "unknown",),
+                                    producer="tool_executor",
+                                ),
+                            ),
+                        ),
+                    )
+                call_sequence += 1
+                result = await self._complete(
+                    request, parts, sequence=call_sequence, purpose="tool_continuation",
+                    state_id=resolution.state_id, config_revision=config_revision,
+                )
             if result.tool_calls:
                 raise BaiError("TOOL_ROUND_LIMIT", "工具调用超过配置轮数限制。")
         except asyncio.CancelledError:
+            raise
+        except TurnRejected:
+            if uow is not None:
+                uow.discard()
             raise
         except BaiError as exc:
             if uow is not None and (exc.retryable or exc.code.startswith(("PROVIDER_", "NETWORK_"))):
@@ -225,7 +304,10 @@ class SingleTurnController:
                 state_id=resolution.state_id,
                 config_revision=config_revision,
             )
-            uow.ready(assistant)
+            uow.ready(
+                assistant,
+                curation_proposal.target_document if curation_proposal is not None else None,
+            )
             uow.commit()
             assistant = next(
                 item for item in self.repository.read_all() if item.record_id == assistant.record_id

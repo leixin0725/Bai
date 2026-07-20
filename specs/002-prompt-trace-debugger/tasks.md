@@ -77,33 +77,33 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ### Tests for User Story 1（先写并确认失败）
 
-- [ ] T027 [P] [US1] 为 BR-001 在 `tests/contract/test_prompt_trace_provider.py` 增加 prepared request、每 attempt 唯一 `materialize_sdk_kwargs()` 输出与 respx HTTP JSON 的逐字段真实性测试，覆盖空正文、多行、简体中文、Emoji、控制字符、超长内容和工具定义
-- [ ] T028 [P] [US1] 为 BR-002 在 `tests/unit/test_prompt_provenance.py` 增加 JSON Pointer/span、重复正文不猜来源、多文件/数百记录聚合、运行时 producer、配置后改身份、excluded/empty/unknown_source 及失败阻断测试
-- [ ] T029 [P] [US1] 为 BR-006/FR-026 在 `tests/contract/test_model_call_gateway.py` 增加唯一 materialization 后 call+attempt+materialized digest 批准绑定、嵌套突变失效、debug on/off payload 相等和批准不改写请求测试
-- [ ] T030 [P] [US1] 为 FR-024 在 `tests/contract/test_provider_adapter_portability.py` 增加第二个 fake provider 仅实现 prepare/materialize_sdk_kwargs/send_once 即通过来源校验、估算 unavailable、批准、retry、usage 和脱敏错误的完整网关测试
-- [ ] T031 [P] [US1] 为 BR-003 在 `tests/integration/test_model_call_gateway_coverage.py` 增加 curation、chat、tool continuation、future persona 与 retry 所有物理 attempt 恰有一个批准项，并用禁止直接 provider.complete/SDK 调用的 spy 验证无旁路
-- [ ] T032 [P] [US1] 为 BR-007 在 `tests/unit/test_prompt_trace_lifecycle.py` 增加 approve 后且网络发送前 TUI 的 prompt/part/SourceRef 引用清除、sender 仅持有不可变 materialized payload、send_once 成功/失败 finally 释放、无持久 trace 和 ActualUsageSummary 不持有或恢复原文测试
-- [ ] T033 [P] [US1] 为 BR-008 在 `tests/integration/test_prompt_trace_rejection.py` 覆盖首个 chat、curation 后 chat、tool continuation 和 retry 批准点 reject，断言当前请求发送 0、已发辅助响应/派生结果丢弃、无 pending/tombstone 且下一轮等于 checkpoint
-- [ ] T034 [P] [US1] 在 `tests/contract/test_prompt_approval_tui.py` 用 Textual Pilot 增加完整正文/来源滚动、A/R、正文未完成 mounted 时禁止批准、80x24/窄宽度/resize 和终端内容安全转义测试
-- [ ] T035 [P] [US1] 在 `tests/integration/test_prompt_trace_single_call.py` 增加 ConfigAsset、记忆选择、prompt assembly、TUI、transaction 到 fake provider 的单次端到端来源/顺序/批准/拒绝验收
+- [X] T027 [P] [US1] 为 BR-001 在 `tests/contract/test_prompt_trace_provider.py` 增加 prepared request、每 attempt 唯一 `materialize_sdk_kwargs()` 输出与 respx HTTP JSON 的逐字段真实性测试，覆盖空正文、多行、简体中文、Emoji、控制字符、超长内容和工具定义
+- [X] T028 [P] [US1] 为 BR-002 在 `tests/unit/test_prompt_provenance.py` 增加 JSON Pointer/span、重复正文不猜来源、多文件/数百记录聚合、运行时 producer、配置后改身份、excluded/empty/unknown_source 及失败阻断测试
+- [X] T029 [P] [US1] 为 BR-006/FR-026 在 `tests/contract/test_model_call_gateway.py` 增加唯一 materialization 后 call+attempt+materialized digest 批准绑定、嵌套突变失效、debug on/off payload 相等和批准不改写请求测试
+- [X] T030 [P] [US1] 为 FR-024 在 `tests/contract/test_provider_adapter_portability.py` 增加第二个 fake provider 仅实现 prepare/materialize_sdk_kwargs/send_once 即通过来源校验、估算 unavailable、批准、retry、usage 和脱敏错误的完整网关测试
+- [X] T031 [P] [US1] 为 BR-003 在 `tests/integration/test_model_call_gateway_coverage.py` 增加 curation、chat、tool continuation、future persona 与 retry 所有物理 attempt 恰有一个批准项，并用禁止直接 provider.complete/SDK 调用的 spy 验证无旁路
+- [X] T032 [P] [US1] 为 BR-007 在 `tests/unit/test_prompt_trace_lifecycle.py` 增加 approve 后且网络发送前 TUI 的 prompt/part/SourceRef 引用清除、sender 仅持有不可变 materialized payload、send_once 成功/失败 finally 释放、无持久 trace 和 ActualUsageSummary 不持有或恢复原文测试
+- [X] T033 [P] [US1] 为 BR-008 在 `tests/integration/test_prompt_trace_rejection.py` 覆盖首个 chat、curation 后 chat、tool continuation 和 retry 批准点 reject，断言当前请求发送 0、已发辅助响应/派生结果丢弃、无 pending/tombstone 且下一轮等于 checkpoint
+- [X] T034 [P] [US1] 在 `tests/contract/test_prompt_approval_tui.py` 用 Textual Pilot 增加完整正文/来源滚动、A/R、正文未完成 mounted 时禁止批准、80x24/窄宽度/resize 和终端内容安全转义测试
+- [X] T035 [P] [US1] 在 `tests/integration/test_prompt_trace_single_call.py` 增加 ConfigAsset、记忆选择、prompt assembly、TUI、transaction 到 fake provider 的单次端到端来源/顺序/批准/拒绝验收
 
 ### Implementation for User Story 1
 
-- [ ] T036 [US1] 在 `src/bai_agent/model_calls/provenance.py` 实现 canonical JSON、payload SHA-256、materialized JSON digest、JSON Pointer/span 回读、included 覆盖和 ordered SourceRef 完整性校验
-- [ ] T037 [US1] 在 `src/bai_agent/prompting/assembler.py` 保留 included/excluded/empty、稳定 part id、trust、真实 ConfigAsset 与运行时来源，不把构建结果降为无法归因的裸字符串
-- [ ] T038 [P] [US1] 在 `src/bai_agent/memory/archive.py`、`src/bai_agent/memory/long_term.py` 和 `src/bai_agent/memory/selection.py` 为已选 raw/长期记忆提供数据文件路径、revision/hash 与完整 record/memory id 来源
-- [ ] T039 [P] [US1] 在 `src/bai_agent/tools/registry.py` 和 `src/bai_agent/tools/memory_source.py` 为工具定义及运行时工具结果提供 config/runtime SourceRef，禁止按正文反向猜测来源
-- [ ] T040 [US1] 在 `src/bai_agent/providers/deepseek.py` 将调用拆为无 I/O `prepare()`、每 attempt 唯一受控 `materialize_sdk_kwargs()` 和单次 I/O `send_once()`，移除 adapter 内重试、让认证只在发送 client 层注入并在 finally 释放 payload
-- [ ] T041 [US1] 在 `src/bai_agent/model_calls/gateway.py` 一次实现 prepare→唯一 materialize→来源/凭据校验→估算→完整 mounted→call+attempt+digest 批准→发送前清除 TUI→复核→send_once/finally release→retry/backoff；每次 retry 新建 attempt 并重新批准
-- [ ] T042 [P] [US1] 在 `src/bai_agent/memory/curation.py` 将 curator 调用迁移为只依赖 ModelCallGateway，并把 proposal/响应留在 TurnWorkingSet
-- [ ] T043 [P] [US1] 在 `src/bai_agent/runtime/controller.py` 将 chat、tool continuation 和 future persona 入口统一迁移到 ModelCallGateway，接入 PREPARED/READY_PENDING/READY_TO_COMMIT 并在 `TurnRejected` 时丢弃整轮
-- [ ] T044 [US1] 在 `src/bai_agent/providers/registry.py` 强制 provider 只暴露 adapter 端口，并在所有调用方迁移后删除或封闭应用层直接 SDK/provider.complete 旁路
-- [ ] T045 [P] [US1] 在 `src/bai_agent/debug/tui.py` 实现短生命周期 Textual approval app、完整 materialized payload/part/source、隐私提醒、滚动与 A/R 决策；完整 mounted 前禁用批准，approve 后且网络发送前关闭正文视图并释放 presenter 引用
-- [ ] T046 [US1] 在 `src/bai_agent/application.py`、`src/bai_agent/runtime/controller.py` 和 `src/bai_agent/cli.py` 注入 gateway/presenter/transaction，并只为当前 chat 运行提供 `--debug-prompts` 基本接线
-- [ ] T047 [US1] 在 `start.ps1` 增加 `-DebugPrompts` 安全透传，继续隐藏输入 API Key 并在 finally 清除当前进程凭据
-- [ ] T048 [P] [US1] 为 DR-001 更新 `README.md` 的单次调试启动、私人记忆提醒、最终 provider 请求、来源标签、批准/拒绝、批准后 TUI 清除、send_once finally 释放和普通失败转 pending 说明
-- [ ] T049 [P] [US1] 为 DR-002/DR-004 更新 `specs/001-persistent-memory-agent/contracts/cli.md`、`specs/001-persistent-memory-agent/contracts/model-and-tools.md`、`specs/001-persistent-memory-agent/quickstart.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，同步唯一网关、retry、拒绝、pending、materialization 和可执行验收命令
-- [ ] T050 [US1] 运行 `tests/contract/test_prompt_trace_provider.py tests/unit/test_prompt_provenance.py tests/contract/test_model_call_gateway.py tests/contract/test_provider_adapter_portability.py tests/integration/test_model_call_gateway_coverage.py tests/unit/test_prompt_trace_lifecycle.py tests/integration/test_prompt_trace_rejection.py tests/contract/test_prompt_approval_tui.py tests/integration/test_prompt_trace_single_call.py -q`、现有 provider/curation/tool/pending 回归、文档命令与链接检查及 `git diff --check`，随后通过 Git 扩展原子提交 US1 的 gateway/provider/callers/TUI/CLI/tests 与 README/001/002 文档
+- [X] T036 [US1] 在 `src/bai_agent/model_calls/provenance.py` 实现 canonical JSON、payload SHA-256、materialized JSON digest、JSON Pointer/span 回读、included 覆盖和 ordered SourceRef 完整性校验
+- [X] T037 [US1] 在 `src/bai_agent/prompting/assembler.py` 保留 included/excluded/empty、稳定 part id、trust、真实 ConfigAsset 与运行时来源，不把构建结果降为无法归因的裸字符串
+- [X] T038 [P] [US1] 在 `src/bai_agent/memory/archive.py`、`src/bai_agent/memory/long_term.py` 和 `src/bai_agent/memory/selection.py` 为已选 raw/长期记忆提供数据文件路径、revision/hash 与完整 record/memory id 来源
+- [X] T039 [P] [US1] 在 `src/bai_agent/tools/registry.py` 和 `src/bai_agent/tools/memory_source.py` 为工具定义及运行时工具结果提供 config/runtime SourceRef，禁止按正文反向猜测来源
+- [X] T040 [US1] 在 `src/bai_agent/providers/deepseek.py` 将调用拆为无 I/O `prepare()`、每 attempt 唯一受控 `materialize_sdk_kwargs()` 和单次 I/O `send_once()`，移除 adapter 内重试、让认证只在发送 client 层注入并在 finally 释放 payload
+- [X] T041 [US1] 在 `src/bai_agent/model_calls/gateway.py` 一次实现 prepare→唯一 materialize→来源/凭据校验→估算→完整 mounted→call+attempt+digest 批准→发送前清除 TUI→复核→send_once/finally release→retry/backoff；每次 retry 新建 attempt 并重新批准
+- [X] T042 [P] [US1] 在 `src/bai_agent/memory/curation.py` 将 curator 调用迁移为只依赖 ModelCallGateway，并把 proposal/响应留在 TurnWorkingSet
+- [X] T043 [P] [US1] 在 `src/bai_agent/runtime/controller.py` 将 chat、tool continuation 和 future persona 入口统一迁移到 ModelCallGateway，接入 PREPARED/READY_PENDING/READY_TO_COMMIT 并在 `TurnRejected` 时丢弃整轮
+- [X] T044 [US1] 在 `src/bai_agent/providers/registry.py` 强制 provider 只暴露 adapter 端口，并在所有调用方迁移后删除或封闭应用层直接 SDK/provider.complete 旁路
+- [X] T045 [P] [US1] 在 `src/bai_agent/debug/tui.py` 实现短生命周期 Textual approval app、完整 materialized payload/part/source、隐私提醒、滚动与 A/R 决策；完整 mounted 前禁用批准，approve 后且网络发送前关闭正文视图并释放 presenter 引用
+- [X] T046 [US1] 在 `src/bai_agent/application.py`、`src/bai_agent/runtime/controller.py` 和 `src/bai_agent/cli.py` 注入 gateway/presenter/transaction，并只为当前 chat 运行提供 `--debug-prompts` 基本接线
+- [X] T047 [US1] 在 `start.ps1` 增加 `-DebugPrompts` 安全透传，继续隐藏输入 API Key 并在 finally 清除当前进程凭据
+- [X] T048 [P] [US1] 为 DR-001 更新 `README.md` 的单次调试启动、私人记忆提醒、最终 provider 请求、来源标签、批准/拒绝、批准后 TUI 清除、send_once finally 释放和普通失败转 pending 说明
+- [X] T049 [P] [US1] 为 DR-002/DR-004 更新 `specs/001-persistent-memory-agent/contracts/cli.md`、`specs/001-persistent-memory-agent/contracts/model-and-tools.md`、`specs/001-persistent-memory-agent/quickstart.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，同步唯一网关、retry、拒绝、pending、materialization 和可执行验收命令
+- [X] T050 [US1] 运行 `tests/contract/test_prompt_trace_provider.py tests/unit/test_prompt_provenance.py tests/contract/test_model_call_gateway.py tests/contract/test_provider_adapter_portability.py tests/integration/test_model_call_gateway_coverage.py tests/unit/test_prompt_trace_lifecycle.py tests/integration/test_prompt_trace_rejection.py tests/contract/test_prompt_approval_tui.py tests/integration/test_prompt_trace_single_call.py -q`、现有 provider/curation/tool/pending 回归、文档命令与链接检查及 `git diff --check`，随后通过 Git 扩展原子提交 US1 的 gateway/provider/callers/TUI/CLI/tests 与 README/001/002 文档
 
 **Checkpoint**: US1 是首个可公开启动的安全 MVP；所有当前模型调用和 retry 已无旁路，批准、拒绝、凭据与失败恢复均有先行测试。
 

@@ -6,8 +6,17 @@ import asyncio
 import pytest
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import CompletionRequest, Message
+from bai_agent.domain.models import CompletionRequest, Message, ModelCallDraft
+from bai_agent.model_calls.gateway import ModelCallGateway
 from bai_agent.providers.deepseek import DeepSeekProvider
+from tests.prompt_debug_fakes import make_draft
+
+
+async def send(provider: DeepSeekProvider, request: CompletionRequest):
+    draft = make_draft(request.messages[0].content if request.messages else "测试")
+    draft = draft.model_copy(update={"request": request, "parts": draft.parts if request.messages else ()})
+    prepared = provider.prepare(draft, 1)
+    return await provider.send_once(provider.materialize_sdk_kwargs(prepared))
 
 
 class FakeCompletions:
@@ -46,7 +55,7 @@ async def test_complete_maps_request_and_filters_reasoning() -> None:
     completions = FakeCompletions(response())
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
     provider = DeepSeekProvider(client, {"model": "configured-model", "stream": False, "max_output_tokens": 32})
-    result = await provider.complete(
+    result = await send(provider,
         CompletionRequest(flow_id="flow", turn_id="turn", messages=(Message(role="user", content="问题"),))
     )
     assert result.text == "完成"
@@ -58,14 +67,14 @@ async def test_complete_maps_request_and_filters_reasoning() -> None:
 async def test_truncation_and_sdk_failure_are_normalized() -> None:
     truncated = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions(response("部分", "length"))))
     with pytest.raises(BaiError) as raised:
-        await DeepSeekProvider(truncated, {"model": "m", "stream": False}).complete(
+        await send(DeepSeekProvider(truncated, {"model": "m", "stream": False}),
             CompletionRequest(flow_id="f", turn_id="t")
         )
     assert raised.value.code == "PROVIDER_TRUNCATED"
 
     failed = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions(failure=RuntimeError("sdk detail"))))
     with pytest.raises(BaiError) as raised:
-        await DeepSeekProvider(failed, {"model": "m", "stream": False, "max_attempts": 1}).complete(
+        await send(DeepSeekProvider(failed, {"model": "m", "stream": False}),
             CompletionRequest(flow_id="f", turn_id="t")
         )
     assert raised.value.code == "PROVIDER_FAILED"
@@ -76,7 +85,7 @@ async def test_truncation_and_sdk_failure_are_normalized() -> None:
 async def test_cancellation_is_rethrown() -> None:
     client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions(failure=asyncio.CancelledError())))
     with pytest.raises(asyncio.CancelledError):
-        await DeepSeekProvider(client, {"model": "m", "stream": False}).complete(
+        await send(DeepSeekProvider(client, {"model": "m", "stream": False}),
             CompletionRequest(flow_id="f", turn_id="t")
         )
 
@@ -85,9 +94,8 @@ async def test_cancellation_is_rethrown() -> None:
 async def test_retry_is_bounded_and_stream_profile_is_rejected() -> None:
     completions = EventuallySuccessfulCompletions()
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    result = await DeepSeekProvider(
-        client, {"model": "m", "stream": False, "max_attempts": 3}
-    ).complete(CompletionRequest(flow_id="f", turn_id="t"))
+    adapter = DeepSeekProvider(client, {"model": "m", "stream": False, "max_output_tokens": 32})
+    result = await ModelCallGateway(adapter, max_attempts=3, backoff_seconds=0).complete(make_draft())
     assert result.text == "完成"
     assert completions.calls == 3
     with pytest.raises(BaiError) as raised:

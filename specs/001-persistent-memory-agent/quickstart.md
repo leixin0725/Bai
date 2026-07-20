@@ -67,6 +67,20 @@ python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 
 该命令复用原 `turn_id`，不会重复追加用户记录。
 
+### 3.1 本地提示调试（2026-07-20）
+
+在真实交互式终端运行：
+
+```bash
+python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
+```
+
+每个 curation/chat/tool continuation/retry 都先展示唯一物化后的最终 provider 载荷及来源；逐次按 `A` 批准，或按 `R` 拒绝并确认 raw、长期记忆、pending 与轮前一致。批准后界面先清除再发送；普通 provider 失败只产生一条 USER pending，随后用既有 `--resume-pending`。自动验收不调用真实 DeepSeek：
+
+```bash
+pytest tests/contract/test_model_call_gateway.py tests/integration/test_prompt_trace_single_call.py -q
+```
+
 ## 4. 记忆组织与完整覆盖
 
 `data/memory/raw/*.jsonl` 永久保存所有确认的用户/Assistant 原文，分段只影响物理存储。`data/memory/long_term.yaml` 在同一个 revision 内保存：

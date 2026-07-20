@@ -6,6 +6,8 @@ import base64
 import json
 
 from bai_agent.domain.models import (
+    SourceKind,
+    SourceRef,
     ToolDefinition,
     ToolOutcome,
     ToolResult,
@@ -120,3 +122,13 @@ class MemorySourceQueryTool:
 
     async def execute(self, arguments: dict, context) -> ToolResult:
         return self.execute_sync(arguments, context)
+
+    @staticmethod
+    def result_source(call_id: str) -> SourceRef:
+        """[2026-07-20] 工具结果使用运行时 producer 与 call id，不伪造文件来源。"""
+        return SourceRef(
+            source_kind=SourceKind.RUNTIME,
+            source_id=f"tool-result:{call_id}",
+            entity_ids=(call_id,),
+            producer="tool:memory_source_query",
+        )

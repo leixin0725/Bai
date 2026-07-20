@@ -18,6 +18,5 @@ def create_provider(provider: dict[str, Any], profile: dict[str, Any]) -> DeepSe
         raise BaiError("PROVIDER_CAPABILITY_INVALID", "首版不允许展示未确认流式输出。")
     client = AsyncOpenAI(api_key=read_secret(str(provider["api_key_env"])), base_url=str(provider["base_url"]))
     merged = dict(profile)
-    merged["max_attempts"] = int(provider.get("retry", {}).get("max_attempts", 1))
+    merged["provider_id"] = str(provider["id"])
     return DeepSeekProvider(client, merged)
-

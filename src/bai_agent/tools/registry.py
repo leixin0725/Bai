@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import ToolDefinition
+from bai_agent.domain.models import SourceKind, SourceRef, ToolDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +16,7 @@ class RegisteredTool:
     allowed_personas: tuple[str, ...]
     read_only: bool
     compensation_contract: str | None = None
+    source_refs: tuple[SourceRef, ...] = ()
 
 
 class ToolRegistry:
@@ -31,6 +32,7 @@ class ToolRegistry:
         allowed_personas: tuple[str, ...],
         read_only: bool = True,
         compensation_contract: str | None = None,
+        source_refs: tuple[SourceRef, ...] = (),
     ) -> None:
         if definition.name in self._tools:
             raise BaiError("TOOL_DUPLICATE", "工具名称重复。")
@@ -39,8 +41,32 @@ class ToolRegistry:
             compensating = bool(compensation_contract) and callable(getattr(implementation, "compensate", None))
             if not transactional and not compensating:
                 raise BaiError("TOOL_RECOVERY_REQUIRED", "写工具缺少可恢复事务或明确补偿契约。")
+        resolved_sources = source_refs or (
+            SourceRef(
+                source_kind=SourceKind.CONFIG_FILE,
+                source_id=f"tool-definition:{definition.tool_id}",
+                project_relative_path="config/tools.toml",
+                content_sha256="sha256:" + "0" * 64,
+                revision="sha256:" + "0" * 64,
+                entity_ids=(definition.tool_id,),
+                producer="tool_registry",
+            ),
+        )
         self._tools[definition.name] = RegisteredTool(
-            definition, implementation, enabled, allowed_personas, read_only, compensation_contract
+            definition, implementation, enabled, allowed_personas, read_only,
+            compensation_contract, resolved_sources
+        )
+
+    def source_refs_for(self, name: str, persona_id: str) -> tuple[SourceRef, ...]:
+        return self.resolve(name, persona_id).source_refs
+
+    @staticmethod
+    def result_source_ref(call_id: str, tool_name: str) -> SourceRef:
+        return SourceRef(
+            source_kind=SourceKind.RUNTIME,
+            source_id=f"tool-result:{call_id}",
+            entity_ids=(call_id,),
+            producer=f"tool:{tool_name}",
         )
 
     def resolve(self, name: str, persona_id: str) -> RegisteredTool:

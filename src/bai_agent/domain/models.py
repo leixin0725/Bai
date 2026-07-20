@@ -83,7 +83,7 @@ class TrustLevel(StrEnum):
 
 class Message(FrozenModel):
     role: str
-    content: str = Field(min_length=1)
+    content: str
     trust: TrustLevel = TrustLevel.UNTRUSTED_DATA
     tool_call_id: str | None = None
 

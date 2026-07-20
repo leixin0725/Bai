@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import RawRecord, Role, canonical_json, content_hash, new_id, utc_now
+from bai_agent.domain.models import RawRecord, Role, SourceKind, SourceRef, canonical_json, content_hash, new_id, utc_now
 from bai_agent.memory.recovery import atomic_write, find_temporary_files
 from bai_agent.security.credentials import CredentialGuard
 from bai_agent.security.permissions import PermissionStatus, ensure_private_path
@@ -219,6 +219,20 @@ class RawRecordArchive:
                 index[record.record_id] = (path.name, offset, len(line), record.global_sequence)
                 offset += len(line)
         return index
+
+    def source_ref(self, record: RawRecord) -> SourceRef:
+        """[2026-07-20] raw 来源使用真实分段与稳定 record id，不按正文定位。"""
+        location = self.record_index().get(record.record_id)
+        segment = location[0] if location else "pending-transaction"
+        return SourceRef(
+            source_kind=SourceKind.DATA_FILE,
+            source_id=f"raw:{record.record_id}",
+            project_relative_path=f"data/memory/raw/{segment}",
+            content_sha256=record.content_sha256,
+            revision=self.identity_hash(),
+            entity_ids=(record.record_id,),
+            producer="raw_record_archive",
+        )
 
     def permission_results(self) -> tuple[Any, ...]:
         results = [ensure_private_path(self.memory_root, is_directory=True), ensure_private_path(self.raw_dir, is_directory=True)]

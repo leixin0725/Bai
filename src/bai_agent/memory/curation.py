@@ -24,6 +24,11 @@ from bai_agent.domain.models import (
     MemoryKind,
     MemoryStatus,
     Message,
+    ModelCallDraft,
+    Participation,
+    RequestPart,
+    SourceKind,
+    SourceRef,
     SourceReference,
     SourceRelation,
     TrustLevel,
@@ -121,7 +126,13 @@ class CurationService:
         self.max_attempts = max(1, max_attempts)
         self.tracer = tracer
 
-    async def propose(self, *, force: bool = False) -> ProposedCuration | None:
+    async def propose(
+        self,
+        *,
+        force: bool = False,
+        turn_id: str | None = None,
+        call_sequence: int = 1,
+    ) -> ProposedCuration | None:
         document = self.store.load()
         records = self.archive.read_all()
         batch = self.policy.next_batch(
@@ -164,9 +175,10 @@ class CurationService:
             )
         except (KeyError, ValueError) as exc:
             raise BaiError("PROMPT_TEMPLATE_INVALID", "记忆整理模板变量无效。") from exc
+        resolved_turn_id = turn_id or f"curation-{batch.batch_id}"
         request = CompletionRequest(
             flow_id=f"curation-{batch.batch_id}",
-            turn_id=f"curation-{batch.batch_id}",
+            turn_id=resolved_turn_id,
             model_profile_id="memory_curator",
             messages=(
                 Message(role="system", content=self.curator_persona, trust=TrustLevel.TRUSTED_INSTRUCTION),
@@ -176,9 +188,64 @@ class CurationService:
         )
         last_error: Exception | None = None
         proposal = None
-        for _ in range(self.max_attempts):
+        attempts = 1 if getattr(self.provider, "is_model_call_gateway", False) else self.max_attempts
+        for _ in range(attempts):
             try:
-                response = await self.provider.complete(request)
+                if getattr(self.provider, "is_model_call_gateway", False):
+                    system_source = SourceRef(
+                        source_kind=SourceKind.CONFIG_FILE,
+                        source_id="persona:memory_curator",
+                        project_relative_path="config/personas/memory_curator.md",
+                        content_sha256=content_hash(self.curator_persona),
+                        revision=self.config_revision,
+                        producer="config_loader",
+                    )
+                    prompt_sources = (
+                        SourceRef(
+                            source_kind=SourceKind.CONFIG_FILE,
+                            source_id="prompt:memory_curation",
+                            project_relative_path="config/prompts/memory_curation.md",
+                            content_sha256=content_hash(self.prompt_template),
+                            revision=self.config_revision,
+                            producer="config_loader",
+                        ),
+                        SourceRef(
+                            source_kind=SourceKind.DATA_FILE,
+                            source_id=f"curation-batch:{batch.batch_id}",
+                            project_relative_path="data/memory/raw",
+                            content_sha256=batch.content_sha256,
+                            revision=self.archive.identity_hash(),
+                            entity_ids=batch.record_ids,
+                            producer="curation_policy",
+                        ),
+                    )
+                    parts = (
+                        RequestPart(
+                            part_id=f"curation:{batch.batch_id}:system", order=0,
+                            participation=Participation.INCLUDED,
+                            trust=TrustLevel.TRUSTED_INSTRUCTION,
+                            payload_pointer="/messages/0/content", text_span=(0, len(self.curator_persona)),
+                            content=self.curator_persona, sources=(system_source,),
+                        ),
+                        RequestPart(
+                            part_id=f"curation:{batch.batch_id}:user", order=1,
+                            participation=Participation.INCLUDED,
+                            trust=TrustLevel.UNTRUSTED_DATA,
+                            payload_pointer="/messages/1/content", text_span=(0, len(prompt)),
+                            content=prompt, sources=prompt_sources,
+                        ),
+                    )
+                    response = await self.provider.complete(
+                        ModelCallDraft(
+                            call_id=f"call-{batch.batch_id}", turn_id=resolved_turn_id,
+                            flow_id=request.flow_id, call_sequence=call_sequence,
+                            purpose="memory_curation", persona_id="memory_curator", state_id=None,
+                            config_revision=self.config_revision, model_profile_id="memory_curator",
+                            request=request, parts=parts,
+                        )
+                    )
+                else:
+                    response = await self.provider.complete(request)
                 proposal = self._validate_response(response.text, batch)
                 break
             except Exception as exc:
