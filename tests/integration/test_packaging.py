@@ -86,12 +86,14 @@ def test_local_atomic_utf8_and_permission_normalization(tmp_path: Path) -> None:
 def test_compatibility_workflow_covers_supported_matrix() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "windows-latest" in workflow
-    assert "ubuntu-latest" in workflow
-    assert "macos-latest" in workflow
+    assert "ubuntu-24.04" in workflow
+    assert "macos-latest" not in workflow
     assert "'3.13'" in workflow
     assert "'3.14'" in workflow
     assert "actions/checkout@v7" in workflow
     assert "actions/setup-python@v6" in workflow
     assert 'pytest -m "not performance"' in workflow
-    assert "BAI_RUN_WINDOWS_REFERENCE: '1'" in workflow
+    assert "test_prompt_tui_latency.py" in workflow
+    assert "run_prompt_tui_performance" in workflow
+    assert "BAI_RUN_WINDOWS_REFERENCE" not in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow

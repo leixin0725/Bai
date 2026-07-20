@@ -86,3 +86,30 @@ def scan_reachable_history(root: Path) -> list[Finding]:
                 findings.extend(_scan_bytes(blob.stdout, name, f"commit:{commit[:12]}"))
     return findings
 
+
+def scan_git_diffs(root: Path) -> list[Finding]:
+    """[2026-07-20] 工作树与暂存补丁单独扫描，覆盖尚未形成文件或提交的候选值。"""
+    findings: list[Finding] = []
+    for cached, scope in ((False, "working-diff"), (True, "staged-diff")):
+        command = ["git", "diff", "--binary", "--no-ext-diff"]
+        if cached:
+            command.append("--cached")
+        result = subprocess.run(command, cwd=root, check=True, capture_output=True)
+        findings.extend(_scan_bytes(result.stdout, "git-diff", scope))
+    return findings
+
+
+def persistent_prompt_trace_paths(root: Path) -> list[str]:
+    """[2026-07-20] 只检查运行数据位置，不把源码测试名误报成持久 prompt trace。"""
+    data_root = root / "data"
+    if not data_root.exists():
+        return []
+    suspicious: list[str] = []
+    for path in data_root.rglob("*"):
+        if not path.is_file():
+            continue
+        logical = path.relative_to(root).as_posix()
+        lowered = logical.casefold()
+        if "prompt-trace" in lowered or "prompt_trace" in lowered:
+            suspicious.append(logical)
+    return sorted(suspicious)

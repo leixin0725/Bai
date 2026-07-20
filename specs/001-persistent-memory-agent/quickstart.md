@@ -180,18 +180,15 @@ git diff --check
 
 `.github/workflows/compatibility.yml` 在固定 Ubuntu 24.04 上以 Python 3.13/3.14 运行主要功能门禁，并在 Windows runner 上运行次要兼容门禁；macOS 不在范围。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
 
-## 10. Windows 参考性能复现
+## 10. Ubuntu 24.04 提示 TUI 性能复现
 
-性能 fixture 含 10,000 条永久原始记录、1,000 条长期记忆和配置上限内的 48 条近期直接原文。显式开启后执行至少 100 次全新 Python 进程：
+在原生 Ubuntu 24.04、Python 3.13、80×24 `xterm-256color` 中执行：
 
-```powershell
-$env:BAI_RUN_WINDOWS_REFERENCE = "1"
-$env:BAI_REFERENCE_MEMORY = "记录参考机内存规格"
-$env:BAI_REFERENCE_STORAGE = "记录参考机存储规格"
-pytest tests\performance\test_startup.py -m performance -q -s
+```bash
+TERM=xterm-256color pytest tests/performance/test_prompt_tui_latency.py -q -s
 ```
 
-计时从进程创建到配置、原始索引、长期 YAML、覆盖概览和首轮 `PromptContext` 可用；报告 OS、CPU、内存、存储、Python、缓存策略和 nearest-rank p95。门槛为 3 秒且网络调用为 0，只在指定 Windows 参考环境判定，其他平台只跑功能矩阵。
+计时从 frozen request、来源和估算就绪到标题、身份、上下文摘要完成 mounted；首次冷启动单独记录，强制门禁只计算随后 30 次同进程启动的 p95，要求不超过 500 ms。Python 3.14 进入 Ubuntu 主要功能矩阵但不承担该固定性能门禁；Windows 仅做次要功能兼容，macOS 不在范围。
 
 ## 11. 凭据事件处置
 

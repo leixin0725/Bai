@@ -169,7 +169,7 @@ def build_application(
             from bai_agent.domain.errors import BaiError
 
             raise BaiError(permission.error_code or "MEMORY_PERMISSION_INVALID", permission.warning or "长期记忆权限无效。")
-        # [2026-07-20] 启动恢复必须先于 pending 读取、新输入、配置调用和 provider 访问。
+        # [2026-07-20] 持锁恢复必须先于 pending 读取、Provider 创建和任何新轮输入。
         TurnUnitOfWork(memory_root, archive, long_term_store, tracer=tracer).recover()
         states_doc = settings["states.toml"]
         states = {str(item["id"]): tuple(item["ordered_persona_ids"]) for item in states_doc["states"] if item.get("enabled", False)}

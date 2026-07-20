@@ -14,7 +14,7 @@
 
 **Primary Dependencies**: 现有 `openai`、`pydantic`、`ruamel.yaml`、`filelock`；新增 Textual `>=8.2,<9`，用于跨平台全屏类 TUI、滚动长文本、键盘/按钮批准和无头测试。Textual 自带 Rich 渲染能力，不再增加第二套终端 UI 依赖。
 
-**Storage**: 保留 JSONL 原始记录和 YAML 长期记忆；新增单个私有、原子替换的 `data/memory/.state/turn-transaction.json` 三态轮次事务日志。该日志只保存恢复所需的暂存用户记录、基线身份、安全失败码和待发布结果，不保存最终模型请求、提示正文、来源追踪、认证信息或已拒绝标记。
+**Storage**: 保留 JSONL 原始记录和 YAML 长期记忆；新增单个私有、原子替换的 `data/memory/.state/turn-transaction.json` 三态轮次事务日志。该日志只保存恢复所需的暂存用户记录（含本轮用户输入）、基线身份、安全失败码和待发布结果；除该暂存输入外，不保存组装后的最终模型请求、其他提示片段、来源追踪、认证信息或已拒绝标记。
 
 **Testing**: `pytest`、`pytest-asyncio`、`hypothesis`、`respx`，加 Textual `App.run_test()`/Pilot 无头交互测试；使用伪 provider、SDK 参数捕获和 HTTP mock 验证显示载荷与实际出站载荷逐字段一致。
 
@@ -47,7 +47,7 @@
 | I. Clarity, extensibility, maintainability | `ModelCallGateway`、provider 适配、来源验证、估算、展示和轮次事务职责分离；扩展点在 contracts 中给出 | PASS |
 | II. Decoupling and readability | 领域模型/端口不依赖 Textual 或 OpenAI SDK；provider 和 TUI 仅实现端口；持久化通过轮次工作单元协调，无跨层共享可变请求 | PASS |
 | III. Simplest understandable implementation | 仅增加一个 TUI 依赖、一个统一网关和一个事务日志；不引入数据库、事件溯源或持久追踪 | PASS |
-| IV. zh-CN traceable comments | `Comment Impact` 已定义 `[2026-07-19]` 新增/更新规则，旧注释仅在过时时调整 | PASS |
+| IV. zh-CN traceable comments | `Comment Impact` 已定义 `[2026-07-20]` 或实际实现日期/版本的新增/更新规则，旧注释仅在过时时调整 | PASS |
 | V. Git discipline | `Git Milestones` 定义与任务一致的六个可独立验证、文档同步原子提交边界 | PASS |
 | VI. Core business tests | `Core Business Logic` 将 BR-001—BR-010 全部映射到正常、边界和关键失败自动化测试 | PASS |
 | VII. Credential protection | 环境变量注入、认证与提示载荷分离、双门禁、脱敏错误、夹具约束及历史扫描均已设计 | PASS |
@@ -70,7 +70,7 @@ specs/002-prompt-trace-debugger/
 │   ├── configuration.md
 │   ├── model-call.md
 │   └── turn-transaction.md
-└── tasks.md                 # 由 /speckit-tasks 后续生成
+└── tasks.md                 # 已由 /speckit-tasks 生成并完成实现状态更新
 ```
 
 ### Source Code (repository root)

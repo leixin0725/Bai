@@ -198,14 +198,16 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 **Purpose**: 完成规模、凭据、可用性、注释、兼容性和全量回归门禁，不把故事阶段应同步的文档推迟到此处。
 
-- [ ] T088 [P] 在 `tests/integration/test_prompt_trace_coverage_scale.py` 增加至少 200 次 chat/curation/tool/future persona/failure/retry 混合调用验收，证明 approval 与物理出站一一对应、顺序一致且未批准发送为 0
-- [ ] T089 [P] 为 CR-004 扩展 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py`，扫描 TUI、错误、日志、journal、fixture、工作树和可达 Git 历史，确保可用凭据与持久 prompt trace 数量均为 0
-- [ ] T090 按 `specs/002-prompt-trace-debugger/quickstart.md` 在隔离数据目录执行普通/debug 单次/多次、无色、非 TTY、拒绝、pending、重启和故障排查命令，在 `specs/002-prompt-trace-debugger/checklists/usability.md` 记录至少 10 次首次使用验收并验证至少 90% 能在 30 秒内定位来源
-- [ ] T091 运行 `pytest -q`、全部 `tests/performance/` 与 `tests/fault_injection/`，修复回归但不得降低 BR-001—BR-010、凭据、provider portability、模型迁移或 write-tool transaction 断言
-- [ ] T092 审核 `src/bai_agent/` 本功能注释：全部为简体中文、带日期/版本并说明职责与不变量，只在原注释过时或误导时更新；在 `specs/002-prompt-trace-debugger/tasks.md` 记录修正偏差
-- [ ] T093 在 `pyproject.toml` 声明范围内验证 Ubuntu 24.04/Python 3.13 与 3.14 的主要 editable install、`python -m bai_agent config validate --config-dir config`、CLI help 和核心功能测试，并在 Windows 11/PowerShell 执行同组次要功能兼容验收，macOS 记为不在范围，最后运行 `git diff --check`
-- [ ] T094 [P] 更新 `.github/workflows/compatibility.yml`：以带固定容器/镜像说明的 Ubuntu 24.04/Python 3.13 与 3.14 为主要功能矩阵，保留 Windows runner 次要功能矩阵，移除 macOS；将手动参考性能作业迁到 Ubuntu 24.04/Python 3.13 并执行 30 次同进程 prompt TUI p95 门禁；修复乱码中文注释并用 `[2026-07-20]` 时间戳记录原因
-- [ ] T095 核对 `specs/002-prompt-trace-debugger/spec.md` 的 FR-001—FR-034、BR-001—BR-010、CR-001—CR-004、DR-001—DR-004、SC-001—SC-017 与任务/测试/文档逐项闭环，确认本次 analyze 的 CRITICAL/HIGH 为 0、名义覆盖 100%，且无 non-TTY、事务状态、TUI 生命周期、模型迁移或未映射产品行为冲突；运行链接/占位符/凭据/兼容性/`git diff --check` 审计后，通过 Git 扩展原子提交仅包含最终测试、注释、兼容性和文档校准变更
+- [X] T088 [P] 在 `tests/integration/test_prompt_trace_coverage_scale.py` 增加至少 200 次 chat/curation/tool/future persona/failure/retry 混合调用验收，证明 approval 与物理出站一一对应、顺序一致且未批准发送为 0
+- [X] T089 [P] 为 CR-004 扩展 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py`，扫描 TUI、错误、日志、journal、fixture、工作树和可达 Git 历史，确保可用凭据与持久 prompt trace 数量均为 0
+- [X] T090 按 `specs/002-prompt-trace-debugger/quickstart.md` 在隔离数据目录执行普通/debug 单次/多次、无色、非 TTY、拒绝、pending、重启和故障排查命令，在 `specs/002-prompt-trace-debugger/checklists/usability.md` 记录至少 10 次首次使用验收并验证至少 90% 能在 30 秒内定位来源
+- [X] T091 运行 `pytest -q`、全部 `tests/performance/` 与 `tests/fault_injection/`，修复回归但不得降低 BR-001—BR-010、凭据、provider portability、模型迁移或 write-tool transaction 断言
+- [X] T092 审核 `src/bai_agent/` 本功能注释：全部为简体中文、带日期/版本并说明职责与不变量，只在原注释过时或误导时更新；在 `specs/002-prompt-trace-debugger/tasks.md` 记录修正偏差
+- [X] T093 在 `pyproject.toml` 声明范围内验证 Ubuntu 24.04/Python 3.13 与 3.14 的主要 editable install、`python -m bai_agent config validate --config-dir config`、CLI help 和核心功能测试，并在 Windows 11/PowerShell 执行同组次要功能兼容验收，macOS 记为不在范围，最后运行 `git diff --check`
+- [X] T094 [P] 更新 `.github/workflows/compatibility.yml`：以带固定容器/镜像说明的 Ubuntu 24.04/Python 3.13 与 3.14 为主要功能矩阵，保留 Windows runner 次要功能矩阵，移除 macOS；将手动参考性能作业迁到 Ubuntu 24.04/Python 3.13 并执行 30 次同进程 prompt TUI p95 门禁；修复乱码中文注释并用 `[2026-07-20]` 时间戳记录原因
+
+**T092 修正偏差记录（2026-07-20）**：T083 同步收紧了 `IncidentStore` 的逻辑元数据 schema；BR-010 验收发现执行器虽有能力门禁但失败/取消未调用 rollback，已在 US4 一并修正；T063 的旧 fixture hash 误用了空载荷摘要，已按声明的 canonical payload 方法重算并加入逐项断言；T094 同步更新了既有 packaging 矩阵断言。上述均为既定安全/真实性要求的实现收敛，未新增产品行为。
+- [X] T095 核对 `specs/002-prompt-trace-debugger/spec.md` 的 FR-001—FR-034、BR-001—BR-010、CR-001—CR-004、DR-001—DR-004、SC-001—SC-017 与任务/测试/文档逐项闭环，确认本次 analyze 的 CRITICAL/HIGH 为 0、名义覆盖 100%，且无 non-TTY、事务状态、TUI 生命周期、模型迁移或未映射产品行为冲突；运行链接/占位符/凭据/兼容性/`git diff --check` 审计后，通过 Git 扩展原子提交仅包含最终测试、注释、兼容性和文档校准变更
 
 ---
 
