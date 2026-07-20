@@ -25,11 +25,20 @@ class CaptureCompletions:
 async def test_prepare_materialize_and_send_are_field_identical(content: str) -> None:
     completions = CaptureCompletions()
     client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    adapter = DeepSeekProvider(client, {"model": "deepseek-chat", "stream": False, "max_output_tokens": 8192})
+    adapter = DeepSeekProvider(
+        client,
+        {
+            "model": "deepseek-v4-flash",
+            "stream": False,
+            "thinking_enabled": False,
+            "max_output_tokens": 8192,
+        },
+    )
     draft = make_draft(content)
     prepared = adapter.prepare(draft, 1)
     payload = adapter.materialize_sdk_kwargs(prepared)
     result = await adapter.send_once(payload)
     assert completions.kwargs == dict(payload.sdk_kwargs)
+    assert completions.kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
     assert result.usage == {"input_tokens": 9, "output_tokens": 2, "total_tokens": 11}
     assert adapter.active_payload is None

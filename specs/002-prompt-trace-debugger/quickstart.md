@@ -105,7 +105,7 @@ pytest tests/integration -k "debug and (curation or tool or retry)" -q
 pytest tests/contract -k "model_call_gateway" -q
 ```
 
-预期：整理、聊天、工具结果续接、未来辅助人格和 provider retry 每个物理 attempt 都按真实顺序独立出现；每次只有一个 approval，前一项未决定时不处理后一项；retry 不恢复上一项 TUI。
+预期：整理、聊天、工具结果续接、未来辅助人格和 provider retry 每个物理 attempt 都按真实顺序独立出现；每次只有一个 approval，前一项未决定时不处理后一项；retry 不恢复上一项 TUI。每个 DeepSeek 请求的最终载荷都包含 `extra_body.thinking.type=disabled`；工具续接在匹配 tool result 前包含产生调用的 assistant/tool_calls。
 
 标题同时核对 turn、flow、call sequence、purpose、persona、state、provider、model、config revision、attempt 和 status；call sequence 由共享网关分配器生成，调用方不能覆盖。retry 保持逻辑 call 字段稳定，只增加 attempt 并保留前一失败状态。
 
@@ -222,6 +222,8 @@ pytest tests/contract/test_tool_transaction_capabilities.py tests/unit/test_logg
 | 预计峰值超限 | TUI 显示 `exceeded` 并区分主要输入 part 与输出预留贡献 |
 | 非交互终端 | 改在真实交互终端运行；不得通过重定向绕过 |
 | TUI 初始化/渲染失败 | 发送次数为 0；修复终端能力后重试 |
+| 批准后同一 call/attempt 反复出现 | 仅网络/超时或 HTTP 429/500/503 应产生新 attempt；400/401/402/403/422 必须只审批一次。运行 provider 合同测试并核对最终载荷含 `thinking.type=disabled` |
+| 工具续接返回 HTTP 400 | 核对续接消息按 assistant/tool_calls → tool result 排列，且 tool_call_id 完全匹配；非思考模式不保存或回传 reasoning_content |
 | PREPARED journal 残留 | 重启后自动丢弃，且不形成 pending/history |
 | READY_PENDING journal 残留 | 重启后先幂等发布唯一 USER pending；默认/`--discard-pending` 随后截尾，`--resume-pending` 保留并恢复；不得发布 assistant/long-term |
 | READY_TO_COMMIT journal 残留 | 重启后幂等发布完整轮次；冲突时停止新轮并按脱敏错误指引处理 |

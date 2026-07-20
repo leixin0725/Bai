@@ -89,6 +89,8 @@ provider-neutral 的模型调用及完整来源上下文。
 
 **Relationship**: 一个 draft 可因重试产生多个 `PreparedProviderRequest` attempt，但每个 attempt 独立批准。
 
+`CompletionRequest.messages` 的 assistant 项可携带 provider-neutral `tool_calls`（call id、函数名、参数）；tool continuation 必须把该 assistant 项放在对应 tool result 之前。DeepSeek adapter 只在物化时转换为 OpenAI tool_calls 结构，并为生成的 assistant content/tool_calls 添加 `[generated]` 来源 part。
+
 ## 5. PreparedProviderRequest / MaterializedSendPayload
 
 `PreparedProviderRequest` 是 `prepare()` 产生的 provider 适配结果和来源上下文；`MaterializedSendPayload` 只能由唯一一次 `materialize_sdk_kwargs()` 产生，是 TUI 展示、批准摘要和 sender 发送共同使用的深度不可变 SDK 参数。

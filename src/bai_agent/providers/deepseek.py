@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import openai
+
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
     CompletionResult,
@@ -26,15 +28,74 @@ class DeepSeekProvider:
         self.profile = dict(profile)
         if self.profile.get("stream", False):
             raise BaiError("PROVIDER_CAPABILITY_INVALID", "首版必须使用完整非流式响应。")
+        retryable_statuses = self.profile.get("retryable_statuses", (429, 500, 503))
+        if not isinstance(retryable_statuses, (list, tuple)) or any(
+            isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599
+            for status in retryable_statuses
+        ):
+            raise BaiError("PROVIDER_CAPABILITY_INVALID", "Provider 重试状态码配置无效。")
+        self.retryable_statuses = frozenset(retryable_statuses)
         self.active_payload: MaterializedSendPayload | None = None
 
     def prepare(self, draft: ModelCallDraft, attempt: int) -> PreparedProviderRequest:
         """[2026-07-20] 准备阶段无 I/O，仅形成 provider-specific 无认证逻辑请求。"""
         messages = []
-        for item in draft.request.messages:
+        parts = list(draft.parts)
+        for message_index, item in enumerate(draft.request.messages):
             mapped = {"role": item.role, "content": item.content}
             if item.tool_call_id:
                 mapped["tool_call_id"] = item.tool_call_id
+            if item.tool_calls:
+                mapped_tool_calls = []
+                for call in item.tool_calls:
+                    try:
+                        call_id = str(call["call_id"])
+                        name = str(call["name"])
+                        arguments = call["arguments"]
+                        if not call_id or not name or not isinstance(arguments, dict):
+                            raise ValueError
+                    except (KeyError, TypeError, ValueError) as exc:
+                        raise BaiError("PROVIDER_TOOL_CALL_INVALID", "待续接工具调用格式无效。") from exc
+                    mapped_tool_calls.append(
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": canonical_json(arguments),
+                            },
+                        }
+                    )
+                mapped["tool_calls"] = mapped_tool_calls
+                generated_source = SourceRef(
+                    source_kind=SourceKind.GENERATED,
+                    source_id=f"{draft.call_id}:assistant-tool-calls:{message_index}",
+                    entity_ids=tuple(call["id"] for call in mapped_tool_calls),
+                    producer="provider_response",
+                )
+                parts.append(
+                    RequestPart(
+                        part_id=f"{draft.call_id}:assistant-content:{message_index}",
+                        order=len(parts),
+                        participation=Participation.INCLUDED,
+                        trust=TrustLevel.UNTRUSTED_DATA,
+                        payload_pointer=f"/messages/{message_index}/content",
+                        text_span=(0, len(item.content)),
+                        content=item.content,
+                        sources=(generated_source,),
+                    )
+                )
+                parts.append(
+                    RequestPart(
+                        part_id=f"{draft.call_id}:assistant-tool-calls:{message_index}",
+                        order=len(parts),
+                        participation=Participation.INCLUDED,
+                        trust=TrustLevel.UNTRUSTED_DATA,
+                        payload_pointer=f"/messages/{message_index}/tool_calls",
+                        content=canonical_json(mapped_tool_calls),
+                        sources=(generated_source,),
+                    )
+                )
             messages.append(mapped)
         tools = []
         for definition in draft.request.tool_definitions:
@@ -56,6 +117,11 @@ class DeepSeekProvider:
             "messages": messages,
             "stream": False,
             "max_tokens": self.profile.get("max_output_tokens"),
+            "extra_body": {
+                "thinking": {
+                    "type": "enabled" if self.profile.get("thinking_enabled", False) else "disabled"
+                }
+            },
         }
         if tools:
             kwargs["tools"] = tools
@@ -63,7 +129,6 @@ class DeepSeekProvider:
             kwargs["temperature"] = self.profile["temperature"]
         if self.profile.get("structured_output") and self.profile.get("output_schema"):
             kwargs["response_format"] = {"type": "json_object"}
-        parts = list(draft.parts)
         if tools:
             parts.append(
                 RequestPart(
@@ -121,7 +186,7 @@ class DeepSeekProvider:
                 raise BaiError("PROVIDER_PROTOCOL_INVALID", "模型响应不包含候选结果。")
             choice = response.choices[0]
             if choice.finish_reason == "length":
-                raise BaiError("PROVIDER_TRUNCATED", "模型响应因长度限制而不完整。", retryable=True)
+                raise BaiError("PROVIDER_TRUNCATED", "模型响应因长度限制而不完整。")
             raw_tool_calls = getattr(choice.message, "tool_calls", None) or ()
             tool_calls = []
             seen_ids: set[str] = set()
@@ -167,7 +232,26 @@ class DeepSeekProvider:
             )
         except BaiError:
             raise
+        except openai.APIStatusError as exc:
+            status = exc.status_code
+            retryable = status in self.retryable_statuses
+            if status in {400, 422}:
+                error = BaiError("PROVIDER_REQUEST_INVALID", "模型请求参数或工具协议无效。")
+            elif status in {401, 403}:
+                error = BaiError("PROVIDER_AUTH_FAILED", "模型认证或访问权限校验失败。")
+            elif status == 402:
+                error = BaiError("PROVIDER_BALANCE_INSUFFICIENT", "模型账户余额不足。")
+            elif status == 429:
+                error = BaiError("PROVIDER_RATE_LIMITED", "模型服务触发限速。", retryable=retryable)
+            elif status in {500, 503}:
+                error = BaiError("PROVIDER_UNAVAILABLE", "模型服务暂时不可用。", retryable=retryable)
+            else:
+                error = BaiError("PROVIDER_HTTP_FAILED", f"模型服务返回 HTTP {status}。", retryable=retryable)
+            # [2026-07-20] 只保留脱敏领域错误；上游 body 可能含请求细节，不能进入 CLI、日志或 journal。
+            raise error from exc
+        except (openai.APIConnectionError, openai.APITimeoutError) as exc:
+            raise BaiError("NETWORK_FAILED", "模型网络连接失败。", retryable=True) from exc
         except Exception as exc:
-            raise BaiError("PROVIDER_FAILED", "模型调用失败。", retryable=True) from exc
+            raise BaiError("PROVIDER_FAILED", "模型调用失败。") from exc
         finally:
             self.active_payload = None

@@ -86,6 +86,15 @@ class Message(FrozenModel):
     content: str
     trust: TrustLevel = TrustLevel.UNTRUSTED_DATA
     tool_call_id: str | None = None
+    tool_calls: tuple[dict[str, JsonValue], ...] = ()
+
+    @model_validator(mode="after")
+    def validate_tool_protocol(self) -> "Message":
+        if self.tool_calls and self.role != "assistant":
+            raise ValueError("只有 assistant 消息可以声明 tool_calls")
+        if self.tool_call_id is not None and self.role != "tool":
+            raise ValueError("只有 tool 消息可以声明 tool_call_id")
+        return self
 
 
 class RawRecord(FrozenModel):

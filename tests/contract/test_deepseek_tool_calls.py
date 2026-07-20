@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import CompletionRequest, Message
+from bai_agent.domain.models import CompletionRequest, Message, thaw_json
 from bai_agent.providers.deepseek import DeepSeekProvider
 from tests.prompt_debug_fakes import make_draft
 
@@ -89,3 +89,56 @@ async def test_tool_call_id_is_returned_to_provider() -> None:
         )
     )
     assert completions.kwargs["messages"][0]["tool_call_id"] == "call-1"
+
+
+@pytest.mark.asyncio
+async def test_assistant_tool_call_is_replayed_before_tool_result() -> None:
+    completions = Completions(
+        SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="完成", tool_calls=None), finish_reason="stop")],
+            usage=None,
+        )
+    )
+    provider = DeepSeekProvider(
+        SimpleNamespace(chat=SimpleNamespace(completions=completions)),
+        {"model": "deepseek-v4-flash", "stream": False, "thinking_enabled": False},
+    )
+    await send(
+        provider,
+        CompletionRequest(
+            flow_id="f",
+            turn_id="t",
+            messages=(
+                Message(role="user", content="查询来源"),
+                Message(
+                    role="assistant",
+                    content="",
+                    tool_calls=(
+                        {
+                            "call_id": "call-1",
+                            "name": "memory_source_query",
+                            "arguments": {"memory_id": "missing"},
+                        },
+                    ),
+                ),
+                Message(role="tool", content='{"outcome":"not_found"}', tool_call_id="call-1"),
+            ),
+        ),
+    )
+
+    assistant = thaw_json(completions.kwargs["messages"])[1]
+    assert assistant == {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {
+                    "name": "memory_source_query",
+                    "arguments": '{"memory_id":"missing"}',
+                },
+            }
+        ],
+    }
+    assert completions.kwargs["messages"][2]["tool_call_id"] == "call-1"

@@ -246,6 +246,20 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ---
 
+## Phase 10: DeepSeek 审批重弹缺陷修复
+
+**Purpose**: 修复 V4 默认思考模式、工具续接协议缺项和错误误分类共同造成的批准界面重复弹出及最终失败。
+
+- [X] T113 [P] 为 FR-034/FR-039/SC-017/SC-021 在 `tests/contract/test_prompt_trace_provider.py` 与 `tests/contract/test_deepseek_provider.py` 增加失败优先测试，覆盖真实物化 `thinking.type=disabled`、400 仅一次审批、429/网络失败新 attempt、错误 body 脱敏、SDK `max_retries=0` 和 provider 重试状态透传
+- [X] T114 [P] 为 FR-040/SC-022 在 `tests/contract/test_deepseek_tool_calls.py` 与 `tests/integration/test_prompt_trace_multi_call.py` 增加失败优先测试，覆盖 assistant/tool_calls → tool result 顺序、call id/函数/参数保真、generated 来源、chat/tool continuation 各一次批准并最终成功
+- [X] T115 在 `src/bai_agent/providers/deepseek.py` 与 `src/bai_agent/providers/registry.py` 显式物化非思考参数、关闭 SDK 内部重试，并将网络/超时/429/500/503 与 400/401/402/403/422/未知异常分类为脱敏领域错误
+- [X] T116 在 `src/bai_agent/domain/models.py`、`src/bai_agent/runtime/controller.py` 与 `src/bai_agent/model_calls/gateway.py` 增加 provider-neutral assistant tool_calls，工具续接先回放 assistant 调用再追加结果，并保持 legacy 空字段不改变既有载荷
+- [X] T117 同步 spec/research/data model/model-call contract/README/quickstart/审计清单，运行 provider/tool/approval/pending 相关测试、完整回归、链接和 `git diff --check`，确认 FR-001—FR-040/SC-001—SC-022 闭环后原子提交
+
+**Checkpoint**: 成功请求不重弹；协议/认证/余额等不可重试错误只审批一次；仅真实瞬态故障按新 attempt 重新审批。
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -335,6 +349,7 @@ Setup -> Foundational safety/transaction
 6. **Final**: 200/1,000 次规模、凭据历史、可用性、Linux/Windows 兼容性和最终审计。
 7. **Pending revision**: 合法尾部原子丢弃、显式恢复、resumed reject 和 CLI/PowerShell 非阻塞启动。
 8. **TUI copy**: 复制当前最终请求/来源边框的完整安全文本，不改变批准事务与生命周期。
+9. **DeepSeek retry fix**: 显式非思考、完整工具续接协议和受控错误分类，消除必败请求重复审批。
 
 ## Analyze Remediation Mapping
 

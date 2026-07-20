@@ -220,7 +220,12 @@ class LegacyProviderAdapter:
 
         kwargs = {
             "model": self.profile.get("model", draft.model_profile_id or "test-model"),
-            "messages": [item.model_dump(mode="json", exclude={"trust"}, exclude_none=True) for item in draft.request.messages],
+            "messages": [
+                item.model_dump(
+                    mode="json", exclude={"trust"}, exclude_none=True, exclude_defaults=True
+                )
+                for item in draft.request.messages
+            ],
         }
         if draft.request.tool_definitions:
             kwargs["tools"] = list(draft.request.tool_definitions)

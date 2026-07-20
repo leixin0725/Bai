@@ -21,6 +21,8 @@
 
 **Alternatives considered**: 在 controller 内插入调试回调会漏掉整理和 provider 内部重试；让 `prepare()` 与 `send_once()` 各自生成 SDK kwargs 会产生双重 materialization；在 OpenAI SDK transport 层抓包无法可靠恢复业务来源；让各 provider 自行做 UI 会破坏复用与测试隔离。
 
+**2026-07-20 defect finding**: OpenAI SDK 自带重试会绕过网关逐物理请求审批，因此生产 client 固定 `max_retries=0`。DeepSeek 官方只把网络失败及配置中的 429/500/503 视为本项目可重试错误；400/401/402/403/422 必须一次失败。错误 body 不进入领域错误、日志或 journal。
+
 ## 3. 最终请求真实性与批准绑定
 
 **Decision**: `PreparedProviderRequest` 保留 provider 适配结果和来源，`materialize_sdk_kwargs()` 唯一一次生成深度不可变、可 JSON 序列化且不含认证的 `MaterializedSendPayload`。TUI 展示与 sender 发送引用同一 materialized object，批准令牌绑定 `call_id + attempt + canonical_payload_sha256`，发送前重新计算摘要。
@@ -52,6 +54,8 @@ DeepSeek 首版采用官方公开字符比例、UTF-8/JSON/工具包装开销和
 ## 6. 模型容量与 DeepSeek 配置
 
 **Decision**: 在每个 model profile 中显式维护 `context_window_tokens`、`max_output_tokens`、provider `max_output_cap` 和 `token_estimator`，启动时验证预留不超过能力上限；chat 与 memory curator 从即将弃用的 `deepseek-chat` 迁移至 `deepseek-v4-flash`，保留 `thinking_enabled=false`、`max_output_tokens=8192` 及两个 profile 各自现有的 temperature、tools、structured-output 参数。本地 `context_budget.max_input_tokens` 继续只表示 Agent 组装预算，不冒充模型容量。
+
+**2026-07-20 defect finding**: V4 的 thinking 默认值是 enabled，配置布尔值本身不会影响 API；OpenAI SDK 请求必须通过 `extra_body={"thinking":{"type":"disabled"}}` 显式关闭。非思考工具续接仍必须回放产生调用的 assistant/tool_calls，再追加匹配 tool_call_id 的 tool result；否则 provider 返回不可重试 400。
 
 **Rationale**: 峰值占用必须基于当前请求的输出预留与当前模型容量，不能从其他模型或本地预算推断。DeepSeek 当前文档给出 V4 Flash/Pro 的 1M context 和 384K 最大输出，并公告旧 alias 的弃用时间，因此能力元数据必须可维护且经校验。
 

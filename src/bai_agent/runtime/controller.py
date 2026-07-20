@@ -269,7 +269,16 @@ class SingleTurnController:
                             tool_call_id=call.call_id,
                         )
                     )
-                request = request.model_copy(update={"messages": (*request.messages, *tool_messages)})
+                # [2026-07-20] 工具结果前必须回放发起调用的 assistant/tool_calls；否则 provider 会拒绝续接协议。
+                assistant_tool_message = Message(
+                    role="assistant",
+                    content=result.text,
+                    trust=TrustLevel.UNTRUSTED_DATA,
+                    tool_calls=result.tool_calls,
+                )
+                request = request.model_copy(
+                    update={"messages": (*request.messages, assistant_tool_message, *tool_messages)}
+                )
                 for offset, message in enumerate(tool_messages):
                     index = len(request.messages) - len(tool_messages) + offset
                     parts = (

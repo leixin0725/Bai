@@ -39,7 +39,7 @@
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
-- [x] FR-001—FR-038, BR-001—BR-011, CR-001—CR-004, DR-001—DR-004, and SC-001—SC-020 are internally consistent
+- [x] FR-001—FR-040, BR-001—BR-011, CR-001—CR-004, DR-001—DR-004, and SC-001—SC-022 are internally consistent
 
 ## Notes
 

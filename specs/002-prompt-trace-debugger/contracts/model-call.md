@@ -51,7 +51,8 @@ class ModelCallGateway(Protocol):
 8. approve：生成绑定 call/attempt/materialized digest 的 token；在网络发送前关闭并清除 TUI，释放 prepared、part、SourceRef 和 renderable 引用。
 9. sender 只接管同一个 `MaterializedSendPayload`；发送前再次执行凭据检测并重算 digest，任一不匹配则阻断。
 10. `send_once()` 使用 payload 内的同一 `sdk_kwargs` 发出一次物理请求；认证只在 client 层单独注入，且无论成功或失败都在 `finally` 释放 sender 对 payload 的引用。
-11. 成功返回 response 和可选实际 usage；失败按配置判断是否可重试。可重试时 attempt + 1 并从步骤 1 开始，不能复用批准或恢复上一 TUI；重试结束的普通 provider/网络失败由 controller 将轮次转为 READY_PENDING 并只发布一条 USER pending。
+11. 成功返回 response 和可选实际 usage；适配器关闭 SDK 内部重试并按配置分类失败。只有网络连接/超时与 HTTP 429/500/503 可重试；400/401/402/403/422 及未知本地异常立即失败。可重试时 attempt + 1 并从步骤 1 开始，不能复用批准或恢复上一 TUI；重试结束的普通 provider/网络失败由 controller 将轮次转为 READY_PENDING 并只发布一条 USER pending。
+12. DeepSeek V4 的每个物理请求显式物化 `extra_body.thinking.type=disabled`；工具续接在 tool result 前回放 assistant/tool_calls，不保存或要求 `reasoning_content`。
 
 ## 最终请求边界
 
@@ -94,7 +95,8 @@ class ModelCallGateway(Protocol):
 | `CredentialExposureError` | 显示前阻断；脱敏事件；发送次数 0 |
 | `DebugPresentationError` | 不自动批准；发送次数 0 |
 | `TurnRejected` | 当前 attempt 发送次数 0；触发整轮回滚 |
-| retryable provider error | 当前 attempt 已发送；下一 attempt 重新展示与批准 |
+| network/timeout 或 HTTP 429/500/503 | 当前 attempt 已发送；下一 attempt 重新展示与批准 |
+| HTTP 400/401/402/403/422 或未知本地异常 | 当前 attempt 已发送；脱敏失败且不再展示同一调用 |
 | retry exhausted / non-retryable provider / network error | 不再构建后续 attempt；事务转 `READY_PENDING`，幂等发布且只发布一条 USER pending；只有显式 `--resume-pending` 重发，默认启动或 `--discard-pending` 放弃该尾部 pending |
 
 ## 实际用量
