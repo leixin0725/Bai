@@ -43,7 +43,7 @@ def render_tool_history(
     message_offset: int,
     part_order: int,
 ) -> tuple[tuple[Message, ...], tuple[RequestPart, ...]]:
-    """从整轮未标注事件重建一个工具 block，并把全局 fragment 平移回各消息。"""
+    """[2026-07-20] 从整轮未标注事件重建工具 block，并平移 fragment。"""
     entries = tuple(
         TemporalLogEntry(
             entry_id=event.event_id,

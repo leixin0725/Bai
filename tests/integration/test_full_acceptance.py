@@ -7,11 +7,20 @@ from pathlib import Path
 from shutil import copytree
 
 from bai_agent.application import build_application
-from bai_agent.domain.models import ToolExecutionContext, ToolOutcome
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+from bai_agent.domain.models import (
+    SourceKind, SourceRef, TemporalLogEntry, TemporalSegmentationPolicy, TemporalSpan,
+    TemporalTimeKind, ToolCall, ToolExecutionContext, ToolHistoryEvent,
+    ToolHistoryEventKind, ToolOutcome,
+)
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.long_term import LongTermStore
 from bai_agent.memory.selection import select_recent_complete_turns, validate_complete_coverage
 from bai_agent.tools.memory_source import MemorySourceQueryTool
+from bai_agent.prompting.temporal import CURRENT_HISTORY_BLOCKS, annotate_history
+from bai_agent.runtime.controller import render_tool_history
 from tests.fixtures.performance import (
     CURATED_THROUGH,
     LONG_TERM_MEMORY_COUNT,
@@ -161,3 +170,60 @@ def test_all_temporal_consumers_share_one_revision_and_reload_without_storage_re
         assert archive_after == archive_before
     finally:
         app.close()
+
+
+def test_seven_history_blocks_share_boundaries_and_exclude_non_logs_without_writes(tmp_path: Path) -> None:
+    config_source = SourceRef(
+        source_kind=SourceKind.CONFIG_FILE, source_id="config:history_timestamps",
+        project_relative_path="config/history_timestamps.toml",
+        content_sha256="sha256:" + "3" * 64, revision="sha256:" + "4" * 64,
+        producer="config_loader",
+    )
+    event_source = SourceRef(
+        source_kind=SourceKind.RUNTIME, source_id="acceptance-event",
+        entity_ids=("acceptance-event",), producer="acceptance",
+    )
+    policy = TemporalSegmentationPolicy(
+        display_timezone=ZoneInfo("Asia/Shanghai"), display_timezone_name="Asia/Shanghai",
+        long_gap=timedelta(minutes=30), continuous_refresh=timedelta(minutes=120),
+        split_on_local_date_change=True, config_source=config_source,
+    )
+    start = datetime(2026, 7, 20, tzinfo=timezone.utc)
+    entries = tuple(
+        TemporalLogEntry(
+            entry_id=f"shared-{index}", body=f"原正文-{index}",
+            span=TemporalSpan(start=instant, end=instant, kind=TemporalTimeKind.EVENT),
+            sources=(event_source,),
+        )
+        for index, instant in enumerate((start, start + timedelta(minutes=45)), start=1)
+    )
+    storage = tmp_path / "unchanged.jsonl"
+    storage.write_bytes(b'{"created_at":"2026-07-20T00:00:00Z"}\n')
+    before = storage.read_bytes()
+    outputs = {block: annotate_history(entries, policy).text for block in CURRENT_HISTORY_BLOCKS}
+    assert tuple(outputs) == CURRENT_HISTORY_BLOCKS
+    assert len(set(outputs.values())) == 1
+    assert all(text.count("[时间：") == 2 for text in outputs.values())
+    future_fake = annotate_history(entries, policy)
+    assert future_fake.text == next(iter(outputs.values()))
+
+    tool_events = (
+        ToolHistoryEvent(
+            event_id="tool-call-batch:acceptance", kind=ToolHistoryEventKind.TOOL_CALL_BATCH,
+            occurred_at=start, original_body="原正文-1", role="assistant",
+            tool_calls=(ToolCall(call_id="call-a", name="query", arguments={"x": 1}),),
+            sources=(event_source,),
+        ),
+        ToolHistoryEvent(
+            event_id="tool-result:call-a:acceptance", kind=ToolHistoryEventKind.TOOL_RESULT,
+            occurred_at=start + timedelta(minutes=45), original_body="原正文-2", role="tool",
+            tool_call_id="call-a", sources=(event_source,),
+        ),
+    )
+    messages, _ = render_tool_history(tool_events, policy, message_offset=0, part_order=0)
+    assert [message.role for message in messages] == ["assistant", "tool"]
+    assert messages[0].tool_calls[0] == {"call_id": "call-a", "name": "query", "arguments": {"x": 1}}
+    assert messages[1].tool_call_id == "call-a"
+    assert all(body in message.content for body, message in zip(("原正文-1", "原正文-2"), messages, strict=True))
+    assert not ({"current_input", "persona", "state_rules", "batch_metadata", "output_schema"} & set(outputs))
+    assert storage.read_bytes() == before

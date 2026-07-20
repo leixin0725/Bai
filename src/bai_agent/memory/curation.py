@@ -53,7 +53,7 @@ class ProposedCuration:
 
 @dataclass(frozen=True, slots=True)
 class _PromptPiece:
-    """模板展开时同步携带最终正文片段，避免从重复文本反查位置。"""
+    """[2026-07-20] 模板展开时同步携带最终正文片段，避免从重复文本反查位置。"""
 
     piece_id: str
     content: str
@@ -389,7 +389,7 @@ class CurationService:
         *,
         template_source: SourceRef,
     ) -> tuple[str, tuple[tuple[_PromptPiece, int, int], ...]]:
-        """单次扫描 Template，并在追加字符时记录最终绝对 span。"""
+        """[2026-07-20] 单次扫描 Template，并在追加字符时记录最终绝对 span。"""
         text_parts: list[str] = []
         positioned: list[tuple[_PromptPiece, int, int]] = []
         cursor = 0

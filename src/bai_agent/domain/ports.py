@@ -46,7 +46,7 @@ class Clock(Protocol):
 
 
 class SystemClock:
-    """进程默认 UTC 时钟；测试可用实现同一端口的确定时钟替换。"""
+    """[2026-07-20] 进程默认 UTC 时钟；测试可用同端口确定时钟替换。"""
 
     def now(self) -> datetime:
         return datetime.now(timezone.utc)

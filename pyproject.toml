@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.27", "editables>=0.3"]
 build-backend = "hatchling.build"
 
 [project]
@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "hatchling>=1.27",
+  "editables>=0.3",
   "hypothesis>=6.135,<7",
   "pytest>=8.4,<10",
   "pytest-asyncio>=1.0,<2",

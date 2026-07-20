@@ -172,13 +172,13 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 **Purpose**: 完成性能、全消费者覆盖、兼容性、安全、注释和文档一致性门禁；不替代各故事阶段已经要求的文档同步。
 
-- [ ] T059 [P] 为 BR-006/SC-008 在 `tests/performance/test_temporal_annotation_scale.py` 增加 10,000 个预构造日志项预热后 `<1.0s`、输出验真和相同输入 100 次逐字一致测试，并增加 10,000 raw+1,000 long-term 单次索引/O(raw+refs) 无 N+1 断言
-- [ ] T060 [P] 为 BR-010/SC-002/SC-007 在 `tests/integration/test_full_acceptance.py` 汇总七个 block 的 100% 接入、block 状态隔离、未来 fake consumer、非日志排除、顺序/正文/协议保持和存储 no-write 验收
-- [ ] T061 [P] 扩展 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py`，确认时间配置、marker 来源、错误、debug payload、测试夹具、工作树和可达 Git 历史不含可用凭据或新增持久 prompt trace
-- [ ] T062 审核 `src/bai_agent/` 本功能新增/更新注释全部为带日期/版本的简体中文并说明模块边界、时间真实性、配置原子性和工具协议不变量；仅在失真时修改既有注释，并在 `specs/003-timestamped-memory-context/tasks.md` 记录修正或 N/A 理由
-- [ ] T063 为 DR-001—DR-005/SC-009 逐项核对 `README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/configuration.md,contracts/model-and-tools.md,contracts/storage.md}`、`specs/002-prompt-trace-debugger/{quickstart.md,contracts/model-call.md}` 与 `specs/003-timestamped-memory-context/{spec.md,plan.md,research.md,data-model.md,contracts/,quickstart.md,tasks.md}` 的默认值、七 block、示例、链接、UTC/迁移、来源工具排除和验证命令一致性
-- [ ] T064 检查 `.github/workflows/compatibility.yml` 是否已在 Ubuntu 24.04/Python 3.13/3.14 与 Windows 功能矩阵运行新增非性能测试；缺失时在该文件补齐，已覆盖时在 `specs/003-timestamped-memory-context/tasks.md` 记录 `N/A` 理由，不把 1 秒强制性能门禁迁移到 Windows
-- [ ] T065 按 `specs/003-timestamped-memory-context/quickstart.md` 执行全部定向命令、`pytest -m "not performance" -q`、`pytest tests/performance/test_temporal_annotation_scale.py -q -s`、适用现有 performance/fault-injection 回归、配置/文档链接/占位符/凭据扫描和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录 FR-001—FR-026、BR-001—BR-010、DR-001—DR-005、SC-001—SC-009 闭环并通过 Git 扩展原子提交最终测试、注释、workflow（如需）和文档审计变更
+- [X] T059 [P] 为 BR-006/SC-008 在 `tests/performance/test_temporal_annotation_scale.py` 增加 10,000 个预构造日志项预热后 `<1.0s`、输出验真和相同输入 100 次逐字一致测试，并增加 10,000 raw+1,000 long-term 单次索引/O(raw+refs) 无 N+1 断言
+- [X] T060 [P] 为 BR-010/SC-002/SC-007 在 `tests/integration/test_full_acceptance.py` 汇总七个 block 的 100% 接入、block 状态隔离、未来 fake consumer、非日志排除、顺序/正文/协议保持和存储 no-write 验收
+- [X] T061 [P] 扩展 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py`，确认时间配置、marker 来源、错误、debug payload、测试夹具、工作树和可达 Git 历史不含可用凭据或新增持久 prompt trace
+- [X] T062 审核 `src/bai_agent/` 本功能新增/更新注释全部为带日期/版本的简体中文并说明模块边界、时间真实性、配置原子性和工具协议不变量；仅在失真时修改既有注释，并在 `specs/003-timestamped-memory-context/tasks.md` 记录修正或 N/A 理由
+- [X] T063 为 DR-001—DR-005/SC-009 逐项核对 `README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/configuration.md,contracts/model-and-tools.md,contracts/storage.md}`、`specs/002-prompt-trace-debugger/{quickstart.md,contracts/model-call.md}` 与 `specs/003-timestamped-memory-context/{spec.md,plan.md,research.md,data-model.md,contracts/,quickstart.md,tasks.md}` 的默认值、七 block、示例、链接、UTC/迁移、来源工具排除和验证命令一致性
+- [X] T064 检查 `.github/workflows/compatibility.yml` 是否已在 Ubuntu 24.04/Python 3.13/3.14 与 Windows 功能矩阵运行新增非性能测试；缺失时在该文件补齐，已覆盖时在 `specs/003-timestamped-memory-context/tasks.md` 记录 `N/A` 理由，不把 1 秒强制性能门禁迁移到 Windows
+- [X] T065 按 `specs/003-timestamped-memory-context/quickstart.md` 执行全部定向命令、`pytest -m "not performance" -q`、`pytest tests/performance/test_temporal_annotation_scale.py -q -s`、适用现有 performance/fault-injection 回归、配置/文档链接/占位符/凭据扫描和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录 FR-001—FR-026、BR-001—BR-010、DR-001—DR-005、SC-001—SC-009 闭环并通过 Git 扩展原子提交最终测试、注释、workflow（如需）和文档审计变更
 
 ---
 
@@ -299,3 +299,23 @@ Curation：T031 || T032 -> T033 -> T034
 - **T034 / 2026-07-20**: Curation 三区块、事务提案、模板、provenance 与 estimation 回归共 21 项通过；7 个必需模板变量均保留，canonical JSON/重复正文绝对 span/损坏来源 provider=0 断言通过；4 份受影响 Markdown 的本地相对链接检查为 0 个断链，`git diff --check` 通过。
 - **T051 / 2026-07-20**: Tools/Provider 定向及既有 DeepSeek/tool/gateway/estimation 回归共 56 项通过，并额外完成全量非性能回归 334 passed/2 deselected；七个现有日志 block 清单、四轮整体重建、stable origin、debug on/off 等价和 `memory_source_query` direct golden 边界均通过；6 份受影响 Markdown 的本地相对链接检查为 0 个断链，`memory_source.py` 无改动，`git diff --check` 通过。
 - **T058 / 2026-07-20**: Configuration/reload/packaging/full-acceptance 及既有 persona/config 回归共 41 项通过；30→60、UTC 显示、无效 reload 原子失败与修复恢复通过，实际 wheel 含完整默认配置，固定 instant 在 Windows 输出 `2026-07-20 08:00 +0800`；独立无效占位凭据 `config validate` 通过，4 份文档 0 个断链且默认值一致，`git diff --check` 通过。Ubuntu 同一夹具由 compatibility matrix 执行。
+- **T059—T061 / 2026-07-20**: 10k 标注和 10k raw+1k memory 投影性能门禁 2 项通过（单次均 `<1.0s`，100 次逐字一致）；七 block/future consumer/no-write 与工作树、时间表面、可达 Git 历史秘密扫描共 6 项通过，未发现可用凭据或持久 prompt trace。
+- **T062 / 2026-07-20**: 审核 `main...HEAD` 的新增源码注释/模块与公开边界说明，补齐 `_PromptPiece`、模板 span、`ToolHistoryEvent`、`SystemClock`、tool-history renderer 共 5 处日期前缀；时间真实性、配置原子性、工具协议不变量说明均已覆盖。
+- **T063 / 2026-07-20**: 核对指定 16 份 Markdown，默认值、七 block、示例、UTC/无迁移、来源工具排除和命令一致；0 个本地断链、0 个缺失测试路径。
+- **T064 / 2026-07-20**: N/A（无需修改 workflow）：现有 Ubuntu 24.04/Python 3.13+3.14 与 Windows/Python 3.13+3.14 均执行 `pytest -m "not performance"`，已覆盖全部新增非性能测试；1 秒 temporal 性能门禁保持仅在主要平台/显式本地命令执行，未迁移到 Windows 功能矩阵。
+- **T065 / 2026-07-20**: feature quickstart 10 组定向测试共 83 项通过；editable 安装因隔离环境无法联网获取 build dependency 超时后，以已声明并安装的 `hatchling`/`editables` 执行 `--no-build-isolation` 等价复验通过，离线 `config validate` 通过。最终 `pytest -m "not performance" -q` 为 343 passed/4 deselected；全部 performance 为 5 passed/2 platform-gated skipped（其中 temporal scale 2 passed）；fault injection 为 33 passed；模板/配置占位符补充回归 17 passed。16 份文档 0 断链/0 缺失测试路径，秘密与持久 trace 扫描无发现，`git diff --check` 通过。
+
+## Requirement Closure（2026-07-20）
+
+| Requirement set | Closure evidence | Status |
+|---|---|---|
+| FR-001—FR-008 | T003—T018 的统一值对象、纯分段器、固定标签、边界/属性与 recent 接线 | CLOSED |
+| FR-009—FR-014 | T019—T051 的来源范围、curation/tool 协议、精确 provenance、预算与 debug 等价 | CLOSED |
+| FR-015—FR-020 | T052—T058 的独立严格配置、IANA/tzdata、单引用原子 reload 与失败恢复 | CLOSED |
+| FR-021—FR-026 | T021/T038/T039/T044—T046/T059—T060 的最终预算、确定性、no-write、七消费者、来源工具排除与工具事件时间 | CLOSED |
+| BR-001—BR-010 | Core Business Rule Coverage 表对应任务全部 `[X]`，并由 343 项非性能、5 项性能及 33 项故障注入回归闭环 | CLOSED |
+| DR-001—DR-005 | README、001/002 合同与 quickstart、003 全设计制品共 16 份文档一致性审计 | CLOSED |
+| SC-001—SC-004 | 算法单元/属性、密集/gap/refresh/跨日/倒序固定验收 | CLOSED |
+| SC-005—SC-007 | memory source fail-closed、配置 provider=0、协议/正文/顺序/no migration 回归 | CLOSED |
+| SC-008 | 10,000 项单次 `<1.0s` 且相同输入 100 次逐字一致；10k raw+1k memory 单索引 | CLOSED |
+| SC-009 | 16 份指定文档 0 断链、0 缺失测试路径，默认值/七 block/UTC/工具排除一致 | CLOSED |

@@ -113,3 +113,16 @@ def persistent_prompt_trace_paths(root: Path) -> list[str]:
         if "prompt-trace" in lowered or "prompt_trace" in lowered:
             suspicious.append(logical)
     return sorted(suspicious)
+
+
+def temporal_security_surface_paths(root: Path) -> list[Path]:
+    """[2026-07-20] 时间配置、来源桥、调试与夹具是本功能的显式秘密扫描面。"""
+    candidates = [
+        root / "config" / "history_timestamps.toml",
+        root / "src" / "bai_agent" / "prompting" / "temporal.py",
+        root / "src" / "bai_agent" / "memory" / "temporal.py",
+        root / "src" / "bai_agent" / "runtime" / "controller.py",
+        root / "src" / "bai_agent" / "debug" / "tui.py",
+    ]
+    candidates.extend((root / "tests").rglob("*temporal*"))
+    return [path for path in candidates if path.is_file()]

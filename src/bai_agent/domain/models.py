@@ -588,7 +588,7 @@ class SourceRef(FrozenModel):
 
 
 class ToolHistoryEvent(FrozenModel):
-    """当前轮未标注工具事件；时间与 origin 只存在于进程内。"""
+    """[2026-07-20] 当前轮未标注工具事件；时间与 origin 只存在于进程内。"""
 
     event_id: str = Field(min_length=1)
     kind: ToolHistoryEventKind
