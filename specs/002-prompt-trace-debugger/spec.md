@@ -115,7 +115,7 @@
 6. **Given** 等待批准的原始提示构建正在展示，**When** 维护者批准，**Then** 类 TUI 在网络发送前立即关闭并移除原始提示正文与来源，sender 仅持有同一个不可变发送载荷并在 `send_once` 成功或失败后的 `finally` 中释放，后续状态和实际用量不得使原文重新出现。
 7. **Given** 任一模型请求正在等待批准，**When** 维护者拒绝发送，**Then** 当前请求不发送，整个当前轮次产生的输入、临时结果、记忆或索引候选、待恢复标记和调试数据均被撤销，应用恢复到提交该轮输入之前并直接返回输入界面。
 8. **Given** 一个被拒绝并撤销的轮次，**When** 用户继续聊天、重启程序或触发记忆整理，**Then** 后续上下文、持久记录、来源索引、恢复状态和模型调用均不存在该轮留下的内容或标记。
-9. **Given** 已批准请求遭遇普通 provider 或网络失败且重试已结束，**When** 当前轮收敛，**Then** 系统只发布一条 USER pending 并允许通过既有 `--resume-pending` 恢复；若是维护者明确拒绝，则不得形成 pending。
+9. **Given** 已批准请求遭遇普通 provider 或网络失败且重试已结束，**When** 当前轮收敛，**Then** 系统只发布一条 USER pending；下一次默认启动或显式 `--discard-pending` 必须只丢弃该尾部 pending 后进入新输入，只有显式 `--resume-pending` 才能恢复并重发；若是维护者明确拒绝，则不得形成 pending。
 10. **Given** 当前工具注册表仅含只读工具，**When** 工具在可拒绝轮次中执行，**Then** 其结果只进入当前工作集；未来写工具若没有可恢复的 `prepare/commit/rollback` 或明确补偿契约，必须在任何副作用前被拒绝。
 
 ### Edge Cases
@@ -135,6 +135,8 @@
 - 当前轮在拒绝前已完成一个或多个经批准的辅助模型调用而尚未完成整轮时，系统必须丢弃这些响应及其所有本地派生结果并恢复轮前状态；已经发生的外部调用无法撤回，但不得再影响应用后续行为。
 - 无痕撤销期间发生中断或局部清理失败时，系统必须在恢复后继续回滚到轮前检查点，且不得把该轮暴露为待恢复、已取消或普通历史记录。
 - 已批准请求的普通 provider/网络失败必须收敛为一条可恢复 USER pending；该恢复语义不得被维护者明确拒绝复用。
+- raw archive 中只有位于最末尾、没有对应 ASSISTANT 且未被长期记忆或 coverage 引用的单条 USER 才是可放弃 pending；历史中间 USER、完整轮次、身份或 hash 冲突一律失败关闭且不得修改文件。
+- 默认启动和 `--discard-pending` 在没有 pending 时必须直接进入新输入；`--resume-pending` 没有 pending 时同样进入新输入，但不得把其他历史记录当作恢复目标。
 - 写工具没有可恢复事务或补偿能力、能力声明与实现不一致或 prepare 失败时，副作用调用次数必须为 0。
 
 ## Requirements *(mandatory)*
@@ -172,9 +174,12 @@
 - **FR-029**: 无痕撤销 MUST 原子移除或放弃本轮产生的用户输入、Agent 或辅助人格临时输出、工具结果、记忆与来源索引候选、状态变更、待恢复标记、上下文摘要、用量摘要和调试数据；MUST NOT 留下已取消记录、墓碑或任何可进入后续上下文的表示。
 - **FR-030**: 若本轮在拒绝前已有经批准的辅助请求发送，系统 MUST 丢弃其响应及所有尚未完成整轮确认的本地派生结果；已发生的外部调用不可撤回，但其结果 MUST NOT 影响后续记忆、状态、工具或模型请求。
 - **FR-031**: 无痕撤销在中断或局部失败后 MUST 可恢复并最终回到轮前检查点；在回滚完成前系统 MUST 阻止新轮次及任何模型请求，不得把被拒绝轮次转为待恢复轮次。
-- **FR-032**: 已批准请求发生普通 provider 或网络失败且不再重试时，系统 MUST 将当前事务持久转换为 `READY_PENDING`，幂等发布且仅发布一条 USER pending，并允许通过既有 `--resume-pending` 恢复；维护者明确拒绝 MUST 继续从 `PREPARED` 丢弃且 MUST NOT 形成 pending。
+- **FR-032**: 已批准请求发生普通 provider 或网络失败且不再重试时，系统 MUST 将当前事务持久转换为 `READY_PENDING`，幂等发布且仅发布一条 USER pending；只有显式 `--resume-pending` 才允许恢复并重发该内容，下一次未指定恢复参数的默认启动或显式 `--discard-pending` MUST 原子丢弃该合法尾部 pending 后进入新输入；维护者明确拒绝 MUST NOT 形成 pending。
 - **FR-033**: 当前工具注册表 MUST 只声明并执行只读工具；未来具有写副作用的工具在可拒绝轮次中 MUST 提供可持久恢复的 `prepare/commit/rollback` 或明确补偿契约，否则系统 MUST 在任何副作用发生前拒绝执行。
 - **FR-034**: chat 与 memory curator profile MUST 从 `deepseek-chat` 迁移到 `deepseek-v4-flash`，保持 `thinking_enabled=false`、`max_output_tokens=8192` 及各 profile 现有 temperature、tools、structured-output 等生成参数不变；provider 能力元数据 MUST 记录 1,000,000 token context 和 384,000 token 输出上限。
+- **FR-035**: `chat` MUST 提供互斥的 `--resume-pending` 与 `--discard-pending`；`start.ps1` MUST 提供互斥的 `-ResumePending` 与 `-DiscardPending`，且两者均可与 `-DebugPrompts` 组合。无 pending 时三种启动模式均 MUST 安全进入新输入，不得调用恢复发送。
+- **FR-036**: pending 丢弃 MUST 只允许删除 raw archive 最末尾、角色为 USER、无对应 ASSISTANT 且未进入长期记忆、来源索引、coverage 或 curation frontier 的未完成轮次；MUST 保持此前完整轮次、全局 sequence 连续性、分段 JSONL、内容哈希和其他用户数据不变，并使用现有 WriterLease、私有权限与原子替换机制使崩溃后只可能保留完整旧状态或完整新状态。
+- **FR-037**: fresh 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C MUST 丢弃 PREPARED；恢复既有 pending 的调试轮次遇到相同明确拒绝时 MUST 通过受保护的尾部丢弃删除 raw pending。R、Esc 和拒绝按钮返回输入界面，Ctrl+C 完成丢弃后 MUST 以 130 退出；EOF、终端丢失或 presentation failure MUST 保持零发送且不得伪装成批准。
 
 ### Core Business Rules *(mandatory)*
 
@@ -186,8 +191,9 @@
 - **BR-006 — 调试批准不改变请求**: 启用调试只增加发送前观察与批准门禁，不得修改模型请求、记忆、人格、工具行为或既定调用顺序；关闭调试是必须保持既有行为的边界；展示或批准失败时不得静默改写请求、自动批准或把半份追踪当作完整结果。
 - **BR-007 — 本地临时暴露与凭据零泄露**: 正常原始提示只在显式启用的基础类 TUI 中展示至批准时点；批准后、网络发送前界面必须关闭并清除，presenter 必须释放正文与来源且不得持久化，sender 只持有同一不可变载荷并在 `send_once` 的 `finally` 中释放。私人记忆可在提醒后按原文展示，但认证信息绝不属于提示追踪；发现疑似可用凭据时必须阻止显示、持久化和出站请求，并返回脱敏错误。
 - **BR-008 — 拒绝即无痕撤销**: 正常批准路径在发送前保持当前轮可确认且请求与展示一致；拒绝任一待批请求时，整个当前轮必须原子恢复到轮前检查点且当前请求发送次数为零；边界覆盖此前已批准辅助调用的本地结果丢弃，失败路径覆盖中断后继续回滚，最终不得留下可影响后续行为的记录、状态或恢复标记。
-- **BR-009 — 普通失败保留可恢复输入**: 已批准请求发生普通 provider 或网络失败且重试结束时，当前轮必须通过 `READY_PENDING` 只发布一条 USER pending，并保持既有 `--resume-pending` 可恢复性；维护者明确拒绝是不同领域结果，必须无痕撤销且不得产生 pending。
+- **BR-009 — 普通失败保留但不默认阻塞**: 已批准请求发生普通 provider 或网络失败且重试结束时，当前轮必须通过 `READY_PENDING` 只发布一条 USER pending；显式 `--resume-pending` 保持可恢复性，默认启动与 `--discard-pending` 则只放弃该未完成尾部轮次并继续新对话。维护者明确拒绝是不同领域结果，必须撤销 fresh PREPARED 或删除 resumed pending。
 - **BR-010 — 写工具副作用能力门禁**: 当前只读工具可在可拒绝轮次中执行且结果仅进入工作集；未来写工具只有在可恢复 `prepare/commit/rollback` 或明确补偿契约完成验证后才能准备副作用，能力缺失、声明不实或 prepare 失败时副作用调用次数必须为零。
+- **BR-011 — 完整归档不可变、未完成尾部可放弃**: 已完成 USER/ASSISTANT 轮次继续永久不可删除；唯一未配对的合法尾部 USER 是尚未完成的可放弃轮次，只能在全量结构、hash、长期引用和 expected turn 身份校验通过后原子截尾，任何任意 turn id 或历史中间删除请求都必须失败关闭。
 
 ### Sensitive Credentials *(include if applicable)*
 
@@ -198,8 +204,8 @@
 
 ### Documentation Requirements *(mandatory for major updates)*
 
-- **DR-001**: README 和运行指南 MUST 说明调试视图的用途、启动参数、默认关闭行为、基础类 TUI 的调用与来源标签、交互式颜色及无颜色模式、上下文估算字段、逐次批准、批准后清除、拒绝无痕撤销、普通失败转 pending 和私人记忆暴露提醒。
-- **DR-002**: 快速开始与验收说明 MUST 提供可执行的最小验证流程，覆盖单次聊天、多次模型调用、文件来源、运行时来源、上下文估算、批准发送、拒绝后恢复轮前状态、普通失败后 `--resume-pending`、调试关闭、非 TTY 失败和凭据不显示。
+- **DR-001**: README 和运行指南 MUST 说明调试视图的用途、启动参数、默认关闭行为、pending 默认丢弃/显式恢复/显式丢弃命令、基础类 TUI 的调用与来源标签、交互式颜色及无颜色模式、上下文估算字段、逐次批准、批准后清除、拒绝整轮撤销、普通失败转 pending 和私人记忆暴露提醒。
+- **DR-002**: 快速开始与验收说明 MUST 提供可执行的最小验证流程，覆盖单次聊天、多次模型调用、文件来源、运行时来源、上下文估算、批准发送、fresh 与 resumed 拒绝、普通失败后的默认丢弃/`--discard-pending`/`--resume-pending`、PowerShell 参数透传、调试关闭、非 TTY 失败和凭据不显示。
 - **DR-003**: 配置说明 MUST 记录颜色策略、高占用阈值、模型上下文容量元数据的默认值、校验失败行为、`deepseek-v4-flash` 迁移不变量和不同模型提供商的兼容性边界。
 - **DR-004**: 故障排查说明 MUST 解释来源未知、估算不可用、容量超限、交互式无颜色或非交互终端、追踪完整性失败、拒绝回滚中断、普通 provider 失败、写工具门禁和提供商未返回实际用量时的表现与恢复方式。
 
@@ -233,10 +239,12 @@
 - **SC-011**: README、快速开始、配置和故障排查中的调试示例全部可按文档完成，且覆盖启用、观察、容量解释、无颜色降级、关闭和安全检查。
 - **SC-012**: 在单次运行中连续批准并发送 1,000 次调试模型调用后，每个请求一经批准便在网络发送前从类 TUI 移除原始提示构建，presenter 遗留的正文和来源数据数量为 0，且每次 `send_once` 成功或失败后 sender 遗留的发送载荷数量为 0；实际用量摘要不会恢复原文。
 - **SC-013**: 在分别于首个聊天请求、记忆整理后续请求、工具续接和重试批准点拒绝的验收测试中，当前被拒绝请求的提供商发送次数为 0；回滚后持久数据、状态、待恢复信息和下一轮模型上下文与提交被拒绝轮次输入之前的检查点 100% 一致。
-- **SC-014**: 在无痕撤销的每个持久化步骤模拟中断并重启后，100% 被拒绝轮次最终完成回滚，遗留用户输入、派生记忆、来源索引、工具结果、取消标记、待恢复标记和调试数据数量均为 0。
-- **SC-015**: 在 retry exhausted、non-retryable provider error 和网络中断验收中，100% 普通失败最终只形成一条 USER pending 且可由 `--resume-pending` 恢复；明确 reject 形成的 pending 数量为 0。
+- **SC-014**: 在无痕撤销和 pending 尾部原子替换的每个持久化步骤模拟中断并重启后，100% 状态收敛为完整旧 pending 或完整已删除状态；不存在半条记录、损坏 segment、误删完整历史、来源或长期记忆。
+- **SC-015**: 在 retry exhausted、non-retryable provider error 和网络中断验收中，100% 普通失败最终只形成一条 USER pending；显式 `--resume-pending` 复用同一 turn 且不重复 USER，下一次默认启动或 `--discard-pending` 删除该 pending 后直接进入新输入；明确 reject 最终 pending 数量为 0。
 - **SC-016**: 对当前全部工具和至少一个 fake 写工具执行合同验收时，当前工具只读声明与实现一致率为 100%；缺少有效事务或补偿能力的写工具在副作用前拒绝率为 100%，副作用调用数量为 0。
 - **SC-017**: 配置和 provider 合同测试中，chat 与 memory curator 均使用 `deepseek-v4-flash` 非思考模式，`max_output_tokens` 均为 8192，迁移前后其余生成参数差异数量为 0；provider 能力元数据分别为 1,000,000 context 和 384,000 output cap。
+- **SC-018**: 默认、`--discard-pending`、`--resume-pending` 与 `--debug-prompts` 的适用组合在存在/不存在 pending 时全部通过合同与集成测试；CLI 互斥参数退出 2，PowerShell 互斥参数在读取凭据或启动 Python 前给出参数绑定错误。
+- **SC-019**: fresh 与 resumed 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C 验收中 provider 发送次数均为 0；resumed pending 在明确拒绝后从 raw 尾部消失，Ctrl+C 退出码为 130，其余明确拒绝返回输入循环。
 
 ## Assumptions
 
@@ -250,6 +258,6 @@
 - 原始提示可能包含私人记忆，维护者接受其在显式启用的本地界面中出现；该选择不包含任何凭据暴露或默认持久化授权。
 - 类 TUI 只在请求等待批准期间展示并保留原始提示构建；维护者批准后、网络发送前，原文和来源立即从界面与 presenter 移除，sender 仅保留同一不可变发送载荷并在 `send_once` 的 `finally` 中释放；响应后的实际用量由普通聊天输出以不含原文的独立摘要展示。
 - 调试模式中的当前轮数据在整轮确认前视为可无痕撤销的临时工作；拒绝任一待批请求会恢复轮前检查点并返回输入界面。此前已发送的外部辅助调用无法撤回，但其响应和本地派生结果不会进入之后的应用状态。
-- 普通 provider/网络失败继续使用现有 USER pending 与 `--resume-pending` 恢复能力；只有维护者明确拒绝才执行无痕整轮撤销。
+- 普通 provider/网络失败继续使用现有 USER pending；只有显式 `--resume-pending` 重发，默认启动和 `--discard-pending` 均放弃该未完成尾部轮次并开始新对话。
 - `deepseek-v4-flash` 使用非思考模式；chat 与 memory curator 的 `max_output_tokens=8192` 及现有 temperature、tools、structured-output 设置保持不变，1M/384K 仅作为 provider 能力上限元数据。
 - 原生 Linux 是主要支持平台，Windows 是次要功能兼容平台，macOS 不在本功能范围内。

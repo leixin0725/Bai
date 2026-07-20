@@ -12,15 +12,28 @@ from bai_agent.states.resolver import StaticStateResolver
 
 
 class FailedGateway:
+    def __init__(self, failure: BaiError | None = None) -> None:
+        self.failure = failure or BaiError("PROVIDER_FAILED", "普通失败。", retryable=True)
+
     async def complete(self, _draft):
-        raise BaiError("PROVIDER_FAILED", "普通失败。", retryable=True)
+        raise self.failure
 
 
 @pytest.mark.asyncio
-async def test_provider_failure_is_single_pending_and_resumable(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "failure",
+    [
+        BaiError("PROVIDER_FAILED", "retry exhausted", retryable=True),
+        BaiError("PROVIDER_FAILED", "non-retryable provider"),
+        BaiError("NETWORK_UNAVAILABLE", "network interruption"),
+    ],
+)
+async def test_provider_failure_is_single_pending_and_resumable(
+    tmp_path: Path, failure: BaiError
+) -> None:
     archive = RawRecordArchive(tmp_path)
     controller = SingleTurnController(
-        archive, FailedGateway(), StaticStateResolver.default(), PromptAssembler.mvp("基础", ("状态",)),
+        archive, FailedGateway(failure), StaticStateResolver.default(), PromptAssembler.mvp("基础", ("状态",)),
         transaction_root=tmp_path,
     )
     with pytest.raises(BaiError):
@@ -28,3 +41,6 @@ async def test_provider_failure_is_single_pending_and_resumable(tmp_path: Path) 
     pending = archive.pending_turn()
     assert pending and pending.content == "待恢复输入"
     assert len(archive.read_all()) == 1
+
+    assert controller.discard_pending(expected_turn_id=pending.turn_id) == pending.turn_id
+    assert archive.read_all() == ()

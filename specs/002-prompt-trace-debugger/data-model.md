@@ -205,7 +205,7 @@ ABSENT
 
 - 启动时在取得 `WriterLease` 后、读取 pending/config/provider 前恢复。
 - `PREPARED` 总是丢弃，因为它既未形成普通失败决定也未形成确认完整轮次，且不得暴露为 pending/cancelled。
-- `READY_PENDING` 总是前滚为且仅为一条 USER pending，沿用既有 `--resume-pending`；不得包含 assistant、长期记忆或拒绝标记。
+- `READY_PENDING` 总是前滚为且仅为一条 USER pending；事务恢复后显式 `--resume-pending` 可重发，默认启动与 `--discard-pending` 可放弃该合法尾部 pending；不得包含 assistant、长期记忆或拒绝标记。
 - `READY_TO_COMMIT` 总是前滚为完整轮次；发布 API 以 record id、turn id、checkpoint hash 幂等。
 - 基线被人工修改或 hash 冲突时 fail closed，阻止新轮次并给出恢复指引，不覆盖外部更改。
 
@@ -236,3 +236,5 @@ DRAFTED -> PREPARED -> MATERIALIZED -> PROVENANCE_VALIDATED -> CREDENTIAL_CHECKE
 7. READY_PENDING 与 READY_TO_COMMIT 不允许回滚；恢复分别只前滚单条 pending 或完整轮次。
 8. `ActualUsageSummary` 和普通输出不得持有 prompt、materialized payload、part 或 SourceRef；事务日志和正常日志中不得出现 `sdk_kwargs`、part content、SourceRef 集合或认证信息。
 9. 当前工具均为只读；写工具没有经验证的可恢复事务或补偿能力时副作用调用次数为 0。
+10. 可放弃 pending 是派生状态而非新 journal 状态：它必须是 raw 最后一条 USER、该 turn 无 ASSISTANT、此前记录均为完整连续轮次，且其 sequence/record id 未进入长期记忆 source refs、coverage spans、covered ids 或 curation frontier。
+11. 丢弃只原子替换最后一个 segment 并移除其最后一行；若该行是 segment 唯一记录则保留空尾 segment，后续 append 复用该编号。全局 sequence 不重排，下一条新记录安全复用被放弃的末尾 sequence。

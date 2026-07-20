@@ -2,7 +2,7 @@
 
 **Purpose**: 在最终提交前逐项证明 spec、任务、测试、实现与文档的名义覆盖。
 **Audited**: 2026-07-20
-**Scope**: FR-001—FR-034、BR-001—BR-010、CR-001—CR-004、DR-001—DR-004、SC-001—SC-017。
+**Scope**: FR-001—FR-037、BR-001—BR-011、CR-001—CR-004、DR-001—DR-004、SC-001—SC-019。
 
 ## Functional Requirements
 
@@ -39,9 +39,12 @@
 | FR-029 | T008/T033/T077 · checkpoint/journal cleanup | ✓ |
 | FR-030 | T033/T052 · discard approved auxiliary results | ✓ |
 | FR-031 | T008/T079 · restart recovery blocks new work | ✓ |
-| FR-032 | T009/T010/T079 · READY_PENDING/resume | ✓ |
+| FR-032 | T009/T096—T106 · READY_PENDING/default discard/resume | ✓ |
 | FR-033 | T012/T024 · read-only/write recovery gate | ✓ |
 | FR-034 | T065/T066/T072 · V4 Flash migration/capabilities | ✓ |
+| FR-035 | T098—T100/T106 · CLI/PowerShell mode matrix | ✓ |
+| FR-036 | T096/T097/T103/T104 · guarded atomic raw tail discard | ✓ |
+| FR-037 | T101/T105/T106 · fresh/resumed TUI rejection | ✓ |
 
 ## Business, Credential, and Documentation Requirements
 
@@ -55,8 +58,9 @@
 | BR-006 | T076 · debug equivalence/failure behavior | ✓ |
 | BR-007 | T011/T032/T078/T089 · zero persistence/credential/references | ✓ |
 | BR-008 | T008/T033/T077/T079 · rejectable transaction | ✓ |
-| BR-009 | T009/T010/T079 · ordinary failure pending | ✓ |
+| BR-009 | T009/T100/T102/T105 · ordinary failure pending policy | ✓ |
 | BR-010 | T012/T024 · tool transaction/compensation gate | ✓ |
+| BR-011 | T096/T097/T103/T104 · complete immutable/tail abandonable | ✓ |
 | CR-001 | T011/T013/T083/T089 · prompt/trace/log/journal secret barriers | ✓ |
 | CR-002 | T027/T040 · transport auth separated from materialized payload | ✓ |
 | CR-003 | T013/T041/T083 · prompt guard plus safe incident state | ✓ |
@@ -83,10 +87,12 @@
 | SC-011 | T090 · documented acceptance commands pass | ✓ |
 | SC-012 | T078 · 1,000 approvals, presenter/sender residue zero | ✓ |
 | SC-013 | T033 · reject at chat/curation/tool/retry checkpoints | ✓ |
-| SC-014 | T008 · transaction fault-injection recovery | ✓ |
-| SC-015 | T009/T010 · ordinary failure one pending; reject zero pending | ✓ |
+| SC-014 | T008/T097 · transaction and tail-replace fault recovery | ✓ |
+| SC-015 | T100/T102 · one pending/resume/default discard | ✓ |
 | SC-016 | T012/T024 · current tools read-only; unsafe writes rejected before effect | ✓ |
 | SC-017 | T065/T066/T072 · both profiles V4 Flash/non-thinking/8192/1M/384K | ✓ |
+| SC-018 | T098—T100/T106 · CLI/PowerShell/debug mode matrix | ✓ |
+| SC-019 | T101/T105 · fresh/resumed reject and Ctrl+C | ✓ |
 
 ## Conflict Audit
 
@@ -94,4 +100,6 @@
 - [x] transaction vocabulary is exactly PREPARED, READY_PENDING, READY_TO_COMMIT.
 - [x] approve closes/clears TUI before send; sender releases in `finally`; actual usage stays numeric and does not reopen TUI.
 - [x] `deepseek-chat` appears only as migration history; active profiles use `deepseek-v4-flash`.
-- [x] all 69 named FR/BR/CR/DR/SC identifiers have evidence above: nominal coverage 69/69 (100%).
+- [x] all 75 named FR/BR/CR/DR/SC identifiers have evidence above: nominal coverage 75/75 (100%).
+- [x] no artifact requires default resume before new input; only explicit resume may resend old pending content.
+- [x] complete USER/ASSISTANT turns remain immutable; only a validated unreferenced tail USER may be atomically abandoned.

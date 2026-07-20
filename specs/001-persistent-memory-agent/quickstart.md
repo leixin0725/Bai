@@ -59,13 +59,19 @@ python -m bai_agent --config-dir config --data-dir data chat
 
 逐行输入，使用 EOF 或 Ctrl+C 退出。再次运行同一命令会直接继承全部记忆，不会询问对话 ID。每轮持久化顺序是：用户输入落盘、模型调用、Assistant 输出落盘、向终端显示输出。
 
-模型失败时，已经确认的用户输入仍保留为 pending turn。普通启动只报告待恢复状态；确认再次调用模型时显式执行：
+模型失败时，用户输入仍保留为单条 pending turn。普通启动会原子丢弃该尾部 pending 并进入新输入；确认再次调用模型时显式执行：
 
 ```powershell
 python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 ```
 
-该命令复用原 `turn_id`，不会重复追加用户记录。
+该命令复用原 `turn_id`，不会重复追加用户记录。也可显式丢弃后进入新输入：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data chat --discard-pending
+```
+
+`--resume-pending` 与 `--discard-pending` 互斥；没有 pending 时默认、resume 和 discard 都直接等待新输入。
 
 ### 3.1 本地提示调试（2026-07-20）
 
@@ -75,11 +81,11 @@ python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 ```
 
-每个 curation/chat/tool continuation/retry 都先展示唯一物化后的最终 provider 载荷及来源；逐次按 `A` 批准，或按 `R` 拒绝并确认 raw、长期记忆、pending 与轮前一致。批准后界面先清除再发送；普通 provider 失败只产生一条 USER pending，随后用既有 `--resume-pending`。自动验收不调用真实 DeepSeek：
+每个 curation/chat/tool continuation/retry 都先展示唯一物化后的最终 provider 载荷及来源；逐次按 `A` 批准，或按 `R` 拒绝并确认 raw、长期记忆、pending 与轮前一致。批准后界面先清除再发送；普通 provider 失败只产生一条 USER pending，只有显式 `--resume-pending` 重发，默认或 `--discard-pending` 放弃。自动验收不调用真实 DeepSeek：
 
 调用标题必须显示 turn/flow/call sequence/purpose/persona/state/provider/model/config revision/attempt/status。Curation、chat、tool continuation 依真实顺序逐项批准；retry 是同一逻辑 call 的新 attempt，不与失败项合并。交互 TTY 可用 `NO_COLOR=1` 验收纯文本等价标签；管道或重定向必须得到 `DEBUG_TTY_REQUIRED`，不能当作无色降级。
 
-`Ctrl+C` 在 TUI 中先按拒绝路径撤销当前 PREPARED，再以 130 退出；EOF/终端丢失不批准。启动时取得 WriterLease 后先收敛三态 journal：PREPARED 丢弃、READY_PENDING 发布唯一 pending、READY_TO_COMMIT 发布完整轮次；冲突时禁止新输入与 provider。调试开关不写配置，普通重启恢复为关闭。
+`Ctrl+C` 在 TUI 中先按拒绝路径撤销 fresh PREPARED 或删除 resumed pending，再以 130 退出；EOF/终端丢失不批准。启动时取得 WriterLease 后先收敛三态 journal：PREPARED 丢弃、READY_PENDING 发布唯一 pending、READY_TO_COMMIT 发布完整轮次；随后才应用默认丢弃/显式丢弃/显式恢复策略。冲突时禁止新输入与 provider。调试开关不写配置，普通重启恢复为关闭。
 
 ```bash
 pytest tests/contract/test_model_call_gateway.py tests/integration/test_prompt_trace_single_call.py -q

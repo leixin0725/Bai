@@ -132,6 +132,10 @@ class AgentApplication:
             config_revision=self.snapshot.revision,
         )
 
+    def discard_pending(self, expected_turn_id: str | None = None) -> str | None:
+        """[2026-07-20] CLI 只能通过统一控制器放弃已校验的 raw 尾部 pending。"""
+        return self.controller.discard_pending(expected_turn_id=expected_turn_id)
+
     def close(self) -> None:
         self.lease.release()
 

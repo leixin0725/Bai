@@ -2,11 +2,11 @@
 
 ## 目的
 
-在不删除已确认 append-only 原始归档的前提下，同时保证：
+在不删除已确认完整原始轮次的前提下，同时保证：
 
 1. 用户输入在任何模型生成前已持久化；
 2. 调试模式拒绝任一待批调用后，整轮不进入历史、记忆、索引、状态、pending 或后续上下文；
-3. 已批准请求的普通 provider/网络失败只进入一条既有 USER pending，并可由 `--resume-pending` 恢复；
+3. 已批准请求的普通 provider/网络失败只进入一条 USER pending；仅显式 `--resume-pending` 恢复，默认或 `--discard-pending` 放弃；
 4. 每个中断点重启后都能收敛到清晰状态。
 
 ## 存储位置与权限
@@ -100,6 +100,18 @@
 
 raw 与 long-term 的发布顺序必须固定，并由恢复器使用相同顺序。无论中断在哪一步，READY_PENDING/READY_TO_COMMIT journal 都足以识别各自已完成部分并继续，不重复追加或把 pending 升级为完整轮次。
 
+## 可放弃尾部 pending
+
+READY_PENDING 发布后的单条 USER 不是已确认完整轮次。只有同时满足下列条件才允许放弃：
+
+- 位于全局 raw 最末尾，角色为 USER，且同 turn 不存在 ASSISTANT；
+- 此前 raw 严格由同 turn 的 USER/ASSISTANT 连续对组成；
+- record/turn/sequence/content hash 与最后一个 segment 的最后一行一致；
+- curation frontier、covered record ids、coverage spans 和长期记忆 source refs 均未引用该记录；
+- 调用方持有 WriterLease，expected turn id 若提供则完全匹配。
+
+丢弃端口只把最后一个 segment 原子替换为移除末行后的完整字节。若末行是该 segment 唯一记录，目标是合法空尾 segment；不得 unlink、重编号 segment、按任意 turn id 删除、改写此前 sequence 或修改 long-term。替换前故障保留完整旧 pending，替换后故障保留完整已删除状态；临时文件不是正式 segment，重启不得读成历史。
+
 ## 启动恢复
 
 恢复顺序：
@@ -108,9 +120,9 @@ raw 与 long-term 的发布顺序必须固定，并由恢复器使用相同顺�
 2. 检查 journal schema、权限和内容安全。
 3. 无 journal：继续现有启动恢复。
 4. PREPARED：删除 journal；不向 raw 写 cancelled/pending，不调用 provider，不执行整理。
-5. READY_PENDING：核对 checkpoint 和已发布记录，幂等完成单条 USER pending，验证后删除 journal；随后由既有 `--resume-pending` 处理。
+5. READY_PENDING：核对 checkpoint 和已发布记录，幂等完成单条 USER pending，验证后删除 journal。
 6. READY_TO_COMMIT：核对 checkpoint 和已发布记录，幂等完成完整 raw turn 与 long-term，验证后删除 journal。
-7. 恢复完成后才允许读取 pending、接受新输入、构建配置调用或访问 provider。
+7. 恢复完成后才允许读取 pending；默认/`--discard-pending` 原子放弃，`--resume-pending` 保留并恢复。策略完成后才允许接受新输入或访问 provider。
 
 恢复器的安全 trace 只记录 turn id 与 `recovery_absent/recovery_discarded/committed` 等枚举状态；不得记录 journal 正文、prompt、来源或凭据。实际用量同样只允许数值元数据。
 
@@ -121,6 +133,7 @@ raw 与 long-term 的发布顺序必须固定，并由恢复器使用相同顺�
 - READY_PENDING 发布时 raw tail 与“基线或已达单条 pending 目标”都不匹配：停止恢复，禁止新轮和 provider，避免覆盖人工编辑。
 - READY_TO_COMMIT 发布时 raw tail 或 long-term revision 与“基线或已达完整目标”两者都不匹配：停止恢复，禁止新轮和 provider，避免覆盖人工编辑。
 - journal 删除失败：任一 READY 可在下次重启幂等重放；PREPARED 仍阻止新轮，直到删除成功。
+- 尾部 pending 校验发现历史中间未配对 USER、已有 ASSISTANT、expected turn 不匹配、segment/hash 损坏或长期引用：停止丢弃，不修改 raw/long-term，不调用 provider。
 
 ## 记忆整理契约
 
@@ -148,10 +161,11 @@ turn_uow.commit()
 - PREPARED 临时文件写入、fsync、replace；
 - 每次 curation/chat/tool/retry 批准点 reject；
 - READY_PENDING 与 READY_TO_COMMIT 各自的临时文件写入、fsync、replace；
-- READY_PENDING 单条 USER pending 发布及 `--resume-pending`；
+- READY_PENDING 单条 USER pending 发布、默认/显式丢弃及 `--resume-pending`；
+- pending 与此前完整记录位于同一 segment、单独位于 rollover 尾 segment、尾 segment 原子替换的每个 failure hook；
 - raw 第一条/第二条记录发布、跨 segment rollover、manifest 更新；
 - long-term replace 与 last-valid 更新；
 - journal cleanup；
 - 回滚期间的删除失败与进程终止。
 
-断言：明确拒绝或未决定的 PREPARED 最终无 journal 且已确认状态等于 checkpoint；READY_PENDING 最终只发布一条 USER pending 且可恢复；READY_TO_COMMIT 最终完整发布且无重复；任何不确定状态发送次数为 0 且阻止新轮。
+断言：明确拒绝或未决定的 PREPARED 最终无 journal且已确认状态等于 checkpoint；READY_PENDING 最终只发布一条 USER pending，显式恢复不重复 USER，默认/显式丢弃只截尾；READY_TO_COMMIT 最终完整发布且无重复；任何不确定状态发送次数为 0 且阻止新轮。

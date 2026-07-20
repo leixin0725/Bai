@@ -1,5 +1,10 @@
-﻿param(
-    [switch]$DebugPrompts
+﻿[CmdletBinding(DefaultParameterSetName = "Default")]
+param(
+    [switch]$DebugPrompts,
+    [Parameter(Mandatory = $true, ParameterSetName = "Resume")]
+    [switch]$ResumePending,
+    [Parameter(Mandatory = $true, ParameterSetName = "Discard")]
+    [switch]$DiscardPending
 )
 
 Set-Location $PSScriptRoot
@@ -20,6 +25,13 @@ try {
     # [2026-07-20] 调试开关只透传给当前 chat 进程，不写环境或配置。
     if ($DebugPrompts) {
         $chatArgs += "--debug-prompts"
+    }
+    # [2026-07-20] resume 与 discard 由 ParameterSet 在读取凭据和启动 Python 前互斥。
+    if ($ResumePending) {
+        $chatArgs += "--resume-pending"
+    }
+    if ($DiscardPending) {
+        $chatArgs += "--discard-pending"
     }
     & ".\.venv\Scripts\python.exe" @chatArgs
 } finally {

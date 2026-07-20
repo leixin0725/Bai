@@ -27,7 +27,9 @@ def _parser() -> argparse.ArgumentParser:
     config_validate.add_argument("--config-dir", dest="command_config_dir", type=Path)
 
     chat = commands.add_parser("chat")
-    chat.add_argument("--resume-pending", action="store_true")
+    pending = chat.add_mutually_exclusive_group()
+    pending.add_argument("--resume-pending", action="store_true")
+    pending.add_argument("--discard-pending", action="store_true")
     chat.add_argument("--debug-prompts", action="store_true")
 
     memory = commands.add_parser("memory")
@@ -226,11 +228,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             try:
                 pending = app.archive.pending_turn()
-                if pending and not args.resume_pending:
-                    _print({"ok": False, "pending_turn_id": pending.turn_id, "resume_required": True})
-                    return 5
                 if pending and args.resume_pending:
-                    asyncio.run(app.run_turn(pending.content, resume_pending=True, turn_id=pending.turn_id))
+                    try:
+                        asyncio.run(app.run_turn(pending.content, resume_pending=True, turn_id=pending.turn_id))
+                    except BaiError as exc:
+                        if exc.code != "TURN_REJECTED":
+                            raise
+                elif pending:
+                    discarded_turn_id = app.discard_pending(pending.turn_id)
+                    if discarded_turn_id is not None:
+                        _print(
+                            {
+                                "ok": True,
+                                "pending_discarded": True,
+                                "pending_turn_id": discarded_turn_id,
+                            }
+                        )
                 for line in sys.stdin:
                     content = line.rstrip("\r\n")
                     if content:

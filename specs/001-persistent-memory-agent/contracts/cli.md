@@ -97,14 +97,15 @@ python -m bai_agent chat
 - 用户输入确认落盘后才发起模型调用。
 - Assistant 完整响应确认落盘后才写 stdout；首版不显示未确认流增量。
 - Provider/整理失败时 stderr 输出稳定安全错误；已持久化用户输入保留。
-- 若启动时发现最后一个 `turn_id` 只有用户输入，先报告待恢复轮次；只有显式 `--resume-pending` 才重新调用模型，避免无提示重复计费。
-- `--resume-pending` 复用原 `turn_id`，不得再写一条相同用户记录。
+- 若启动时发现最后一个 `turn_id` 只有用户输入，默认原子丢弃该合法尾部 pending 后进入新输入；不得报告 `resume_required` 并退出。
+- `--discard-pending` 与默认策略相同；`--resume-pending` 是唯一允许重发旧内容的方式，复用原 `turn_id` 且不得再写一条相同用户记录。两者互斥；没有 pending 时均进入新输入。
+- 丢弃成功可输出只含 turn id 的 `pending_discarded` JSON 通知，不得回显正文、摘要或来源。
 - 记忆整理或长期 YAML 写入失败且即将越过窗口时，本轮在 Provider 调用前停止。
 - 不在终端状态行显示提示正文、API Key、Authorization 或 DeepSeek 推理内容。
 
 ### 7.1 `chat --debug-prompts`（2026-07-20）
 
-该开关只对当前 chat 进程有效，要求 stdin/stdout 都是 TTY。CLI 在应用构建、输入读取和 journal 写入前执行 TTY 与 Textual application-mode 预检；失败返回脱敏 `DEBUG_TTY_REQUIRED` 或 `DEBUG_PRESENTATION_FAILED`/exit 2。每个最终 provider 请求由短生命周期 Textual 界面完整展示来源并等待 `A` 批准或 `R`/`Esc` 拒绝；`Enter` 不默认批准。批准后 TUI 在发送前清除，明确拒绝返回输入界面且不形成 pending，普通 provider/网络失败仍形成一条可由 `--resume-pending` 恢复的 USER pending。`Ctrl+C` 等同拒绝并在回滚后返回 130；EOF/终端丢失从不批准，运行期 presentation failure 由下次持锁恢复收敛未决定的 PREPARED。
+该开关只对当前 chat 进程有效，要求 stdin/stdout 都是 TTY。CLI 在应用构建、输入读取和 journal 写入前执行 TTY 与 Textual application-mode 预检；失败返回脱敏 `DEBUG_TTY_REQUIRED` 或 `DEBUG_PRESENTATION_FAILED`/exit 2。每个最终 provider 请求由短生命周期 Textual 界面完整展示来源并等待 `A` 批准或 `R`/`Esc` 拒绝；`Enter` 不默认批准。批准后 TUI 在发送前清除，fresh 明确拒绝丢弃 PREPARED，resumed 明确拒绝安全删除已有 raw pending，普通 provider/网络失败仍形成一条可显式恢复、默认放弃的 USER pending。`Ctrl+C` 等同拒绝并在清理后返回 130；EOF/终端丢失从不批准，运行期 presentation failure 由下次持锁恢复收敛未决定的 PREPARED。
 
 ## 8. 稳定退出码
 

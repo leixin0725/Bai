@@ -9,7 +9,7 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 **Prerequisites**: `plan.md`、`spec.md`、`research.md`、`data-model.md`、`contracts/`、`quickstart.md`
 
-**Tests**: BR-001—BR-010 的正常、边界和关键失败路径均必须先写自动化测试并确认在实现前失败。凭据门禁、provider 扩展、模型迁移、Linux 性能和兼容性验收同样采用测试先行。
+**Tests**: BR-001—BR-011 的正常、边界和关键失败路径均必须先写自动化测试并确认在实现前失败。凭据门禁、provider 扩展、模型迁移、Linux 性能、pending 原子截尾和兼容性验收同样采用测试先行。
 
 **Organization**: 任务按用户故事优先级组织；跨故事的事务、安全和 provider 调用边界放入 Foundational 或最早需要它们的 US1，确保公开 `--debug-prompts` 前已具备无痕拒绝、凭据保护、失败恢复和全调用覆盖。每个重大阶段在检查点前同步文档、执行验证，并通过已安装的 Git 扩展创建原子提交。
 
@@ -207,7 +207,30 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 - [X] T094 [P] 更新 `.github/workflows/compatibility.yml`：以带固定容器/镜像说明的 Ubuntu 24.04/Python 3.13 与 3.14 为主要功能矩阵，保留 Windows runner 次要功能矩阵，移除 macOS；将手动参考性能作业迁到 Ubuntu 24.04/Python 3.13 并执行 30 次同进程 prompt TUI p95 门禁；修复乱码中文注释并用 `[2026-07-20]` 时间戳记录原因
 
 **T092 修正偏差记录（2026-07-20）**：T083 同步收紧了 `IncidentStore` 的逻辑元数据 schema；BR-010 验收发现执行器虽有能力门禁但失败/取消未调用 rollback，已在 US4 一并修正；T063 的旧 fixture hash 误用了空载荷摘要，已按声明的 canonical payload 方法重算并加入逐项断言；T094 同步更新了既有 packaging 矩阵断言。上述均为既定安全/真实性要求的实现收敛，未新增产品行为。
-- [X] T095 核对 `specs/002-prompt-trace-debugger/spec.md` 的 FR-001—FR-034、BR-001—BR-010、CR-001—CR-004、DR-001—DR-004、SC-001—SC-017 与任务/测试/文档逐项闭环，确认本次 analyze 的 CRITICAL/HIGH 为 0、名义覆盖 100%，且无 non-TTY、事务状态、TUI 生命周期、模型迁移或未映射产品行为冲突；运行链接/占位符/凭据/兼容性/`git diff --check` 审计后，通过 Git 扩展原子提交仅包含最终测试、注释、兼容性和文档校准变更
+- [X] T095 核对当时版本的 FR-001—FR-034、BR-001—BR-010、CR-001—CR-004、DR-001—DR-004、SC-001—SC-017 与任务/测试/文档逐项闭环，确认 analyze 的 CRITICAL/HIGH 为 0、名义覆盖 100%，且无 non-TTY、事务状态、TUI 生命周期、模型迁移或未映射产品行为冲突；运行链接/占位符/凭据/兼容性/`git diff --check` 审计后，通过 Git 扩展原子提交仅包含最终测试、注释、兼容性和文档校准变更
+
+---
+
+## Phase 8: Pending 默认丢弃语义修订
+
+**Purpose**: 使 pending 不再默认阻塞新对话，只允许显式恢复，并为合法 raw 尾部未完成 USER 提供原子、安全、可故障恢复的丢弃能力。
+
+- [X] T096 [P] 为 FR-036/BR-011 在 `tests/unit/test_raw_record_archive.py` 增加完整轮次后尾部 USER 截尾、单记录尾 segment 置空复用、无 pending 幂等、expected turn 冲突、历史中间 USER、已有 ASSISTANT、sequence/hash/segment 损坏均不修改数据的失败优先测试
+- [X] T097 [P] 为 SC-014 在 `tests/fault_injection/test_pending_discard_atomicity.py` 覆盖 pending 与完整轮次同 segment、独占 rollover segment 及 atomic_write 的 temp_created/written/flushed/fsynced/before_replace/after_replace 故障，验证重启只见完整旧 pending 或完整已删除状态
+- [X] T098 [P] 为 FR-035/SC-018 在 `tests/contract/test_cli_chat.py` 增加默认/显式丢弃/显式恢复、有无 pending、安全通知、resume 不重复 USER、互斥参数 exit 2 和不再输出 resume_required 的失败优先测试
+- [X] T099 [P] 为 FR-035/SC-018 在 `tests/contract/test_start_script.py` 通过 PowerShell 参数元数据与脚本 AST/文本合同验证 `-ResumePending`、`-DiscardPending`、`-DebugPrompts` 组合、互斥和 CLI 参数透传
+- [X] T100 [P] 为 FR-032/BR-009/SC-015 在 `tests/integration/test_pending_startup_policy.py` 覆盖 WriterLease/三态恢复后默认 chat/debug 丢弃、`--discard-pending` 存在/不存在、`--resume-pending` 同 turn、无 pending 进入新输入且旧正文从不由默认路径发送
+- [X] T101 [P] 为 FR-037/SC-019 在 `tests/integration/test_prompt_trace_rejection.py` 增加 fresh 与 resumed pending 的 R/Esc/拒绝按钮/Ctrl+C，断言发送 0、fresh 不形成 pending、resumed raw 尾部删除、R/Esc 返回输入和 Ctrl+C 130
+- [X] T102 [P] 为 FR-032/SC-015 在 `tests/integration/test_turn_transaction_pending.py` 增加 provider retry exhausted/non-retryable/network failure 只形成一条 pending、本进程报告失败、下一次默认启动删除且显式恢复不追加 USER
+- [X] T103 [P] 为 FR-036/BR-011/CR-001/CR-004 在 `tests/integration/test_pending_discard_security.py` 增加长期 memory source/coverage/frontier 引用冲突、此前完整历史与 long-term 字节不变、日志/错误/journal/通知无正文或凭据、debug on/off 除批准门禁外等价测试
+- [X] T104 在 `src/bai_agent/memory/archive.py` 与 `src/bai_agent/memory/long_term.py` 实现 expected-turn 尾部 USER 全量结构/hash/长期引用门禁和最后 segment 原子截尾；空尾 segment 合法且可由后续 append 复用，禁止任意 turn id 或完整轮次删除
+- [X] T105 在 `src/bai_agent/runtime/controller.py` 与 `src/bai_agent/application.py` 提供统一 pending 丢弃端口；在 WriterLease 与三态恢复后应用，fresh reject 丢弃 PREPARED，resumed R/Esc/Ctrl+C 删除 raw pending，普通 provider 失败继续保留唯一 pending
+- [X] T106 在 `src/bai_agent/cli.py` 与 `start.ps1` 实现默认丢弃、互斥 `--resume-pending`/`--discard-pending`、安全 turn-id 通知、无 pending 进入新输入、resumed reject 返回输入/Ctrl+C 130，以及 PowerShell ParameterSet 安全透传
+- [X] T107 [P] 最终校准 `README.md`、`specs/001-persistent-memory-agent/{contracts/cli.md,contracts/storage.md,quickstart.md}` 与 `specs/002-prompt-trace-debugger/{spec.md,plan.md,research.md,data-model.md,contracts,quickstart.md,checklists}`，删除默认必须 resume 的旧表述并记录 FR-001—FR-037/BR-001—BR-011/SC-001—SC-019 覆盖
+- [X] T108 运行 T096—T103 对应 unit/contract/integration/fault/security 测试、`pytest -q`、全部 `tests/fault_injection/` 与适用 performance 回归、CLI/PowerShell 文档命令、链接/占位符/凭据扫描及 `git diff --check`，确认不访问真实 API 或当前 `data/`
+- [X] T109 运行 `$speckit-analyze`，确认 CRITICAL/HIGH 为 0、75 个 FR/BR/CR/DR/SC 名义覆盖 100%、无 pending/TTY/事务/TUI 冲突；勾选 T096—T109，并通过 Git 扩展创建只含本功能工件、测试、实现与文档的原子提交
+
+**Checkpoint**: 默认启动不再被 pending 阻塞；只有显式 resume 重发，任何合法丢弃都只原子移除未完成 raw 尾部 USER。
 
 ---
 
@@ -222,12 +245,14 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 - **US3**: 依赖 US1 的 materialized payload/parts 和 US2 的 attempt 身份。
 - **US4**: 依赖 US1 的安全内核，完成运行级 TTY、恢复、释放和等价性硬化。
 - **Polish**: 依赖四个用户故事全部完成。
+- **Pending revision**: 依赖既有三态事务与 raw/long-term 契约；T096—T103 测试全部先失败，再执行 T104—T106，最后 T107—T109 校准和验证。
 
 ### User Story Dependency Graph
 
 ```text
 Setup -> Foundational safety/transaction
        -> US1 safe public MVP -> US2 multi-call presentation -> US3 context usage -> US4 runtime hardening -> Polish
+       -> Pending default-discard revision
 ```
 
 ### Within Each Phase
@@ -246,6 +271,7 @@ Setup -> Foundational safety/transaction
 - **US3**: T061—T066 可并行；T068/T070/T071 可在估算契约稳定后并行；T072/T073 可并行同步文档。
 - **US4**: T075—T079 可并行；T082/T083 与 T084—T086 可在核心运行接线稳定后并行。
 - **Polish**: T088/T089 可并行，T094 可在兼容性设计稳定后独立更新 workflow，随后由 T095 统一审计。
+- **Pending revision**: T096—T103 可按文件并行编写；T104 必须先于 T105，T105 先于 T106；T107 可在实现稳定后与针对性回归准备并行，T108/T109 顺序执行。
 
 ## Parallel Execution Examples
 
@@ -295,6 +321,7 @@ Setup -> Foundational safety/transaction
 4. **US3**: 可追溯估算、实际用量和稳定性能口径。
 5. **US4**: 运行级 TTY、恢复、释放和等价性硬化。
 6. **Final**: 200/1,000 次规模、凭据历史、可用性、Linux/Windows 兼容性和最终审计。
+7. **Pending revision**: 合法尾部原子丢弃、显式恢复、resumed reject 和 CLI/PowerShell 非阻塞启动。
 
 ## Analyze Remediation Mapping
 
@@ -303,7 +330,7 @@ Setup -> Foundational safety/transaction
 - **I1**: Spec/contract 已在生成前统一重定向/non-TTY 与交互式无色；T053/T059/T075/T080 验证和文档化。
 - **I3**: T040—T044 在同一 US1 原子阶段完成 provider 拆分、retry、调用方迁移和旁路封闭。
 - **I4/A1**: Data model/contracts 已固定批准后 TUI 清除、send_once finally 释放和普通 actual usage 摘要；T032/T064/T069/T070/T078/T086 验证。
-- **U1**: T005/T007—T009/T019—T020 定义并实现 READY_PENDING，保持既有 pending 恢复。
+- **U1**: T005/T007—T009/T019—T020 定义并实现 READY_PENDING；T096—T106 将其启动策略修订为默认/显式丢弃、仅显式恢复。
 - **G1**: T030 增加第二个 fake provider 全网关合同测试。
 - **U2**: T005/T006/T013/T014/T027/T029/T036/T040/T041 明确唯一 materialization 与 digest/HTTP 一致性。
 - **U3**: T063 固定 DeepSeek fixture 数量、来源、版本、hash 和刷新流程，不调用实时 API。

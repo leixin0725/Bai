@@ -64,3 +64,115 @@ def test_duplicate_role_in_turn_is_rejected(tmp_path: Path) -> None:
     archive.append(**values)
     with pytest.raises(BaiError, match="轮次"):
         archive.append(**values)
+
+
+def _append_turn(archive: RawRecordArchive, turn_suffix: int, user: str, assistant: str) -> None:
+    turn_id = f"turn-00000000-0000-4000-8000-{turn_suffix:012d}"
+    archive.append(
+        role=Role.USER, content=user, turn_id=turn_id, state_id="default",
+        config_revision=REVISION,
+    )
+    archive.append(
+        role=Role.ASSISTANT, content=assistant, turn_id=turn_id, state_id="default",
+        config_revision=REVISION,
+    )
+
+
+def test_discard_pending_tail_preserves_completed_history_and_reuses_empty_segment(
+    tmp_path: Path,
+) -> None:
+    archive = archive_at(tmp_path, max_records=2)
+    _append_turn(archive, 1, "已完成输入", "已完成输出")
+    pending = archive.append(
+        role=Role.USER, content="待放弃输入",
+        turn_id="turn-00000000-0000-4000-8000-000000000002",
+        state_id="default", config_revision=REVISION,
+    )
+
+    assert archive.discard_pending_tail(expected_turn_id=pending.turn_id) == pending.turn_id
+    assert [(item.role, item.content) for item in archive.read_all()] == [
+        (Role.USER, "已完成输入"), (Role.ASSISTANT, "已完成输出")
+    ]
+    tail_segment = tmp_path / "raw" / "00000002.jsonl"
+    assert tail_segment.exists() and tail_segment.read_bytes() == b""
+
+    replacement = archive.append(
+        role=Role.USER, content="新输入",
+        turn_id="turn-00000000-0000-4000-8000-000000000003",
+        state_id="default", config_revision=REVISION,
+    )
+    assert replacement.global_sequence == 3
+    assert len(list((tmp_path / "raw").glob("*.jsonl"))) == 2
+
+
+def test_discard_pending_tail_is_noop_when_absent(tmp_path: Path) -> None:
+    archive = archive_at(tmp_path)
+    assert archive.discard_pending_tail() is None
+    _append_turn(archive, 1, "输入", "输出")
+    before = tuple(path.read_bytes() for path in sorted((tmp_path / "raw").glob("*.jsonl")))
+    assert archive.discard_pending_tail() is None
+    assert tuple(path.read_bytes() for path in sorted((tmp_path / "raw").glob("*.jsonl"))) == before
+
+
+def test_discard_pending_tail_rejects_wrong_or_completed_turn_without_writes(tmp_path: Path) -> None:
+    archive = archive_at(tmp_path)
+    _append_turn(archive, 1, "输入", "输出")
+    pending = archive.append(
+        role=Role.USER, content="pending",
+        turn_id="turn-00000000-0000-4000-8000-000000000002",
+        state_id="default", config_revision=REVISION,
+    )
+    segment = tmp_path / "raw" / "00000001.jsonl"
+    before = segment.read_bytes()
+    with pytest.raises(BaiError) as caught:
+        archive.discard_pending_tail(
+            expected_turn_id="turn-00000000-0000-4000-8000-000000000001"
+        )
+    assert caught.value.code == "RAW_PENDING_CONFLICT"
+    assert segment.read_bytes() == before
+
+    archive.append(
+        role=Role.ASSISTANT, content="完成 pending", turn_id=pending.turn_id,
+        state_id="default", config_revision=REVISION,
+    )
+    completed = segment.read_bytes()
+    with pytest.raises(BaiError) as caught:
+        archive.discard_pending_tail(expected_turn_id=pending.turn_id)
+    assert caught.value.code == "RAW_PENDING_CONFLICT"
+    assert segment.read_bytes() == completed
+
+
+def test_discard_pending_tail_rejects_incomplete_middle_turn(tmp_path: Path) -> None:
+    archive = archive_at(tmp_path)
+    archive.append(
+        role=Role.USER, content="非法中间 USER",
+        turn_id="turn-00000000-0000-4000-8000-000000000001",
+        state_id="default", config_revision=REVISION,
+    )
+    tail = archive.append(
+        role=Role.USER, content="尾部 USER",
+        turn_id="turn-00000000-0000-4000-8000-000000000002",
+        state_id="default", config_revision=REVISION,
+    )
+    segment = tmp_path / "raw" / "00000001.jsonl"
+    before = segment.read_bytes()
+    with pytest.raises(BaiError) as caught:
+        archive.discard_pending_tail(expected_turn_id=tail.turn_id)
+    assert caught.value.code == "RAW_PENDING_INVALID"
+    assert segment.read_bytes() == before
+
+
+def test_discard_pending_tail_rejects_corrupt_hash_without_writes(tmp_path: Path) -> None:
+    archive = archive_at(tmp_path)
+    pending = archive.append(
+        role=Role.USER, content="原正文",
+        turn_id="turn-00000000-0000-4000-8000-000000000001",
+        state_id="default", config_revision=REVISION,
+    )
+    segment = tmp_path / "raw" / "00000001.jsonl"
+    corrupted = segment.read_bytes().replace("原正文".encode(), "伪正文".encode())
+    segment.write_bytes(corrupted)
+    with pytest.raises(BaiError) as caught:
+        archive.discard_pending_tail(expected_turn_id=pending.turn_id)
+    assert caught.value.code == "RAW_SEGMENT_INVALID"
+    assert segment.read_bytes() == corrupted

@@ -30,7 +30,7 @@ python -m bai_agent --help
 python -m bai_agent chat --help
 ```
 
-预期：帮助中存在 `chat --debug-prompts`；配置验证显示 chat 与 memory curator 均为 `deepseek-v4-flash`、`thinking_enabled=false`、profile 输出限制 8192、provider context 1,000,000、输出能力上限 384,000 和 estimator，无真实凭据回显；迁移前后其他生成参数不变。
+预期：帮助中存在 `chat --debug-prompts`、`--resume-pending` 和 `--discard-pending`，后两者互斥；配置验证显示 chat 与 memory curator 均为 `deepseek-v4-flash`、`thinking_enabled=false`、profile 输出限制 8192、provider context 1,000,000、输出能力上限 384,000 和 estimator，无真实凭据回显；迁移前后其他生成参数不变。
 
 ## 2. 安全注入凭据并启动
 
@@ -46,11 +46,13 @@ Windows 次要环境推荐沿用项目启动脚本的隐藏输入能力：
 
 ```powershell
 .\start.ps1 -DebugPrompts
+.\start.ps1 -DiscardPending
+.\start.ps1 -ResumePending -DebugPrompts
 ```
 
 预期：每次新运行都显示“本地界面可能展示私人记忆”的提醒；退出再普通启动时调试默认关闭。
 
-CLI 会先运行不含正文的 TTY/Textual application-mode probe；stdin/stdout 重定向或 probe 失败均在应用构建和 journal 写入前以 exit 2 失败。请求级 TUI 的 `Ctrl+C` 先回滚 PREPARED 再返回 130，EOF/终端丢失不批准且由下次持锁恢复安全收敛。
+CLI 会先运行不含正文的 TTY/Textual application-mode probe；stdin/stdout 重定向或 probe 失败均在应用构建和 journal 写入前以 exit 2 失败。请求级 TUI 的 `Ctrl+C` 先回滚 fresh PREPARED 或删除 resumed pending 再返回 130，EOF/终端丢失不批准且由下次持锁恢复安全收敛。
 
 ## 3. 验收单次聊天与来源
 
@@ -111,9 +113,21 @@ pytest tests/contract -k "model_call_gateway" -q
 ```bash
 pytest tests/integration/test_turn_transaction_pending.py -q
 pytest tests/integration -k "resume_pending and provider" -q
+pytest tests/contract/test_cli_chat.py tests/fault_injection/test_pending_discard_atomicity.py -q
 ```
 
-预期：retry exhausted、non-retryable provider error 和网络中断均经 `READY_PENDING` 幂等发布且只发布一条 USER pending，可用既有 `--resume-pending` 恢复；维护者在 approval app 中按 `R` 的明确拒绝从 PREPARED 丢弃且不形成 pending。
+预期：retry exhausted、non-retryable provider error 和网络中断均经 `READY_PENDING` 幂等发布且只发布一条 USER pending；显式 `--resume-pending` 复用原 turn 且不追加 USER，默认启动或 `--discard-pending` 只原子截去合法尾部 pending 后进入新输入。fresh approval app 的 R/Esc/Ctrl+C 丢弃 PREPARED；resumed approval app 的相同明确拒绝删除已有 raw pending。不存在 pending 时三种模式均直接进入新输入。
+
+手工命令矩阵：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data chat
+python -m bai_agent --config-dir config --data-dir data chat --discard-pending
+python -m bai_agent --config-dir config --data-dir data chat --resume-pending
+python -m bai_agent --config-dir config --data-dir data chat --resume-pending --debug-prompts
+```
+
+禁止以手工编辑 JSONL 或 `memory reset all` 代替丢弃。debug 非 TTY 预检失败发生在 pending 修改前，因此该场景保留 pending。
 
 ## 7. 验收无色与终端边界
 
@@ -208,9 +222,10 @@ pytest tests/contract/test_tool_transaction_capabilities.py tests/unit/test_logg
 | 非交互终端 | 改在真实交互终端运行；不得通过重定向绕过 |
 | TUI 初始化/渲染失败 | 发送次数为 0；修复终端能力后重试 |
 | PREPARED journal 残留 | 重启后自动丢弃，且不形成 pending/history |
-| READY_PENDING journal 残留 | 重启后幂等发布且只发布一条 USER pending，可用 `--resume-pending`；不得发布 assistant/long-term |
+| READY_PENDING journal 残留 | 重启后先幂等发布唯一 USER pending；默认/`--discard-pending` 随后截尾，`--resume-pending` 保留并恢复；不得发布 assistant/long-term |
 | READY_TO_COMMIT journal 残留 | 重启后幂等发布完整轮次；冲突时停止新轮并按脱敏错误指引处理 |
-| 普通 provider/网络失败 | 与明确 reject 区分；只形成一条 USER pending，重启或 `--resume-pending` 恢复 |
+| 普通 provider/网络失败 | 与明确 reject 区分；只形成一条 USER pending，只有 `--resume-pending` 恢复，默认重启将其丢弃 |
+| pending 截尾校验失败 | 不修改 raw/long-term，不调用 provider；检查历史配对、segment/hash、expected turn 和长期来源引用 |
 | 写工具无恢复能力 | 在任何副作用前拒绝；当前工具必须全部只读 |
 | provider 无实际 usage | 保留“估算”标签，不显示伪造实际值 |
 | 疑似凭据命中 | 请求和显示均阻断；轮换真实凭据并按现有安全事件流程检查 |

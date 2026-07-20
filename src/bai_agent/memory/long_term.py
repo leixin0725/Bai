@@ -18,6 +18,7 @@ from bai_agent.domain.models import (
     MemoryCoverageOverview,
     MemoryKind,
     MemoryStatus,
+    RawRecord,
     SourceReference,
     SourceRelation,
     SourceKind,
@@ -255,6 +256,29 @@ class LongTermStore:
             )
             for item in items
         )
+
+    def assert_pending_discardable(self, record: RawRecord) -> None:
+        """[2026-07-20] 丢弃 raw 尾部前只读验证长期来源、coverage 与整理前沿均未引用。"""
+        try:
+            document = self._parse_bytes(self.path.read_bytes())
+        except OSError as exc:
+            raise BaiError("MEMORY_DOCUMENT_INVALID", "长期记忆文件不可读，已阻止 pending 丢弃。") from exc
+        referenced = record.global_sequence <= document.curation.curated_through_sequence
+        referenced = referenced or record.record_id in document.curation.covered_record_ids
+        referenced = referenced or any(
+            record.record_id in span.record_ids
+            for span in document.coverage_overview.coverage_spans
+        )
+        referenced = referenced or any(
+            source.record_id == record.record_id
+            for memory in document.memories
+            for source in memory.source_refs
+        )
+        if referenced:
+            raise BaiError(
+                "MEMORY_PENDING_REFERENCED",
+                "raw 尾部 pending 已被长期记忆或 coverage 引用，未修改任何数据。",
+            )
 
     def initialize_with_manual_memory(self, text: str, records: tuple) -> LongTermMemoryDocument:
         safe_text = self.guard.ensure_safe(text)

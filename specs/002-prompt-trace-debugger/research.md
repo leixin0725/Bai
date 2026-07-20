@@ -61,11 +61,11 @@ DeepSeek 首版采用官方公开字符比例、UTF-8/JSON/工具包装开销和
 
 ## 7. 拒绝整轮回滚与崩溃恢复
 
-**Decision**: 增加 `TurnUnitOfWork` 和单文件事务日志，状态为 `PREPARED`、`READY_PENDING` 与 `READY_TO_COMMIT`。`PREPARED` 只持久化暂存输入和轮前基线；维护者明确拒绝或未决定的该阶段重启时删除暂存并回到 `ABSENT`。普通 provider/网络失败且重试结束时原子转为 `READY_PENDING`，幂等发布且只发布一条 USER pending，继续复用 `--resume-pending`。整轮成功后写入 assistant 和可选长期记忆目标，转为 `READY_TO_COMMIT`，再幂等发布完整 raw turn 与长期记忆，最后删除日志；重启见任一 READY 状态必须按其目标前滚完成。
+**Decision**: 增加 `TurnUnitOfWork` 和单文件事务日志，状态为 `PREPARED`、`READY_PENDING` 与 `READY_TO_COMMIT`。`PREPARED` 只持久化暂存输入和轮前基线；维护者明确拒绝或未决定的该阶段重启时删除暂存并回到 `ABSENT`。普通 provider/网络失败且重试结束时原子转为 `READY_PENDING`，幂等发布且只发布一条 USER pending。事务恢复完成后，只有显式 `--resume-pending` 重发；默认启动和 `--discard-pending` 在结构/hash/长期引用校验后以原子尾段替换放弃该 pending。整轮成功后写入 assistant 和可选长期记忆目标，转为 `READY_TO_COMMIT`，再幂等发布完整 raw turn 与长期记忆，最后删除日志；重启见任一 READY 状态必须按其目标前滚完成。
 
-**Rationale**: 该方案同时满足 001 的“输入在生成前持久化”、既有 provider 失败后 pending 恢复和 002 的“明确拒绝后轮次从未存在”。已确认的不可变归档无需删除；每个崩溃点都能根据单一状态安全判断丢弃暂存、发布单条 pending 或发布完整轮次。
+**Rationale**: 该方案同时满足 001 的“输入在生成前持久化”、provider 失败后可显式恢复和 002 的“明确拒绝后轮次从未存在”。完整 USER/ASSISTANT 仍不可删除；未配对尾部 USER 被明确定义为未完成、可放弃轮次。尾段原子替换在每个故障点只留下完整旧状态或完整新状态，不需要按任意 turn id 删除或重写长期记忆。
 
-**Alternatives considered**: 纯内存暂存违反生成前持久化；先追加用户记录后回删破坏 append-only 归档，跨分段时尤其危险；数据库事务对单用户文件存储过重。
+**Alternatives considered**: 纯内存暂存违反生成前持久化；任意 turn id 删除或物理 unlink 尾 segment 会破坏归档和崩溃语义；为一次尾部原子替换增加数据库或第二份删除 journal 对单用户文件存储过重。最终只允许截去最后一条经校验的 USER，并允许最后一个 segment 为空以复用现有 atomic replace。
 
 ## 8. 记忆整理与轮次工作视图
 
@@ -95,6 +95,6 @@ DeepSeek 首版采用官方公开字符比例、UTF-8/JSON/工具包装开销和
 
 **Decision**: 单元测试覆盖摘要、来源校验、估算守恒和三态事务；合同测试覆盖 CLI/TUI/provider/gateway/写工具能力；集成测试覆盖多调用、调试开关等价、明确拒绝和普通失败 pending；故障注入覆盖每个 journal/fsync/replace/READY/raw/YAML/cleanup 点；性能测试在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 中从 frozen request、来源和估算就绪测到标题/身份/上下文摘要 mounted，记录首次冷启动并以 30 次同进程启动 p95≤500 ms 为门禁，同时覆盖 1,000 次释放。DeepSeek 估算 fixture 至少 40 项，记录模型 id、采集日期、官方 usage、payload hash 和刷新说明。README、001 合同/quickstart、002 产物和兼容性 workflow 随对应实现同提交更新。
 
-**Rationale**: 该功能横跨安全边界、物理网络调用和多个持久化文件，仅 happy-path UI 测试无法证明真实性、无旁路与恢复语义。分层测试能直接对应 BR-001—BR-010，同时控制定位成本。
+**Rationale**: 该功能横跨安全边界、物理网络调用和多个持久化文件，仅 happy-path UI 测试无法证明真实性、无旁路、恢复和尾部丢弃语义。分层测试能直接对应 BR-001—BR-011，同时控制定位成本。
 
 **Alternatives considered**: 只做端到端测试难以稳定注入所有崩溃点；只做 mock 单元测试无法证明 SDK/HTTP 出站一致；发布后补文档违反项目宪章。

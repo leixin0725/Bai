@@ -60,6 +60,21 @@ class SingleTurnController:
         self.tool_definitions = tool_definitions
         self.transaction_root = transaction_root
 
+    def discard_pending(self, *, expected_turn_id: str | None = None) -> str | None:
+        """[2026-07-20] 在长期引用门禁通过后委托归档层原子放弃唯一尾部 pending。"""
+        pending = self.repository.pending_turn()
+        if pending is not None and self.long_term_store is not None:
+            self.long_term_store.assert_pending_discardable(pending)
+        return self.repository.discard_pending_tail(expected_turn_id=expected_turn_id)
+
+    def _discard_rejected_turn(
+        self, uow: TurnUnitOfWork | None, *, resumed: bool, turn_id: str
+    ) -> None:
+        if uow is not None:
+            uow.discard()
+        elif resumed:
+            self.discard_pending(expected_turn_id=turn_id)
+
     async def _complete(self, request: CompletionRequest, parts: tuple[RequestPart, ...], *, purpose: str, state_id: str, config_revision: str):
         if getattr(self.provider, "is_model_call_gateway", False):
             draft = ModelCallDraft(
@@ -144,8 +159,9 @@ class SingleTurnController:
                 else:
                     await self.curation_service.curate_if_needed()
             except TurnRejected:
-                if uow is not None:
-                    uow.discard()
+                self._discard_rejected_turn(
+                    uow, resumed=resume_pending, turn_id=resolved_turn_id
+                )
                 raise
             except BaiError as exc:
                 if uow is not None and (exc.retryable or exc.code.startswith(("PROVIDER_", "NETWORK_"))):
@@ -285,8 +301,9 @@ class SingleTurnController:
         except asyncio.CancelledError:
             raise
         except TurnRejected:
-            if uow is not None:
-                uow.discard()
+            self._discard_rejected_turn(
+                uow, resumed=resume_pending, turn_id=resolved_turn_id
+            )
             raise
         except BaiError as exc:
             if uow is not None and (exc.retryable or exc.code.startswith(("PROVIDER_", "NETWORK_"))):

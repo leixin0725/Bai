@@ -95,7 +95,7 @@ class ModelCallGateway(Protocol):
 | `DebugPresentationError` | 不自动批准；发送次数 0 |
 | `TurnRejected` | 当前 attempt 发送次数 0；触发整轮回滚 |
 | retryable provider error | 当前 attempt 已发送；下一 attempt 重新展示与批准 |
-| retry exhausted / non-retryable provider / network error | 不再构建后续 attempt；事务转 `READY_PENDING`，幂等发布且只发布一条 USER pending，可由 `--resume-pending` 恢复 |
+| retry exhausted / non-retryable provider / network error | 不再构建后续 attempt；事务转 `READY_PENDING`，幂等发布且只发布一条 USER pending；只有显式 `--resume-pending` 重发，默认启动或 `--discard-pending` 放弃该尾部 pending |
 
 ## 实际用量
 

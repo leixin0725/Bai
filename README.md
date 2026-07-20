@@ -5,7 +5,7 @@ Bai Agent 是一个 Python 单用户聊天 Agent。它不创建或切换“对�
 当前实现包括：
 
 - DeepSeek API 适配器，以及可替换的模型 Provider 接口；
-- 永久分段 JSONL 原始记录、可直接编辑的长期 YAML 和同修订版 `MemoryCoverageOverview`；
+- 永久保存完整轮次并允许安全放弃唯一未完成尾部 USER 的分段 JSONL、可直接编辑的长期 YAML 和同修订版 `MemoryCoverageOverview`；
 - 独立管理的聊天人格、记忆整理人格、状态人格和提示模板；
 - 在近期窗口边界运行的批量记忆整理，长期记忆保留一个或多个原始来源；
 - 所有人格共用的只读来源查询工具；
@@ -30,11 +30,21 @@ python -m bai_agent --config-dir config --data-dir data doctor
 python -m bai_agent --config-dir config --data-dir data chat
 ```
 
-聊天中断且已有用户输入落盘时，普通启动会报告 pending turn。确认重试同一轮：
+普通启动发现合法尾部 USER pending 时，会只丢弃该未完成轮次并直接等待新输入；不会重发旧正文，也不会删除此前完整聊天或长期记忆。只有确认重试同一轮时显式执行：
 
 ```powershell
 python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 ```
+
+也可显式表达丢弃意图；没有 pending 时三种启动方式都安全进入新输入：
+
+```powershell
+python -m bai_agent --config-dir config --data-dir data chat --discard-pending
+.\start.ps1 -ResumePending
+.\start.ps1 -DiscardPending -DebugPrompts
+```
+
+resume 与 discard 参数互斥；`--resume-pending` 是唯一允许重发旧 pending 内容的方式。丢弃只允许原子截去 raw archive 最末尾的未配对 USER，完整 USER/ASSISTANT 轮次继续永久不可删除。
 
 ## 提示词调试批准
 
@@ -46,7 +56,7 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 每个聊天、记忆整理、工具续接与 provider retry 都通过唯一 `ModelCallGateway`，在 DeepSeek `prepare()` 和唯一 `materialize_sdk_kwargs()` 后展示最终模型可见字段、完整正文及 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]` 来源。界面会提醒私人记忆只在本机临时显示；按 `A` 逐请求批准，按 `R`/`Esc` 明确拒绝并无痕撤销整轮。批准绑定 call、attempt 与物化载荷摘要，不修改请求；批准后、网络发送前 TUI 清除正文和来源，`send_once()` 无论成功或失败都在 `finally` 释放 sender 载荷。
 
-明确拒绝不会形成历史或 pending；已经批准的请求若因普通 provider/网络错误且重试结束，则只发布一条 USER pending，可用 `--resume-pending` 恢复。该模式默认关闭、退出即失效，也不会保存原始追踪。stdin/stdout 任一不是 TTY 时以 `DEBUG_TTY_REQUIRED`/exit 2 在任何持久化和模型发送前失败；Textual application-mode 预检同样先于应用构建。TUI 中 `Ctrl+C` 先按拒绝路径撤销再以 130 退出，EOF/终端丢失绝不批准并以脱敏 presentation failure 阻断。
+明确拒绝不会留下历史或 pending；恢复旧 pending 时发生 R/Esc/拒绝按钮/Ctrl+C，也会安全删除 raw 尾部的该 pending。已经批准的请求若因普通 provider/网络错误且重试结束，则只发布一条 USER pending；只有 `--resume-pending` 恢复，下一次普通启动或 `--discard-pending` 会丢弃并继续新对话。该模式默认关闭、退出即失效，也不会保存原始追踪。stdin/stdout 任一不是 TTY 时以 `DEBUG_TTY_REQUIRED`/exit 2 在任何持久化和模型发送前失败；Textual application-mode 预检同样先于应用构建。TUI 中 `Ctrl+C` 先按拒绝路径撤销再以 130 退出，EOF/终端丢失绝不批准并以脱敏 presentation failure 阻断。
 
 同一轮的 memory curation → chat → tool continuation 按网关分配的严格 call sequence 逐项出现；provider retry 保持逻辑 call 身份，但以新的 attempt、状态和批准项展示，前一项未决定时不会处理后一项。交互 TTY 的稳定色板只增强来源类别，`NO_COLOR=1` 或 `debug_prompt.color="never"` 时仍保留 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]`、分组边界与缩进。输出重定向不是无色模式，会按非 TTY 规则失败。
 
@@ -54,11 +64,11 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 模型能力数字来自受版本控制的 `config/providers.toml`，不是运行时探测：chat 与 memory curator 使用非思考 `deepseek-v4-flash`，profile 输出预留仍为 8192；provider 元数据记录 1,000,000 context 和 384,000 output cap。离线 40 项参考集只含无凭据样本，不会在测试中访问真实 API。
 
-调试界面会完整暴露当前请求中的私人记忆，只应在可信本地终端使用；API Key/Authorization 由 transport 单独持有，既不进入可展示载荷，也不进入 journal、日志或实际用量摘要。若 TUI 运行期失败，未决定的 `PREPARED` journal 会在下一次持锁启动时安全丢弃；`READY_PENDING` 前滚为唯一 USER pending，`READY_TO_COMMIT` 按 USER、ASSISTANT、可选长期记忆顺序幂等发布。恢复冲突会阻止新输入和 provider，不覆盖人工修改。
+调试界面会完整暴露当前请求中的私人记忆，只应在可信本地终端使用；API Key/Authorization 由 transport 单独持有，既不进入可展示载荷，也不进入 journal、日志或实际用量摘要。若 TUI 运行期失败，未决定的 `PREPARED` journal 会在下一次持锁启动时安全丢弃；`READY_PENDING` 先前滚为唯一 USER pending，再由默认丢弃、显式丢弃或显式恢复策略处理；`READY_TO_COMMIT` 按 USER、ASSISTANT、可选长期记忆顺序幂等发布。恢复或尾部校验冲突会阻止新输入和 provider，不覆盖人工修改。
 
 ## 记忆与安全
 
-运行数据默认位于 `data/memory/`：`raw/*.jsonl` 是不可变原始记录，`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：
+运行数据默认位于 `data/memory/`：`raw/*.jsonl` 中已完成 USER/ASSISTANT 轮次不可变；唯一未配对的合法尾部 USER 是可放弃的未完成轮次。`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：
 
 ```powershell
 python -m bai_agent --config-dir config --data-dir data memory validate

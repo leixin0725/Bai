@@ -121,6 +121,52 @@ class RawRecordArchive:
             return records[-1]
         return None
 
+    def discard_pending_tail(self, *, expected_turn_id: str | None = None) -> str | None:
+        """[2026-07-20] 只原子截去合法未配对尾部 USER；完整轮次始终不可删除。"""
+        records = self.read_all()
+        if not records or records[-1].role != Role.USER:
+            if expected_turn_id is not None:
+                raise BaiError("RAW_PENDING_CONFLICT", "指定轮次不是可放弃的 raw 尾部 pending。")
+            return None
+
+        pending = records[-1]
+        if expected_turn_id is not None and pending.turn_id != expected_turn_id:
+            raise BaiError("RAW_PENDING_CONFLICT", "raw 尾部 pending 与指定轮次不匹配。")
+
+        prefix = records[:-1]
+        if len(prefix) % 2:
+            raise BaiError("RAW_PENDING_INVALID", "raw 历史前缀包含未完成的中间轮次。")
+        for index in range(0, len(prefix), 2):
+            user, assistant = prefix[index : index + 2]
+            if (
+                user.role != Role.USER
+                or assistant.role != Role.ASSISTANT
+                or user.turn_id != assistant.turn_id
+            ):
+                raise BaiError("RAW_PENDING_INVALID", "raw 历史前缀不是连续完整轮次。")
+        if any(item.turn_id == pending.turn_id for item in prefix):
+            raise BaiError("RAW_PENDING_INVALID", "raw 尾部 pending 已存在同轮次记录。")
+
+        segments = self._segments()
+        if not segments:
+            raise BaiError("RAW_PENDING_INVALID", "raw 尾部 pending 缺少正式 segment。")
+        target = segments[-1]
+        payload = target.read_bytes()
+        lines = payload.splitlines(keepends=True)
+        if not lines:
+            raise BaiError("RAW_PENDING_INVALID", "raw 尾部 segment 为空或已变化。")
+        try:
+            segment_tail = RawRecord.model_validate_json(lines[-1])
+        except (ValidationError, ValueError) as exc:
+            raise BaiError("RAW_SEGMENT_INVALID", "raw 尾部记录字段或摘要无效。") from exc
+        if segment_tail != pending:
+            raise BaiError("RAW_PENDING_CONFLICT", "raw 尾部 segment 身份已变化。")
+
+        # [2026-07-20] 空尾段由下一次 append 复用，可避免 unlink 和分段重编号的崩溃窗口。
+        atomic_write(target, b"".join(lines[:-1]), self.failure_hook)
+        ensure_private_path(target, is_directory=False)
+        return pending.turn_id
+
     def identity_hash(self, records: tuple[RawRecord, ...] | None = None) -> str:
         values = self.read_all() if records is None else records
         return content_hash(
