@@ -234,6 +234,18 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ---
 
+## Phase 9: TUI 全框复制
+
+**Purpose**: 允许维护者在不批准、不拒绝和不持久化 trace 的前提下，把当前“最终请求 / 来源”边框内的完整安全可见文本复制到终端剪贴板。
+
+- [X] T110 [P] 为 FR-038/SC-020 在 `tests/contract/test_prompt_approval_tui.py` 增加 `C` 快捷键与复制按钮的失败优先 Textual Pilot 测试，逐字符核对最终 provider 载荷、全部提示片段和来源，并断言 decision 为空、请求仍 mounted、发送和持久 trace 均为 0
+- [X] T111 在 `src/bai_agent/debug/tui.py` 增加“复制框内全部内容 [C]”按钮、`C` binding、OSC 52 终端剪贴板调用和不含正文的完成通知；复制使用与边框显示相同的安全纯文本，不触发 approve/reject/exit 或载荷释放
+- [X] T112 同步 `spec.md`、`contracts/cli-tui.md`、`quickstart.md`、`README.md` 与实现审计，运行 TUI 合同、相关集成、完整回归、链接检查和 `git diff --check`，确认 FR-001—FR-038/SC-001—SC-020 名义覆盖且复制功能不改变请求生命周期
+
+**Checkpoint**: 维护者可通过按钮或 `C` 复制完整边框内容，并留在同一批准界面继续决定。
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -322,6 +334,7 @@ Setup -> Foundational safety/transaction
 5. **US4**: 运行级 TTY、恢复、释放和等价性硬化。
 6. **Final**: 200/1,000 次规模、凭据历史、可用性、Linux/Windows 兼容性和最终审计。
 7. **Pending revision**: 合法尾部原子丢弃、显式恢复、resumed reject 和 CLI/PowerShell 非阻塞启动。
+8. **TUI copy**: 复制当前最终请求/来源边框的完整安全文本，不改变批准事务与生命周期。
 
 ## Analyze Remediation Mapping
 

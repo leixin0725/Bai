@@ -98,6 +98,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
     """
     BINDINGS = [
         Binding("a", "approve", "批准并发送", priority=True),
+        Binding("c", "copy_trace", "复制框内全部内容", priority=True),
         Binding("r", "reject", "拒绝并撤销整轮", priority=True),
         Binding("escape", "reject", "拒绝", priority=True),
         Binding("ctrl+c", "interrupt", "拒绝并退出", priority=True),
@@ -109,7 +110,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         payload: MaterializedSendPayload,
         estimate: ContextUsageEstimate,
         *,
-        warning: str = "本地界面可能显示私人记忆；原始追踪不会保存。",
+        warning: str = "本地界面可能显示私人记忆；复制会写入终端剪贴板，原始追踪不会由应用保存。",
         color_policy: str = "auto",
     ) -> None:
         super().__init__()
@@ -139,6 +140,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
             yield Static(self._trace_renderable(), id="trace", markup=False)
         with Horizontal(id="actions"):
             yield Button("批准并发送 [A]", id="approve", variant="success", disabled=True)
+            yield Button("复制框内全部内容 [C]", id="copy")
             yield Button("拒绝并撤销整轮 [R]", id="reject", variant="error")
         yield Footer()
 
@@ -216,11 +218,20 @@ class PromptApprovalApp(App[ApprovalDecision]):
     def action_reject(self) -> None:
         self._finish(False)
 
+    def action_copy_trace(self) -> None:
+        if self.request is None or self.payload is None:
+            return
+        self.copy_to_clipboard(self._trace_text())
+        self.notify("已复制框内全部内容", timeout=2)
+
     def action_interrupt(self) -> None:
         self.interrupted = True
         self._finish(False)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "copy":
+            self.action_copy_trace()
+            return
         self._finish(event.button.id == "approve")
 
 

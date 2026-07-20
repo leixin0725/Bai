@@ -2,7 +2,7 @@
 
 **Purpose**: 在最终提交前逐项证明 spec、任务、测试、实现与文档的名义覆盖。
 **Audited**: 2026-07-20
-**Scope**: FR-001—FR-037、BR-001—BR-011、CR-001—CR-004、DR-001—DR-004、SC-001—SC-019。
+**Scope**: FR-001—FR-038、BR-001—BR-011、CR-001—CR-004、DR-001—DR-004、SC-001—SC-020。
 
 ## Functional Requirements
 
@@ -45,6 +45,7 @@
 | FR-035 | T098—T100/T106 · CLI/PowerShell mode matrix | ✓ |
 | FR-036 | T096/T097/T103/T104 · guarded atomic raw tail discard | ✓ |
 | FR-037 | T101/T105/T106 · fresh/resumed TUI rejection | ✓ |
+| FR-038 | T110/T111 · full trace-box clipboard copy | ✓ |
 
 ## Business, Credential, and Documentation Requirements
 
@@ -93,6 +94,7 @@
 | SC-017 | T065/T066/T072 · both profiles V4 Flash/non-thinking/8192/1M/384K | ✓ |
 | SC-018 | T098—T100/T106 · CLI/PowerShell/debug mode matrix | ✓ |
 | SC-019 | T101/T105 · fresh/resumed reject and Ctrl+C | ✓ |
+| SC-020 | T110 · shortcut/button exact clipboard text and zero decision/send | ✓ |
 
 ## Conflict Audit
 
@@ -100,6 +102,6 @@
 - [x] transaction vocabulary is exactly PREPARED, READY_PENDING, READY_TO_COMMIT.
 - [x] approve closes/clears TUI before send; sender releases in `finally`; actual usage stays numeric and does not reopen TUI.
 - [x] `deepseek-chat` appears only as migration history; active profiles use `deepseek-v4-flash`.
-- [x] all 75 named FR/BR/CR/DR/SC identifiers have evidence above: nominal coverage 75/75 (100%).
+- [x] all 77 named FR/BR/CR/DR/SC identifiers have evidence above: nominal coverage 77/77 (100%).
 - [x] no artifact requires default resume before new input; only explicit resume may resend old pending content.
 - [x] complete USER/ASSISTANT turns remain immutable; only a validated unreferenced tail USER may be atomically abandoned.

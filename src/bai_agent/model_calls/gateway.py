@@ -133,7 +133,7 @@ class ModelCallGateway:
                         prepared,
                         payload,
                         estimate,
-                        "本地界面可能显示私人记忆；原始追踪不会保存。",
+                        "本地界面可能显示私人记忆；复制会写入终端剪贴板，原始追踪不会由应用保存。",
                     )
                 except TurnRejected:
                     self.presenter.clear()

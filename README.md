@@ -54,7 +54,7 @@ resume 与 discard 参数互斥；`--resume-pending` 是唯一允许重发旧 pe
 python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 ```
 
-每个聊天、记忆整理、工具续接与 provider retry 都通过唯一 `ModelCallGateway`，在 DeepSeek `prepare()` 和唯一 `materialize_sdk_kwargs()` 后展示最终模型可见字段、完整正文及 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]` 来源。界面会提醒私人记忆只在本机临时显示；按 `A` 逐请求批准，按 `R`/`Esc` 明确拒绝并无痕撤销整轮。批准绑定 call、attempt 与物化载荷摘要，不修改请求；批准后、网络发送前 TUI 清除正文和来源，`send_once()` 无论成功或失败都在 `finally` 释放 sender 载荷。
+每个聊天、记忆整理、工具续接与 provider retry 都通过唯一 `ModelCallGateway`，在 DeepSeek `prepare()` 和唯一 `materialize_sdk_kwargs()` 后展示最终模型可见字段、完整正文及 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]` 来源。界面会提醒私人记忆只在本机临时显示；按 `C` 或点击“复制框内全部内容”可复制最终载荷、提示片段和来源，且不会作出批准决定；按 `A` 逐请求批准，按 `R`/`Esc` 明确拒绝并无痕撤销整轮。批准绑定 call、attempt 与物化载荷摘要，不修改请求；批准后、网络发送前 TUI 清除正文和来源，`send_once()` 无论成功或失败都在 `finally` 释放 sender 载荷。
 
 明确拒绝不会留下历史或 pending；恢复旧 pending 时发生 R/Esc/拒绝按钮/Ctrl+C，也会安全删除 raw 尾部的该 pending。已经批准的请求若因普通 provider/网络错误且重试结束，则只发布一条 USER pending；只有 `--resume-pending` 恢复，下一次普通启动或 `--discard-pending` 会丢弃并继续新对话。该模式默认关闭、退出即失效，也不会保存原始追踪。stdin/stdout 任一不是 TTY 时以 `DEBUG_TTY_REQUIRED`/exit 2 在任何持久化和模型发送前失败；Textual application-mode 预检同样先于应用构建。TUI 中 `Ctrl+C` 先按拒绝路径撤销再以 130 退出，EOF/终端丢失绝不批准并以脱敏 presentation failure 阻断。
 
@@ -64,7 +64,7 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 模型能力数字来自受版本控制的 `config/providers.toml`，不是运行时探测：chat 与 memory curator 使用非思考 `deepseek-v4-flash`，profile 输出预留仍为 8192；provider 元数据记录 1,000,000 context 和 384,000 output cap。离线 40 项参考集只含无凭据样本，不会在测试中访问真实 API。
 
-调试界面会完整暴露当前请求中的私人记忆，只应在可信本地终端使用；API Key/Authorization 由 transport 单独持有，既不进入可展示载荷，也不进入 journal、日志或实际用量摘要。若 TUI 运行期失败，未决定的 `PREPARED` journal 会在下一次持锁启动时安全丢弃；`READY_PENDING` 先前滚为唯一 USER pending，再由默认丢弃、显式丢弃或显式恢复策略处理；`READY_TO_COMMIT` 按 USER、ASSISTANT、可选长期记忆顺序幂等发布。恢复或尾部校验冲突会阻止新输入和 provider，不覆盖人工修改。
+调试界面会完整暴露当前请求中的私人记忆，只应在可信本地终端使用；复制功能会把框内内容写入由终端/操作系统管理的剪贴板，使用后可按需清除。API Key/Authorization 由 transport 单独持有，既不进入可展示载荷，也不进入 journal、日志或实际用量摘要。若 TUI 运行期失败，未决定的 `PREPARED` journal 会在下一次持锁启动时安全丢弃；`READY_PENDING` 先前滚为唯一 USER pending，再由默认丢弃、显式丢弃或显式恢复策略处理；`READY_TO_COMMIT` 按 USER、ASSISTANT、可选长期记忆顺序幂等发布。恢复或尾部校验冲突会阻止新输入和 provider，不覆盖人工修改。
 
 ## 记忆与安全
 

@@ -77,7 +77,7 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 │   正文……                                                   │
 │   来源 runtime:user_input turn=<id> record=<id>            │
 ├ 操作 ───────────────────────────────────────────────────────┤
-│ [A] 批准并发送                         [R] 拒绝并撤销整轮   │
+│ [A] 批准并发送  [C] 复制框内全部内容  [R] 拒绝并撤销整轮   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -95,6 +95,7 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 | Input | Semantic |
 |---|---|
 | `A` 或点击“批准并发送” | 仅在完整渲染/校验后 approve 当前 attempt |
+| `C` 或点击“复制框内全部内容” | 将“最终请求 / 来源”边框内的完整安全可见纯文本复制到终端剪贴板；不作决定、不发送、不关闭界面、不改变请求 |
 | `R`、`Esc` 或点击“拒绝并撤销整轮” | reject 当前 attempt，provider 不发送；fresh PREPARED 丢弃，resumed raw pending 安全截尾，随后返回聊天输入 |
 | `Ctrl+C` | 等同 reject 当前 attempt；完成 fresh PREPARED 或 resumed pending 丢弃后退出进程，退出码 130 |
 | EOF/终端丢失 | 不 approve；按 presentation failure 安全阻断并使事务恢复可收敛 |
@@ -111,13 +112,15 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 ## 隐私与清理
 
 - 每次以调试参数启动都显示私人记忆本地暴露提醒，首个 approval app 中保持可见。
-- TUI 不支持复制到持久 trace、导出、历史回看或重发。
+- 提醒明确说明复制会把框内私人内容写入终端剪贴板；剪贴板生命周期由终端/操作系统管理，维护者应仅在可信本地终端使用并按需清除。
+- TUI 只支持由维护者显式复制当前边框内的安全可见文本到终端剪贴板；应用不把副本写入 trace、日志、历史或其他持久介质，也不支持导出、历史回看或重发。
 - approve 且 app 退出后，presenter 的 prompt/provenance/PreparedProviderRequest/Rich renderable 引用应清空；sender 仅保留同一个不可变 materialized payload，并在发送成功或失败后的 `finally` 释放。
 - 错误、traceback 和日志只输出 call id、错误码及脱敏指引，不回显正文。
 
 ## TUI 合同测试
 
-- Textual Pilot 覆盖批准、拒绝、Esc、Ctrl+C、滚动、80x24、窄宽度、resize、无色与控制字符。
+- Textual Pilot 覆盖批准、复制快捷键、复制按钮、拒绝、Esc、Ctrl+C、滚动、80x24、窄宽度、resize、无色与控制字符。
+- 快捷键和按钮复制结果必须与边框内完整纯文本逐字符一致；复制后 decision 仍为空，请求引用仍在，provider 发送和持久 trace 均为 0。
 - 在正文尚未完整 mounted/validated 时触发 A，发送次数必须为 0。
 - stdout/stdin 非 TTY、重定向及 app 初始化失败均安全失败。
 - 默认/显式丢弃/显式恢复在 pending 存在与不存在时均覆盖；两个显式参数互斥。

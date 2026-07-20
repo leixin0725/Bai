@@ -180,6 +180,7 @@
 - **FR-035**: `chat` MUST 提供互斥的 `--resume-pending` 与 `--discard-pending`；`start.ps1` MUST 提供互斥的 `-ResumePending` 与 `-DiscardPending`，且两者均可与 `-DebugPrompts` 组合。无 pending 时三种启动模式均 MUST 安全进入新输入，不得调用恢复发送。
 - **FR-036**: pending 丢弃 MUST 只允许删除 raw archive 最末尾、角色为 USER、无对应 ASSISTANT 且未进入长期记忆、来源索引、coverage 或 curation frontier 的未完成轮次；MUST 保持此前完整轮次、全局 sequence 连续性、分段 JSONL、内容哈希和其他用户数据不变，并使用现有 WriterLease、私有权限与原子替换机制使崩溃后只可能保留完整旧状态或完整新状态。
 - **FR-037**: fresh 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C MUST 丢弃 PREPARED；恢复既有 pending 的调试轮次遇到相同明确拒绝时 MUST 通过受保护的尾部丢弃删除 raw pending。R、Esc 和拒绝按钮返回输入界面，Ctrl+C 完成丢弃后 MUST 以 130 退出；EOF、终端丢失或 presentation failure MUST 保持零发送且不得伪装成批准。
+- **FR-038**: 等待批准的 TUI MUST 提供“复制框内全部内容”按钮和 `C` 快捷键，把最终 provider 载荷、全部提示片段及来源按当前安全可见文本完整复制到终端剪贴板；复制 MUST NOT 批准、拒绝、发送、关闭界面、改变请求或在应用内创建持久 trace，完成通知 MUST NOT 回显正文。
 
 ### Core Business Rules *(mandatory)*
 
@@ -204,7 +205,7 @@
 
 ### Documentation Requirements *(mandatory for major updates)*
 
-- **DR-001**: README 和运行指南 MUST 说明调试视图的用途、启动参数、默认关闭行为、pending 默认丢弃/显式恢复/显式丢弃命令、基础类 TUI 的调用与来源标签、交互式颜色及无颜色模式、上下文估算字段、逐次批准、批准后清除、拒绝整轮撤销、普通失败转 pending 和私人记忆暴露提醒。
+- **DR-001**: README 和运行指南 MUST 说明调试视图的用途、启动参数、默认关闭行为、pending 默认丢弃/显式恢复/显式丢弃命令、基础类 TUI 的调用与来源标签、框内全部内容复制及快捷键、交互式颜色及无颜色模式、上下文估算字段、逐次批准、批准后清除、拒绝整轮撤销、普通失败转 pending 和私人记忆暴露提醒。
 - **DR-002**: 快速开始与验收说明 MUST 提供可执行的最小验证流程，覆盖单次聊天、多次模型调用、文件来源、运行时来源、上下文估算、批准发送、fresh 与 resumed 拒绝、普通失败后的默认丢弃/`--discard-pending`/`--resume-pending`、PowerShell 参数透传、调试关闭、非 TTY 失败和凭据不显示。
 - **DR-003**: 配置说明 MUST 记录颜色策略、高占用阈值、模型上下文容量元数据的默认值、校验失败行为、`deepseek-v4-flash` 迁移不变量和不同模型提供商的兼容性边界。
 - **DR-004**: 故障排查说明 MUST 解释来源未知、估算不可用、容量超限、交互式无颜色或非交互终端、追踪完整性失败、拒绝回滚中断、普通 provider 失败、写工具门禁和提供商未返回实际用量时的表现与恢复方式。
@@ -245,6 +246,7 @@
 - **SC-017**: 配置和 provider 合同测试中，chat 与 memory curator 均使用 `deepseek-v4-flash` 非思考模式，`max_output_tokens` 均为 8192，迁移前后其余生成参数差异数量为 0；provider 能力元数据分别为 1,000,000 context 和 384,000 output cap。
 - **SC-018**: 默认、`--discard-pending`、`--resume-pending` 与 `--debug-prompts` 的适用组合在存在/不存在 pending 时全部通过合同与集成测试；CLI 互斥参数退出 2，PowerShell 互斥参数在读取凭据或启动 Python 前给出参数绑定错误。
 - **SC-019**: fresh 与 resumed 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C 验收中 provider 发送次数均为 0；resumed pending 在明确拒绝后从 raw 尾部消失，Ctrl+C 退出码为 130，其余明确拒绝返回输入循环。
+- **SC-020**: Textual Pilot 中通过 `C` 和复制按钮得到的剪贴板文本 MUST 与边框内完整纯文本逐字符一致，且两条路径的批准、拒绝、provider 发送、界面关闭和持久 trace 数量均为 0。
 
 ## Assumptions
 
