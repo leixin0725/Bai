@@ -138,6 +138,12 @@ def load_config(
             raise BaiError("CONFIG_INVALID", f"模型 profile {profile_id} 的 Provider 引用无效。")
         provider_capability = next(item for item in providers if item.get("id") == profile.get("provider"))
         validate_provider_capabilities(provider_capability, profile)
+        if profile_id in {"chat", "memory_curator"} and (
+            profile.get("model") != "deepseek-v4-flash"
+            or profile.get("thinking_enabled") is not False
+            or profile.get("max_output_tokens") != 8192
+        ):
+            raise BaiError("PROVIDER_CAPABILITY_INVALID", f"模型 profile {profile_id} 未满足 V4 Flash 迁移不变量。")
     if any(item.model_profile_id not in model_profiles for item in persona_values):
         raise BaiError("CONFIG_INVALID", "人格引用的模型 profile 不存在。")
 

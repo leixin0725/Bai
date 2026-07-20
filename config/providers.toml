@@ -23,7 +23,7 @@ retryable_statuses = [429, 500, 503]
 
 [model_profiles.chat]
 provider = "deepseek"
-model = "deepseek-chat"
+model = "deepseek-v4-flash"
 context_window_tokens = 1000000
 stream = false
 thinking_enabled = false
@@ -34,7 +34,7 @@ structured_output = false
 
 [model_profiles.memory_curator]
 provider = "deepseek"
-model = "deepseek-chat"
+model = "deepseek-v4-flash"
 context_window_tokens = 1000000
 stream = false
 thinking_enabled = false

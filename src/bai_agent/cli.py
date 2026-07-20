@@ -64,6 +64,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_dir = args.command_config_dir or args.config_dir
             snapshot = load_config(config_dir)
             settings = snapshot.settings
+            provider_document = settings["providers.toml"]
+            providers_by_id = {item["id"]: item for item in provider_document["providers"]}
             _print(
                 {
                     "ok": True,
@@ -72,6 +74,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "roles": sorted({item.role for item in snapshot.personas}),
                     "prompts": sorted(snapshot.prompts),
                     "provider_profiles": sorted(settings["providers.toml"]["model_profiles"]),
+                    "model_capabilities": {
+                        profile_id: {
+                            "model": profile["model"],
+                            "thinking_enabled": profile["thinking_enabled"],
+                            "max_output_tokens": profile["max_output_tokens"],
+                            "context_window_tokens": profile.get("context_window_tokens"),
+                            "max_output_cap": providers_by_id[profile["provider"]]["max_output_cap"],
+                            "token_estimator": providers_by_id[profile["provider"]]["token_estimator"],
+                        }
+                        for profile_id, profile in sorted(provider_document["model_profiles"].items())
+                    },
                     "states": [snapshot.default_state_id],
                     "tools": sorted(
                         item["id"] for item in settings["tools.toml"]["tools"] if item["enabled"]

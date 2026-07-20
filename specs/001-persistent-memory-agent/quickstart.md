@@ -82,7 +82,10 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 ```bash
 pytest tests/contract/test_model_call_gateway.py tests/integration/test_prompt_trace_single_call.py -q
 pytest tests/integration/test_prompt_trace_multi_call.py tests/contract/test_prompt_tui_presentation.py -q
+pytest tests/unit/test_context_estimation.py tests/integration/test_prompt_trace_actual_usage.py -q
 ```
+
+估算字段使用 `≈`：`input = sum(parts) + protocol overhead`，`peak = input + max_output_tokens`。能力取自配置中的 `deepseek-v4-flash` 1M context/384K output cap；两个 profile 仍预留 8192 输出且保持原有生成参数。合法实际 usage 只在 TUI 清除后的普通输出显示；缺失、负数或不守恒 usage 显示不可用。
 
 ## 4. 记忆组织与完整覆盖
 

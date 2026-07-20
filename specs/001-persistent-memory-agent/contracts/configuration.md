@@ -225,3 +225,5 @@ default_enabled = false
 # 002 调试扩展同步（2026-07-20）
 
 配置快照现在为 agent、provider、tool、state、persona 与 prompt 文件保留项目相对路径、UTF-8 SHA-256 和统一 revision。`agent.toml` 的 `[debug_prompt]` 只维护 `color`、上下文风险阈值与估算安全裕度；调试启用状态仍只来自 `chat --debug-prompts`，不得落入配置。Provider 能力单独声明 context window、output cap 与 estimator，非法上限必须报错，不能用本地 `context_budget` 冒充模型容量。
+
+截至 2026-07-20，chat 与 memory curator 均为 `deepseek-v4-flash`、`thinking_enabled=false`、`max_output_tokens=8192`；chat 的 temperature/tools/structured-output 以及 curator 的 tools/structured-output/output schema 保持原值。DeepSeek 能力元数据为 1,000,000 context、384,000 output cap 与 `deepseek_character_v1`。该 estimator 对唯一物化的 messages/tools 整体估算，应用安全裕度并以前缀边际/协议开销保证分段守恒；不兼容结构返回 unavailable，不回退到字符数除四。

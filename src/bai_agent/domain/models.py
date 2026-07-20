@@ -152,6 +152,7 @@ class CompletionResult(FrozenModel):
     finish_reason: str
     tool_calls: tuple[dict[str, JsonValue], ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
+    usage_unavailable_reason: str | None = None
 
 
 class StateResolutionContext(FrozenModel):

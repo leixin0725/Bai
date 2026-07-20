@@ -50,6 +50,10 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 同一轮的 memory curation → chat → tool continuation 按网关分配的严格 call sequence 逐项出现；provider retry 保持逻辑 call 身份，但以新的 attempt、状态和批准项展示，前一项未决定时不会处理后一项。交互 TTY 的稳定色板只增强来源类别，`NO_COLOR=1` 或 `debug_prompt.color="never"` 时仍保留 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]`、分组边界与缩进。输出重定向不是无色模式，会按非 TTY 规则失败。
 
+批准前的上下文栏把输入近似估算、逐段估算、provider 协议开销、最大输出预留、预计峰值、模型容量、占比、剩余和 `normal/high/critical/exceeded` 分开显示；`≈` 表示 `deepseek_character_v1` 的保守离线估算，不是精确 tokenizer。容量未知或载荷不受支持时明确显示未知/不可估算。响应带合法 usage 时，TUI 已关闭，普通聊天输出只显示实际输入/输出/总量、实际占比和输入估算误差，不恢复原文。
+
+模型能力数字来自受版本控制的 `config/providers.toml`，不是运行时探测：chat 与 memory curator 使用非思考 `deepseek-v4-flash`，profile 输出预留仍为 8192；provider 元数据记录 1,000,000 context 和 384,000 output cap。离线 40 项参考集只含无凭据样本，不会在测试中访问真实 API。
+
 ## 记忆与安全
 
 运行数据默认位于 `data/memory/`：`raw/*.jsonl` 是不可变原始记录，`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：

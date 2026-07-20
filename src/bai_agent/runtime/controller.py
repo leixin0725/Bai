@@ -337,4 +337,16 @@ class SingleTurnController:
                 )
         if self.on_output:
             self.on_output(assistant.content)
+            if getattr(self.provider, "debug_enabled", False):
+                usage = getattr(self.provider, "last_actual_usage", None)
+                if usage is not None and usage.status == "actual":
+                    percent = f"{usage.actual_percent:.1f}%" if usage.actual_percent is not None else "未知"
+                    self.on_output(
+                        "实际用量："
+                        f"输入={usage.actual_input_tokens}，输出={usage.actual_output_tokens}，"
+                        f"总量={usage.actual_total_tokens}，占比={percent}，"
+                        f"输入估算误差={usage.input_estimation_error if usage.input_estimation_error is not None else '未知'}。"
+                    )
+                elif usage is not None:
+                    self.on_output(f"实际用量：不可用（{usage.reason}）")
         return assistant.content

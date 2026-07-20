@@ -150,6 +150,8 @@ pytest tests/integration -k "actual_usage" -q
 
 检查空白、中文、英文、混合 Unicode、长记忆、tools 和未知模型：
 
+离线参考集位于 `tests/fixtures/prompt_trace/deepseek_usage_cases.json`，记录 `deepseek-v4-flash`、采集日期、官方 prompt usage、payload hash 与刷新说明；默认测试只读取该文件，不访问实时 API。
+
 - 可估算时 `input == sum(parts) + protocol_overhead`；
 - `peak == input + max_output_tokens`；
 - 容量未知时占比/剩余显示未知；
@@ -168,6 +170,8 @@ python -m pytest tests/integration/test_repository_secret_safety.py -q
 ```
 
 性能测试从 frozen request、来源和估算全部就绪测到标题、身份和上下文摘要完成 mounted；记录首次冷启动，但强制门禁只计算随后 30 次同一进程启动的 p95，要求不超过 500 ms。
+
+门禁基线为 `tests/performance/baselines/ubuntu-24.04-python-3.13.json`；Windows 只做功能兼容并跳过该强制时延断言。
 
 Windows 次要功能兼容验收：
 

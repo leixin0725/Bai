@@ -78,7 +78,7 @@ class FakeAdapter:
             self.sent.append(payload)
             if self.failures:
                 raise self.failures.pop(0)
-            return CompletionResult(text="完成", finish_reason="stop", usage={"input_tokens": 2, "output_tokens": 1})
+            return CompletionResult(text="完成", finish_reason="stop", usage={"input_tokens": 2, "output_tokens": 1, "total_tokens": 3})
         finally:
             self.active_payload = None
 

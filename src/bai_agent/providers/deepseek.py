@@ -140,14 +140,30 @@ class DeepSeekProvider:
             if not isinstance(content, str) and not tool_calls:
                 raise BaiError("PROVIDER_PROTOCOL_INVALID", "模型响应正文为空或无效。")
             usage = getattr(response, "usage", None)
-            input_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-            output_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-            total_tokens = int(getattr(usage, "total_tokens", input_tokens + output_tokens) or 0)
+            usage_values: dict[str, int] = {}
+            usage_reason = None
+            if usage is None:
+                usage_reason = "provider 未返回实际用量。"
+            else:
+                try:
+                    input_tokens = int(usage.prompt_tokens)
+                    output_tokens = int(usage.completion_tokens)
+                    total_tokens = int(getattr(usage, "total_tokens", input_tokens + output_tokens))
+                    if min(input_tokens, output_tokens, total_tokens) < 0 or total_tokens != input_tokens + output_tokens:
+                        raise ValueError
+                    usage_values = {
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": total_tokens,
+                    }
+                except (AttributeError, TypeError, ValueError):
+                    usage_reason = "provider 返回的实际用量无效或不守恒。"
             return CompletionResult(
                 text=content or "",
                 finish_reason=str(choice.finish_reason or "stop"),
                 tool_calls=tuple(tool_calls),
-                usage={"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": total_tokens},
+                usage=usage_values,
+                usage_unavailable_reason=usage_reason,
             )
         except BaiError:
             raise

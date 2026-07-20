@@ -143,23 +143,23 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ### Tests for User Story 3（先写并确认失败）
 
-- [ ] T061 [P] [US3] 为 BR-004 在 `tests/unit/test_context_estimation.py` 增加总量守恒、输出预留、峰值、容量占比/负剩余、normal/high/critical/exceeded、容量未知和 unsupported payload 测试
-- [ ] T062 [P] [US3] 在 `tests/unit/test_context_estimation_properties.py` 用 Hypothesis 覆盖任意 Unicode/空段/part 组合的非负值、确定性、顺序和总量守恒属性
-- [ ] T063 [P] [US3] 在 `tests/fixtures/prompt_trace/deepseek_usage_cases.json` 记录至少 40 个无真实凭据、不发实时 API 的中英混合/长记忆/tools 样本及其 `deepseek-v4-flash` 模型 id、采集日期、官方 usage、payload hash 和刷新说明，并在 `tests/performance/test_deepseek_estimator_accuracy.py` 验证 SC-005 参考集来源与 95% 误差目标
-- [ ] T064 [P] [US3] 在 `tests/integration/test_prompt_trace_actual_usage.py` 增加合法/缺失/负数/不守恒 provider usage、估算误差、普通终端无原文摘要和不重新打开 prompt TUI 测试
-- [ ] T065 [P] [US3] 为 FR-034/SC-017 在 `tests/contract/test_model_capabilities.py` 增加 DeepSeek 1,000,000 context/384,000 output cap、chat 与 memory curator 迁移至 `deepseek-v4-flash`、两者 `thinking_enabled=false`/`max_output_tokens=8192`、其余生成参数不变、未知容量和不兼容 estimator 行为测试并确认失败
-- [ ] T066 [P] [US3] 为 SC-007 在 `tests/performance/test_prompt_tui_latency.py` 以 monotonic mounted 事件、fake provider、原生 Ubuntu 24.04/Python 3.13/80x24 `xterm-256color`，从 frozen request/来源/估算就绪测量首次冷启动并单独记录，再以 `tests/performance/baselines/ubuntu-24.04-python-3.13.json` 验证 30 次同进程启动 p95≤500 ms 及完整批准前发送 0
+- [X] T061 [P] [US3] 为 BR-004 在 `tests/unit/test_context_estimation.py` 增加总量守恒、输出预留、峰值、容量占比/负剩余、normal/high/critical/exceeded、容量未知和 unsupported payload 测试
+- [X] T062 [P] [US3] 在 `tests/unit/test_context_estimation_properties.py` 用 Hypothesis 覆盖任意 Unicode/空段/part 组合的非负值、确定性、顺序和总量守恒属性
+- [X] T063 [P] [US3] 在 `tests/fixtures/prompt_trace/deepseek_usage_cases.json` 记录至少 40 个无真实凭据、不发实时 API 的中英混合/长记忆/tools 样本及其 `deepseek-v4-flash` 模型 id、采集日期、官方 usage、payload hash 和刷新说明，并在 `tests/performance/test_deepseek_estimator_accuracy.py` 验证 SC-005 参考集来源与 95% 误差目标
+- [X] T064 [P] [US3] 在 `tests/integration/test_prompt_trace_actual_usage.py` 增加合法/缺失/负数/不守恒 provider usage、估算误差、普通终端无原文摘要和不重新打开 prompt TUI 测试
+- [X] T065 [P] [US3] 为 FR-034/SC-017 在 `tests/contract/test_model_capabilities.py` 增加 DeepSeek 1,000,000 context/384,000 output cap、chat 与 memory curator 迁移至 `deepseek-v4-flash`、两者 `thinking_enabled=false`/`max_output_tokens=8192`、其余生成参数不变、未知容量和不兼容 estimator 行为测试并确认失败
+- [X] T066 [P] [US3] 为 SC-007 在 `tests/performance/test_prompt_tui_latency.py` 以 monotonic mounted 事件、fake provider、原生 Ubuntu 24.04/Python 3.13/80x24 `xterm-256color`，从 frozen request/来源/估算就绪测量首次冷启动并单独记录，再以 `tests/performance/baselines/ubuntu-24.04-python-3.13.json` 验证 30 次同进程启动 p95≤500 ms 及完整批准前发送 0
 
 ### Implementation for User Story 3
 
-- [ ] T067 [US3] 在 `src/bai_agent/model_calls/estimation.py` 实现 estimator registry、`deepseek_character_v1` 对 materialized messages/tools 的整体估算、前缀边际分配、协议 overhead、配置安全裕度和 unavailable(reason)
-- [ ] T068 [P] [US3] 在 `src/bai_agent/providers/deepseek.py` 映射合法 prompt/completion/total usage，并对缺失、负数和不守恒数据返回 unavailable
-- [ ] T069 [US3] 在 `src/bai_agent/model_calls/gateway.py` 于批准前对唯一 materialized payload 调用 estimator、验证分段守恒，并在响应后仅生成不持有 prompt/PreparedProviderRequest/MaterializedSendPayload/part/SourceRef/TUI 对象的 ActualUsageSummary
-- [ ] T070 [P] [US3] 在 `src/bai_agent/debug/tui.py` 增加批准前的 `≈` 输入/分段/overhead、输出预留、峰值、容量、占比、剩余、主要贡献和分级风险；在 `src/bai_agent/runtime/controller.py` 通过既有 `on_output` 路径于 prompt TUI 关闭后显示无原文 ActualUsageSummary，禁止 debug TUI 处理响应后输出
-- [ ] T071 [P] [US3] 在 `config/providers.toml` 将 chat 与 memory curator 迁移到 `deepseek-v4-flash`，保持两者 `thinking_enabled=false`、`max_output_tokens=8192` 及现有 temperature/tools/structured-output 等生成参数不变，记录 1M context/384K output cap/estimator 能力；在 `config/agent.toml` 校准阈值且不改变 `context_budget` 语义
-- [ ] T072 [P] [US3] 为 DR-001/DR-004 更新 `README.md` 的上下文字段、估算/实际区别、普通用量摘要、未知/超限表现和能力数字来源
-- [ ] T073 [P] [US3] 为 DR-002/DR-003/DR-004 更新 `specs/001-persistent-memory-agent/contracts/configuration.md`、`specs/001-persistent-memory-agent/quickstart.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，同步模型迁移、fixture 来源、估算方法、基准口径和故障排查
-- [ ] T074 [US3] 运行 `tests/unit/test_context_estimation.py tests/unit/test_context_estimation_properties.py tests/performance/test_deepseek_estimator_accuracy.py tests/integration/test_prompt_trace_actual_usage.py tests/contract/test_model_capabilities.py tests/performance/test_prompt_tui_latency.py -q`、配置/provider 回归、文档命令和 `git diff --check`，随后通过 Git 扩展原子提交 US3 的 estimation/provider/gateway/TUI/config/tests 与 README/001/002 文档
+- [X] T067 [US3] 在 `src/bai_agent/model_calls/estimation.py` 实现 estimator registry、`deepseek_character_v1` 对 materialized messages/tools 的整体估算、前缀边际分配、协议 overhead、配置安全裕度和 unavailable(reason)
+- [X] T068 [P] [US3] 在 `src/bai_agent/providers/deepseek.py` 映射合法 prompt/completion/total usage，并对缺失、负数和不守恒数据返回 unavailable
+- [X] T069 [US3] 在 `src/bai_agent/model_calls/gateway.py` 于批准前对唯一 materialized payload 调用 estimator、验证分段守恒，并在响应后仅生成不持有 prompt/PreparedProviderRequest/MaterializedSendPayload/part/SourceRef/TUI 对象的 ActualUsageSummary
+- [X] T070 [P] [US3] 在 `src/bai_agent/debug/tui.py` 增加批准前的 `≈` 输入/分段/overhead、输出预留、峰值、容量、占比、剩余、主要贡献和分级风险；在 `src/bai_agent/runtime/controller.py` 通过既有 `on_output` 路径于 prompt TUI 关闭后显示无原文 ActualUsageSummary，禁止 debug TUI 处理响应后输出
+- [X] T071 [P] [US3] 在 `config/providers.toml` 将 chat 与 memory curator 迁移到 `deepseek-v4-flash`，保持两者 `thinking_enabled=false`、`max_output_tokens=8192` 及现有 temperature/tools/structured-output 等生成参数不变，记录 1M context/384K output cap/estimator 能力；在 `config/agent.toml` 校准阈值且不改变 `context_budget` 语义
+- [X] T072 [P] [US3] 为 DR-001/DR-004 更新 `README.md` 的上下文字段、估算/实际区别、普通用量摘要、未知/超限表现和能力数字来源
+- [X] T073 [P] [US3] 为 DR-002/DR-003/DR-004 更新 `specs/001-persistent-memory-agent/contracts/configuration.md`、`specs/001-persistent-memory-agent/quickstart.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，同步模型迁移、fixture 来源、估算方法、基准口径和故障排查
+- [X] T074 [US3] 运行 `tests/unit/test_context_estimation.py tests/unit/test_context_estimation_properties.py tests/performance/test_deepseek_estimator_accuracy.py tests/integration/test_prompt_trace_actual_usage.py tests/contract/test_model_capabilities.py tests/performance/test_prompt_tui_latency.py -q`、配置/provider 回归、文档命令和 `git diff --check`，随后通过 Git 扩展原子提交 US3 的 estimation/provider/gateway/TUI/config/tests 与 README/001/002 文档
 
 **Checkpoint**: US3 的估算、实际值和性能结果均具有稳定口径与可追溯 fixture，不依赖猜测数字。
 

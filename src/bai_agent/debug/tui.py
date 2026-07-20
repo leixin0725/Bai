@@ -125,9 +125,14 @@ class PromptApprovalApp(App[ApprovalDecision]):
             return f"上下文：不可估算（{self.estimate.reason}）· 输出预留={self.estimate.max_output_tokens}"
         capacity = self.estimate.context_capacity if self.estimate.context_capacity is not None else "未知"
         percent = f"{self.estimate.projected_percent:.1f}%" if self.estimate.projected_percent is not None else "未知"
+        remaining = self.estimate.projected_remaining_tokens if self.estimate.projected_remaining_tokens is not None else "未知"
+        details = ", ".join(f"{part_id}≈{tokens}" for part_id, tokens in self.estimate.part_tokens.items()) or "无参与片段"
+        main = max(self.estimate.part_tokens.items(), key=lambda item: item[1])[0] if self.estimate.part_tokens else "协议开销"
         return (
             f"上下文：输入≈{self.estimate.estimated_input_tokens} + 输出预留{self.estimate.max_output_tokens} "
-            f"= 峰值{self.estimate.projected_peak_tokens} / 容量{capacity} ({percent}) [{self.estimate.risk}]"
+            f"= 峰值{self.estimate.projected_peak_tokens} / 容量{capacity} ({percent}) "
+            f"剩余={remaining} [{self.estimate.risk}]\n"
+            f"分段：{details}；协议开销≈{self.estimate.protocol_overhead_tokens}；主要输入={main}"
         )
 
     def _trace_renderable(self) -> Text:

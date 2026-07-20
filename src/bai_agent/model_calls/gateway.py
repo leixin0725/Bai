@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from bai_agent.domain.errors import BaiError, DebugPresentationError, TurnRejected
-from bai_agent.domain.models import ApprovalValue, ContextUsageEstimate, MaterializedSendPayload, ModelCallDraft
+from bai_agent.domain.models import (
+    ActualUsageSummary,
+    ApprovalValue,
+    ContextUsageEstimate,
+    MaterializedSendPayload,
+    ModelCallDraft,
+)
 from bai_agent.model_calls.provenance import validate_provenance
 from bai_agent.security.credentials import PromptCredentialGuard
 
@@ -73,6 +79,7 @@ class ModelCallGateway:
         self.backoff_seconds = max(0.0, float(backoff_seconds))
         self.sender_payload: MaterializedSendPayload | None = None
         self.last_estimate: ContextUsageEstimate | None = None
+        self.last_actual_usage: ActualUsageSummary | None = None
         self.identity_allocator = identity_allocator or CallIdentityAllocator()
         self.call_states: list[CallAttemptState] = []
         self._serial_lock = asyncio.Lock()
@@ -135,6 +142,7 @@ class ModelCallGateway:
             self._record(draft, attempt, "sender_owned")
             try:
                 result = await self.adapter.send_once(payload)
+                self.last_actual_usage = self._actual_usage(result, estimate)
                 self._record(draft, attempt, "completed")
                 return result
             except BaiError as exc:
@@ -148,6 +156,28 @@ class ModelCallGateway:
                 self.sender_payload = None
         assert last_error is not None
         raise last_error
+
+    @staticmethod
+    def _actual_usage(result, estimate: ContextUsageEstimate) -> ActualUsageSummary:
+        values = result.usage
+        try:
+            input_tokens = values["input_tokens"]
+            output_tokens = values["output_tokens"]
+            total_tokens = values["total_tokens"]
+            if any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in (input_tokens, output_tokens, total_tokens)):
+                raise ValueError
+            if total_tokens != input_tokens + output_tokens:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            return ActualUsageSummary.unavailable(
+                result.usage_unavailable_reason or "provider 未返回合法且守恒的实际用量。"
+            )
+        return ActualUsageSummary.actual(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            context_capacity=estimate.context_capacity,
+            estimated_input_tokens=estimate.estimated_input_tokens,
+        )
 
 
 @dataclass

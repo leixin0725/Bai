@@ -1,0 +1,10 @@
+{
+  "platform": "Ubuntu 24.04",
+  "python": "3.13",
+  "terminal": "xterm-256color",
+  "size": "80x24",
+  "warm_runs": 30,
+  "p95_milliseconds": 500,
+  "cold_start_recorded_separately": true,
+  "updated_at": "2026-07-20"
+}
