@@ -27,29 +27,34 @@ def validate_history_timestamps(value: Any) -> dict[str, Any]:
     """[2026-07-20] 独立时间策略严格拒绝缺失、未知、宽松类型和本地时区回退。"""
     try:
         raw = require_mapping(value, "history_timestamps.toml")
-        if set(raw) != HISTORY_TIMESTAMP_FIELDS:
-            raise ValueError("字段集合不匹配")
-        schema = raw["schema_version"]
-        zone_name = raw["display_timezone"]
-        gap = raw["long_gap_minutes"]
-        refresh = raw["continuous_segment_refresh_minutes"]
-        split = raw["split_on_local_date_change"]
-        if type(schema) is not int or schema != 1:
-            raise ValueError("schema_version")
-        if not isinstance(zone_name, str) or not zone_name.strip():
-            raise ValueError("display_timezone")
-        if type(gap) is not int or not 1 <= gap <= 1440:
-            raise ValueError("long_gap_minutes")
-        if type(refresh) is not int or not 1 <= refresh <= 10080 or refresh < gap:
-            raise ValueError("continuous_segment_refresh_minutes")
-        if type(split) is not bool:
-            raise ValueError("split_on_local_date_change")
+    except (TypeError, ValueError) as exc:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 根对象类型无效。") from exc
+    missing = sorted(HISTORY_TIMESTAMP_FIELDS - set(raw))
+    unknown = sorted(set(raw) - HISTORY_TIMESTAMP_FIELDS)
+    if missing or unknown:
+        detail = "、".join((*[f"缺少 {item}" for item in missing], *[f"未知 {item}" for item in unknown]))
+        raise BaiError("CONFIG_INVALID", f"history_timestamps.toml 字段集合无效：{detail}。")
+    schema = raw["schema_version"]
+    zone_name = raw["display_timezone"]
+    gap = raw["long_gap_minutes"]
+    refresh = raw["continuous_segment_refresh_minutes"]
+    split = raw["split_on_local_date_change"]
+    if type(schema) is not int or schema != 1:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 schema_version 必须是整数 1。")
+    if not isinstance(zone_name, str) or not zone_name.strip():
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 display_timezone 必须是非空 IANA 名称。")
+    if type(gap) is not int or not 1 <= gap <= 1440:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 long_gap_minutes 必须是 1..1440 的整数。")
+    if type(refresh) is not int or not 1 <= refresh <= 10080:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 continuous_segment_refresh_minutes 必须是 1..10080 的整数。")
+    if refresh < gap:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 continuous_segment_refresh_minutes 必须大于等于 long_gap_minutes。")
+    if type(split) is not bool:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 split_on_local_date_change 必须是布尔值。")
+    try:
         ZoneInfo(zone_name)
-    except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError) as exc:
-        raise BaiError(
-            "CONFIG_INVALID",
-            "history_timestamps.toml 字段、类型、范围、关系或 IANA 时区无效。",
-        ) from exc
+    except ZoneInfoNotFoundError as exc:
+        raise BaiError("CONFIG_INVALID", "history_timestamps.toml 字段 display_timezone 不是可解析的 IANA 时区。") from exc
     return dict(raw)
 
 

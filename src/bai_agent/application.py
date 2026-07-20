@@ -96,12 +96,13 @@ class AgentApplication:
             for persona_id in states[fresh.default_state_id]
             if f"persona:{persona_id}" in assets
         )
+        temporal_policy = _temporal_policy(fresh)
         assembler = PromptAssembler.mvp(
             persona_prompts.trusted_chat_instruction,
             persona_prompts.state_prompts(states[fresh.default_state_id]),
             base_asset=assets.get("persona:chat"),
             state_assets=state_asset_values,
-            temporal_policy=_temporal_policy(fresh),
+            temporal_policy=temporal_policy,
         )
         chat_provider = self.controller.provider
         curator_provider = self.controller.curation_service.provider
@@ -140,22 +141,87 @@ class AgentApplication:
                 estimator=curator_estimator,
                 tracer=getattr(self.controller.curation_service.provider, "tracer", None),
             )
-        # [2026-07-19] 所有新对象先完整校验构造，再一次替换轮次边界快照。
-        self.controller.state_resolver = resolver
-        self.controller.prompt_assembler = assembler
-        self.controller.provider = chat_provider
-        self.controller.curation_service.provider = curator_provider
-        self.controller.curation_service.curator_persona = persona_prompts.memory_curator
-        self.controller.curation_service.prompt_template = fresh.prompts["memory_curation"]
-        self.controller.curation_service.config_revision = fresh.revision
-        self.controller.curation_service.temporal_policy = _temporal_policy(fresh)
-        self.controller.temporal_policy = _temporal_policy(fresh)
+        short = settings["agent.toml"]["short_term"]
+        curation_service = CurationService(
+            self.archive,
+            self.long_term_store,
+            curator_provider,
+            CurationPolicy(
+                max_records=int(short["max_records"]),
+                reserved_records=int(short["reserved_records"]),
+                min_batch_records=int(short["curation_batch_min_records"]),
+                max_batch_records=int(short["curation_batch_max_records"]),
+            ),
+            curator_persona=persona_prompts.memory_curator,
+            prompt_template=fresh.prompts["memory_curation"],
+            config_revision=fresh.revision,
+            temporal_policy=temporal_policy,
+            tracer=getattr(self.controller.curation_service, "tracer", None),
+        )
+        tool_config = next(
+            item for item in settings["tools.toml"]["tools"]
+            if item["id"] == "memory_source_query"
+        )
+        source_tool = MemorySourceQueryTool(
+            self.long_term_store,
+            self.archive,
+            page_size=int(tool_config["page_size"]),
+            tracer=self.controller.tracer,
+        )
+        registry = ToolRegistry()
+        registry.register(
+            source_tool.definition,
+            source_tool,
+            enabled=bool(tool_config["enabled"]),
+            allowed_personas=tuple(tool_config["allowed_personas"]),
+            read_only=bool(tool_config["read_only"]),
+            source_refs=(
+                SourceRef(
+                    source_kind=SourceKind.CONFIG_FILE,
+                    source_id="config:tools",
+                    project_relative_path="config/tools.toml",
+                    content_sha256=assets["config:tools"].content_sha256,
+                    revision=fresh.revision,
+                    entity_ids=(source_tool.definition.tool_id,),
+                    producer="config_loader",
+                ),
+            ),
+        )
+        tool_executor = ToolExecutor(
+            registry,
+            deadline_seconds=float(settings["agent.toml"]["runtime"]["tool_deadline_seconds"]),
+            max_result_bytes=int(tool_config["max_result_bytes"]),
+            clock=self.controller.clock,
+            tracer=self.controller.tracer,
+        )
         budget = settings["agent.toml"]["context_budget"]
-        self.controller.memory_budgets = {
+        memory_budgets = {
             "overview_chars": int(settings["agent.toml"]["memory_overview"]["max_chars"]),
             "long_term_chars": int(budget["long_term_tokens"]) * 4,
             "recent_chars": int(budget["short_term_tokens"]) * 4,
         }
+        # [2026-07-20] 所有消费者及有副作用边界先在局部完整构造，再以一个引用替换发布。
+        controller = SingleTurnController(
+            self.archive,
+            chat_provider,
+            resolver,
+            assembler,
+            on_output=self.controller.on_output,
+            tracer=self.controller.tracer,
+            long_term_store=self.long_term_store,
+            curation_service=curation_service,
+            tool_executor=tool_executor,
+            max_tool_rounds=int(settings["agent.toml"]["runtime"]["max_tool_rounds"]),
+            memory_budgets=memory_budgets,
+            tool_definitions=tuple(
+                definition.model_dump(mode="json")
+                for definition in registry.definitions_for("chat")
+            ),
+            transaction_root=self.controller.transaction_root,
+            temporal_policy=temporal_policy,
+            clock=self.controller.clock,
+        )
+        self.controller = controller
         self.snapshot = fresh
 
     async def run_turn(self, content: str, *, resume_pending: bool = False, turn_id: str | None = None) -> str:
@@ -217,6 +283,7 @@ def build_application(
         persona_prompts = PersonaPromptSet.from_snapshot(snapshot)
         state_prompts = persona_prompts.state_prompts(states[snapshot.default_state_id])
         assets = {item.asset_id: item for item in snapshot.assets}
+        temporal_policy = _temporal_policy(snapshot)
         assembler = PromptAssembler.mvp(
             persona_prompts.trusted_chat_instruction,
             state_prompts,
@@ -226,7 +293,7 @@ def build_application(
                 for persona_id in states[snapshot.default_state_id]
                 if f"persona:{persona_id}" in assets
             ),
-            temporal_policy=_temporal_policy(snapshot),
+            temporal_policy=temporal_policy,
         )
         managed_provider = provider is None
         if managed_provider:
@@ -289,7 +356,7 @@ def build_application(
             curator_persona=persona_prompts.memory_curator,
             prompt_template=snapshot.prompts["memory_curation"],
             config_revision=snapshot.revision,
-            temporal_policy=_temporal_policy(snapshot),
+            temporal_policy=temporal_policy,
             tracer=tracer,
         )
         tool_config = next(item for item in settings["tools.toml"]["tools"] if item["id"] == "memory_source_query")
@@ -347,7 +414,7 @@ def build_application(
                 for definition in registry.definitions_for("chat")
             ),
             transaction_root=memory_root,
-            temporal_policy=_temporal_policy(snapshot),
+            temporal_policy=temporal_policy,
             clock=clock,
         )
         return AgentApplication(

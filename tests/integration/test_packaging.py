@@ -9,6 +9,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tomllib
+import zipfile
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+from bai_agent.config.loader import default_config_dir
 
 from bai_agent.domain.models import Role
 from bai_agent.memory.archive import RawRecordArchive
@@ -97,3 +102,37 @@ def test_compatibility_workflow_covers_supported_matrix() -> None:
     assert "run_prompt_tui_performance" in workflow
     assert "BAI_RUN_WINDOWS_REFERENCE" not in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
+
+
+def test_tzdata_fallback_and_packaged_default_timestamp_config_are_reachable() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert any(item.startswith("tzdata>=2026.3") for item in project["project"]["dependencies"])
+    force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert force_include["config"] == "bai_agent/default_config"
+    discovered = default_config_dir()
+    assert (discovered / "history_timestamps.toml").is_file()
+    local = datetime(2026, 7, 20, tzinfo=timezone.utc).astimezone(ZoneInfo("Asia/Shanghai"))
+    assert local.strftime("%Y-%m-%d %H:%M %z") == "2026-07-20 08:00 +0800"
+
+
+def test_built_wheel_contains_complete_default_config(tmp_path: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable, "-m", "pip", "wheel", str(ROOT), "--no-deps",
+            "--no-build-isolation", "--wheel-dir", str(tmp_path),
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    wheel = next(tmp_path.glob("bai_agent-*.whl"))
+    with zipfile.ZipFile(wheel) as archive:
+        names = set(archive.namelist())
+        assert "bai_agent/default_config/history_timestamps.toml" in names
+        assert "bai_agent/default_config/agent.toml" in names
+        timestamp_text = archive.read(
+            "bai_agent/default_config/history_timestamps.toml"
+        ).decode("utf-8")
+    assert 'display_timezone = "Asia/Shanghai"' in timestamp_text

@@ -153,16 +153,16 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 ### Tests for User Story 4（先写并确认失败）
 
-- [ ] T052 [P] [US4] 为 BR-007 在 `tests/integration/test_temporal_config_reload.py` 增加 30→60 分钟下一轮生效、显示时区/跨日整体变化、同一构建冻结旧 snapshot、无效 reload 无 partial objects/provider/raw/tool 副作用以及修复后恢复测试并确认失败
-- [ ] T053 [P] [US4] 在 `tests/contract/test_cli_config.py` 与 `tests/integration/test_packaging.py` 增加独立 manifest 缺失/错误的可操作 path+field 诊断、config validate、tzdata/IANA 后备和安装制品默认配置可达性测试并确认失败
-- [ ] T054 [P] [US4] 为 BR-006/BR-007/BR-010 在 `tests/integration/test_full_acceptance.py` 增加 chat/long-term/overview/curation/tool 同一 config revision、有效变更全体一致、非日志不受影响和原始 UTC/文件字节不变测试并确认失败
+- [X] T052 [P] [US4] 为 BR-007 在 `tests/integration/test_temporal_config_reload.py` 增加 30→60 分钟下一轮生效、显示时区/跨日整体变化、同一构建冻结旧 snapshot、无效 reload 无 partial objects/provider/raw/tool 副作用以及修复后恢复测试并确认失败
+- [X] T053 [P] [US4] 在 `tests/contract/test_cli_config.py` 与 `tests/integration/test_packaging.py` 增加独立 manifest 缺失/错误的可操作 path+field 诊断、config validate、tzdata/IANA 后备和安装制品默认配置可达性测试并确认失败
+- [X] T054 [P] [US4] 为 BR-006/BR-007/BR-010 在 `tests/integration/test_full_acceptance.py` 增加 chat/long-term/overview/curation/tool 同一 config revision、有效变更全体一致、非日志不受影响和原始 UTC/文件字节不变测试并确认失败
 
 ### Implementation for User Story 4
 
-- [ ] T055 [US4] 在 `src/bai_agent/application.py` 的 build/reload 路径先完整加载并验证 snapshot、policy、annotator、assembler、curation、gateway/executor/controller 后再整体替换引用，任何失败保持旧对象不可见且发生在 raw/工具/provider 边界前
-- [ ] T056 [US4] 在 `pyproject.toml` 与 `src/bai_agent/config/loader.py` 校准 tzdata 和默认 `config/history_timestamps.toml` 的安装/发现行为，使 Ubuntu 与 Windows 使用同一 IANA 配置且不依赖本机 locale/固定 offset
-- [ ] T057 [P] [US4] 为 DR-001/DR-002 更新 `README.md`、`specs/001-persistent-memory-agent/contracts/configuration.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，写明字段单位/范围/关系、IANA/tzdata、reload 边界、无效配置失败、恢复步骤和无凭据示例
-- [ ] T058 [US4] 运行 `tests/contract/test_history_timestamp_config.py`、`tests/integration/test_temporal_config_reload.py`、`tests/contract/test_cli_config.py`、`tests/integration/test_packaging.py`、`tests/integration/test_full_acceptance.py` 及现有 persona/config reload 回归，在 Ubuntu/Windows 夹具验证固定 instant 输出，执行 config validate、文档默认值/链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US4 的配置重载/打包、测试和 README/001 文档
+- [X] T055 [US4] 在 `src/bai_agent/application.py` 的 build/reload 路径先完整加载并验证 snapshot、policy、annotator、assembler、curation、gateway/executor/controller 后再整体替换引用，任何失败保持旧对象不可见且发生在 raw/工具/provider 边界前
+- [X] T056 [US4] 在 `pyproject.toml` 与 `src/bai_agent/config/loader.py` 校准 tzdata 和默认 `config/history_timestamps.toml` 的安装/发现行为，使 Ubuntu 与 Windows 使用同一 IANA 配置且不依赖本机 locale/固定 offset
+- [X] T057 [P] [US4] 为 DR-001/DR-002 更新 `README.md`、`specs/001-persistent-memory-agent/contracts/configuration.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，写明字段单位/范围/关系、IANA/tzdata、reload 边界、无效配置失败、恢复步骤和无凭据示例
+- [X] T058 [US4] 运行 `tests/contract/test_history_timestamp_config.py`、`tests/integration/test_temporal_config_reload.py`、`tests/contract/test_cli_config.py`、`tests/integration/test_packaging.py`、`tests/integration/test_full_acceptance.py` 及现有 persona/config reload 回归，在 Ubuntu/Windows 夹具验证固定 instant 输出，执行 config validate、文档默认值/链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US4 的配置重载/打包、测试和 README/001 文档
 
 **Checkpoint**: 四个用户故事均可独立验收；策略配置集中、严格、跨平台且在完整快照边界原子生效。
 
@@ -298,3 +298,4 @@ Curation：T031 || T032 -> T033 -> T034
 - **T030 / 2026-07-20**: Memory/Prompt 定向及既有 archive/selection/coverage 回归共 53 项通过；5 份受影响 Markdown 的本地相对链接检查为 0 个断链，术语/默认值检查一致，`git diff --check` 通过。
 - **T034 / 2026-07-20**: Curation 三区块、事务提案、模板、provenance 与 estimation 回归共 21 项通过；7 个必需模板变量均保留，canonical JSON/重复正文绝对 span/损坏来源 provider=0 断言通过；4 份受影响 Markdown 的本地相对链接检查为 0 个断链，`git diff --check` 通过。
 - **T051 / 2026-07-20**: Tools/Provider 定向及既有 DeepSeek/tool/gateway/estimation 回归共 56 项通过，并额外完成全量非性能回归 334 passed/2 deselected；七个现有日志 block 清单、四轮整体重建、stable origin、debug on/off 等价和 `memory_source_query` direct golden 边界均通过；6 份受影响 Markdown 的本地相对链接检查为 0 个断链，`memory_source.py` 无改动，`git diff --check` 通过。
+- **T058 / 2026-07-20**: Configuration/reload/packaging/full-acceptance 及既有 persona/config 回归共 41 项通过；30→60、UTC 显示、无效 reload 原子失败与修复恢复通过，实际 wheel 含完整默认配置，固定 instant 在 Windows 输出 `2026-07-20 08:00 +0800`；独立无效占位凭据 `config validate` 通过，4 份文档 0 个断链且默认值一致，`git diff --check` 通过。Ubuntu 同一夹具由 compatibility matrix 执行。

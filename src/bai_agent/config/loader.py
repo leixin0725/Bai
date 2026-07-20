@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
+from importlib.resources import files
 import os
 from pathlib import Path
 import tomllib
@@ -31,12 +32,26 @@ MANIFESTS = (
 )
 
 
+def default_config_dir() -> Path:
+    """[2026-07-20] 返回 wheel 内完整默认配置；editable 开发树回退到版本控制目录。"""
+    packaged = files("bai_agent").joinpath("default_config")
+    if packaged.is_dir():
+        return Path(str(packaged))
+    development = Path(__file__).resolve().parents[3] / "config"
+    if development.is_dir():
+        return development
+    raise BaiError("CONFIG_DEFAULT_NOT_FOUND", "安装制品中的默认配置目录不可达。")
+
+
 def _read_toml(path: Path) -> dict:
     try:
         with path.open("rb") as handle:
             value = tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise BaiError("CONFIG_INVALID", f"配置清单 {path.name} 缺失或无效。") from exc
+        raise BaiError(
+            "CONFIG_INVALID",
+            f"配置清单 {path.as_posix()} 缺失或 TOML 无效（字段 <toml>）。",
+        ) from exc
     if value.get("schema_version") != 1:
         raise BaiError("CONFIG_SCHEMA_UNSUPPORTED", f"配置清单 {path.name} 的版本不受支持。")
     return value

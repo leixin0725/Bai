@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from hashlib import sha256
 from pathlib import Path
+from shutil import copytree
 
+from bai_agent.application import build_application
 from bai_agent.domain.models import ToolExecutionContext, ToolOutcome
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.long_term import LongTermStore
@@ -17,6 +19,7 @@ from tests.fixtures.performance import (
     RECENT_RECORD_COUNT,
     prepare_performance_dataset,
 )
+from tests.fakes import FakeProvider
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -123,3 +126,38 @@ def test_high_scale_coverage_sources_and_read_only_query(tmp_path: Path) -> None
     assert result.data["source_count"] >= 1
     assert result.data["records"][0]["global_sequence"] <= CURATED_THROUGH
     assert after == before
+
+
+def test_all_temporal_consumers_share_one_revision_and_reload_without_storage_rewrite(tmp_path: Path) -> None:
+    config = tmp_path / "config"
+    copytree("config", config)
+    app = build_application(config, tmp_path / "data", provider=FakeProvider())
+    try:
+        archive_before = {
+            path.relative_to(app.archive.memory_root).as_posix(): path.read_bytes()
+            for path in app.archive.memory_root.rglob("*")
+            if path.is_file() and path.name != "writer.lock"
+        }
+        policy = app.controller.temporal_policy
+        assert policy is app.controller.prompt_assembler.temporal_policy
+        assert policy is app.controller.curation_service.temporal_policy
+        assert policy.config_source.revision == app.snapshot.revision
+        timestamp_file = config / "history_timestamps.toml"
+        timestamp_file.write_text(
+            timestamp_file.read_text(encoding="utf-8").replace("long_gap_minutes = 30", "long_gap_minutes = 60"),
+            encoding="utf-8",
+        )
+        app._reload_config()
+        reloaded = app.controller.temporal_policy
+        assert reloaded is app.controller.prompt_assembler.temporal_policy
+        assert reloaded is app.controller.curation_service.temporal_policy
+        assert reloaded.config_source.revision == app.snapshot.revision
+        assert reloaded.long_gap.total_seconds() == 3600
+        archive_after = {
+            path.relative_to(app.archive.memory_root).as_posix(): path.read_bytes()
+            for path in app.archive.memory_root.rglob("*")
+            if path.is_file() and path.name != "writer.lock"
+        }
+        assert archive_after == archive_before
+    finally:
+        app.close()

@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "hatchling>=1.27",
   "hypothesis>=6.135,<7",
   "pytest>=8.4,<10",
   "pytest-asyncio>=1.0,<2",
@@ -30,6 +31,12 @@ bai-agent = "bai_agent.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bai_agent"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"config" = "bai_agent/default_config"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/config", "/README.md", "/pyproject.toml"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers"

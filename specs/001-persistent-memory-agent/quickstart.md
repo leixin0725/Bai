@@ -120,6 +120,18 @@ pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_tem
 
 配置修改只在下一份完整快照边界生效，缺失或无效文件必须在请求前失败。生成 marker 不写入 raw/长期记忆；直接检查 `data/memory/` 构建前后字节可证明无持久化副作用。
 
+参数单位与边界：`long_gap_minutes` 为 `1..1440` 分钟；`continuous_segment_refresh_minutes` 为 `1..10080` 分钟且必须大于等于 gap；`split_on_local_date_change` 只能是布尔值；`display_timezone` 只能是 `zoneinfo`/`tzdata` 可解析的 IANA 名称。不要使用 `Local`、Windows 时区名或 `UTC+8` 固定偏移。
+
+若 reload 报错，先保留当前进程与记忆文件，修复错误中点名的 `history_timestamps.toml` 字段，再离线验证并重试下一轮；不需要重置或迁移 raw/YAML。验证只检查凭据环境变量是否存在，可使用明确无效的测试占位值，不会发起网络请求：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "invalid-placeholder-only"
+python -m bai_agent config validate --config-dir config
+pytest tests/integration/test_temporal_config_reload.py tests/integration/test_packaging.py -q
+```
+
+POSIX shell 对应使用 `DEEPSEEK_API_KEY=invalid-placeholder-only python -m bai_agent config validate --config-dir config`。项目依赖 `tzdata>=2026.3`，Windows 无系统 IANA 数据库时也必须把固定 UTC instant 转成与 Ubuntu 相同的 `Asia/Shanghai` 日期、分钟和 `+08:00`。
+
 ## 4. 记忆组织与完整覆盖
 
 `data/memory/raw/*.jsonl` 永久保存所有确认的用户/Assistant 原文，分段只影响物理存储。`data/memory/long_term.yaml` 在同一个 revision 内保存：
