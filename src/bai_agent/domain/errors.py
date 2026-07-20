@@ -20,10 +20,31 @@ class BaiError(Exception):
         }
 
 
+class TurnRejected(BaiError):
+    """[2026-07-20] 明确拒绝是领域决定，不得复用普通 provider 失败路径。"""
+
+    def __init__(self) -> None:
+        super().__init__("TURN_REJECTED", "当前轮次已无痕撤销。")
+
+
+class TraceIntegrityError(BaiError):
+    def __init__(self, message: str = "提示来源不完整，调用已阻止。") -> None:
+        super().__init__("TRACE_INTEGRITY_FAILED", message)
+
+
+class CredentialExposureError(BaiError):
+    def __init__(self) -> None:
+        super().__init__("CREDENTIAL_EXPOSURE", "提示载荷疑似包含可用凭据，原值未显示或发送。")
+
+
+class DebugPresentationError(BaiError):
+    def __init__(self, message: str = "调试批准界面不可用，调用已阻止。") -> None:
+        super().__init__("DEBUG_PRESENTATION_FAILED", message)
+
+
 def fail(code: str, message: str, *, retryable: bool = False) -> "NoReturn":
     """[2026-07-19] 用统一入口避免不同适配器自行拼接不安全异常文本。"""
     raise BaiError(code, message, retryable=retryable)
 
 
 from typing import NoReturn  # noqa: E402  # [2026-07-19] 仅用于 fail 的返回注解。
-

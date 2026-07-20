@@ -6,6 +6,8 @@ adapter = "deepseek_openai_compatible"
 base_url = "https://api.deepseek.com"
 api_key_env = "DEEPSEEK_API_KEY"
 local_concurrency = 1
+max_output_cap = 384000
+token_estimator = "deepseek_character_v1"
 
 [providers.timeout]
 connect_seconds = 10
@@ -22,6 +24,7 @@ retryable_statuses = [429, 500, 503]
 [model_profiles.chat]
 provider = "deepseek"
 model = "deepseek-chat"
+context_window_tokens = 1000000
 stream = false
 thinking_enabled = false
 max_output_tokens = 8192
@@ -32,10 +35,10 @@ structured_output = false
 [model_profiles.memory_curator]
 provider = "deepseek"
 model = "deepseek-chat"
+context_window_tokens = 1000000
 stream = false
 thinking_enabled = false
 max_output_tokens = 8192
 tools_enabled = true
 structured_output = true
 output_schema = "memory_curation_v1"
-

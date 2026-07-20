@@ -72,3 +72,10 @@ class IncidentStore:
         missing = tuple(name for name in required if not payload.get(name))
         return IncidentReport(**payload, cleared=not missing, missing=missing)
 
+    def require_clear(self) -> None:
+        """[2026-07-20] 未闭环安全事件在 prompt 展示和发送前共用同一阻断门禁。"""
+        from bai_agent.domain.errors import BaiError
+
+        report = self.check()
+        if not report.cleared:
+            raise BaiError("SECURITY_INCIDENT_OPEN", "安全事件尚未闭环，模型调用已阻止。")

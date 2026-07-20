@@ -181,6 +181,7 @@ def build_application(
             source_tool,
             enabled=bool(tool_config["enabled"]),
             allowed_personas=tuple(tool_config["allowed_personas"]),
+            read_only=bool(tool_config["read_only"]),
         )
         tool_executor = ToolExecutor(
             registry,

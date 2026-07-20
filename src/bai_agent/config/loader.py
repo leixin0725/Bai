@@ -12,10 +12,12 @@ from bai_agent.config.validation import (
     read_utf8_nonempty,
     resolve_inside,
     validate_agent,
+    validate_debug_prompt,
+    validate_provider_capabilities,
     validate_template,
 )
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import ConfigSnapshot, PersonaProfile, content_hash
+from bai_agent.domain.models import ConfigAsset, ConfigSnapshot, PersonaProfile, content_hash
 
 
 MANIFESTS = ("agent.toml", "providers.toml", "states.toml", "tools.toml", "logging.toml")
@@ -51,6 +53,7 @@ def load_config(
     documents = {name: _read_toml(root / name) for name in MANIFESTS}
     agent = documents["agent.toml"]
     validate_agent(agent)
+    agent["debug_prompt"] = validate_debug_prompt(agent.get("debug_prompt"))
     env = os.environ if environ is None else environ
 
     providers = documents["providers.toml"].get("providers", [])
@@ -64,6 +67,10 @@ def load_config(
             raise BaiError("CREDENTIAL_MISSING", f"所需凭据环境变量 {variable} 不存在。")
 
     loaded_paths: dict[str, Path] = {name: root / name for name in MANIFESTS}
+    asset_ids: dict[str, tuple[str, str]] = {
+        name: (f"config:{Path(name).stem}", "agent_config" if name == "agent.toml" else "provider_config" if name == "providers.toml" else "tool_config" if name == "tools.toml" else "state_prompt")
+        for name in MANIFESTS
+    }
     persona_values: list[PersonaProfile] = []
     persona_paths: set[Path] = set()
     for persona_id, role in (("chat", "chat"), ("memory_curator", "memory_curator")):
@@ -75,6 +82,7 @@ def load_config(
             raise BaiError("CONFIG_INVALID", "不同人格职责不能引用同一提示文件。")
         persona_paths.add(path)
         loaded_paths[reference] = path
+        asset_ids[reference] = (f"persona:{persona_id}", "persona")
         prompt = read_utf8_nonempty(path)
         persona_values.append(
             PersonaProfile(
@@ -103,6 +111,7 @@ def load_config(
             raise BaiError("CONFIG_INVALID", "不同人格职责不能引用同一提示文件。")
         persona_paths.add(path)
         loaded_paths[reference] = path
+        asset_ids[reference] = (f"persona:{persona_id}", "state_prompt")
         prompt = read_utf8_nonempty(path)
         persona_values.append(
             PersonaProfile(
@@ -127,6 +136,8 @@ def load_config(
     for profile_id, profile in model_profiles.items():
         if not isinstance(profile, dict) or profile.get("provider") not in provider_ids:
             raise BaiError("CONFIG_INVALID", f"模型 profile {profile_id} 的 Provider 引用无效。")
+        provider_capability = next(item for item in providers if item.get("id") == profile.get("provider"))
+        validate_provider_capabilities(provider_capability, profile)
     if any(item.model_profile_id not in model_profiles for item in persona_values):
         raise BaiError("CONFIG_INVALID", "人格引用的模型 profile 不存在。")
 
@@ -137,6 +148,7 @@ def load_config(
             raise BaiError("CONFIG_INVALID", "提示模板引用必须是相对路径。")
         path = resolve_inside(root, reference)
         loaded_paths[reference] = path
+        asset_ids[reference] = (f"prompt:{prompt_id}", "prompt_template")
         prompt_text = read_utf8_nonempty(path)
         definition = template_definitions.get(prompt_id)
         if not isinstance(definition, dict):
@@ -159,12 +171,26 @@ def load_config(
         digest.update(path.read_bytes())
         digest.update(b"\0")
 
+    revision = "sha256:" + digest.hexdigest()
+    assets = tuple(
+        ConfigAsset(
+            asset_id=asset_ids[logical_name][0],
+            kind=asset_ids[logical_name][1],
+            project_relative_path=logical_name.replace("\\", "/"),
+            content=path.read_text(encoding="utf-8-sig"),
+            content_sha256=content_hash(path.read_text(encoding="utf-8-sig")),
+            revision=revision,
+        )
+        for logical_name, path in sorted(loaded_paths.items())
+    )
+
     return ConfigSnapshot.create(
-        revision="sha256:" + digest.hexdigest(),
+        revision=revision,
         config_root=str(root),
         data_root=str(_data_root(root, str(agent["data_root"]))),
         default_state_id=str(states.get("default_state_id", "")),
         personas=tuple(persona_values),
         prompts=prompts,
         settings=documents,
+        assets=assets,
     )

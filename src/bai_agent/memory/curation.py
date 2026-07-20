@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from dataclasses import dataclass
 import json
 from string import Template
 from uuid import NAMESPACE_URL, uuid5
@@ -28,6 +29,15 @@ from bai_agent.domain.models import (
     TrustLevel,
     content_hash,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ProposedCuration:
+    """[2026-07-20] 整理提案只携带目标与来源，整轮确认前不得写入长期记忆。"""
+
+    target_document: LongTermMemoryDocument
+    source_record_ids: tuple[str, ...]
+    batch: CurationBatch | None = None
 
 
 class CurationPolicy:
@@ -111,7 +121,7 @@ class CurationService:
         self.max_attempts = max(1, max_attempts)
         self.tracer = tracer
 
-    async def curate_if_needed(self, *, force: bool = False) -> LongTermMemoryDocument | None:
+    async def propose(self, *, force: bool = False) -> ProposedCuration | None:
         document = self.store.load()
         records = self.archive.read_all()
         batch = self.policy.next_batch(
@@ -177,17 +187,32 @@ class CurationService:
             if isinstance(last_error, BaiError):
                 raise last_error
             raise BaiError("CURATION_FAILED", "记忆整理失败，原记录仍保留在直接窗口。", retryable=True) from last_error
-        committed = self._merge_and_commit(document, batch, batch_records, proposal)
+        target = self._merge_document(document, batch, batch_records, proposal)
+        return ProposedCuration(
+            target_document=target,
+            source_record_ids=batch.record_ids,
+            batch=batch,
+        )
+
+    def commit(self, proposal: ProposedCuration) -> LongTermMemoryDocument:
+        """[2026-07-20] 该入口仅供 READY_TO_COMMIT 发布路径调用。"""
+        committed = self.store.commit(proposal.target_document)
         if self.tracer:
+            batch = proposal.batch
             self.tracer.emit(
                 "memory.curation_committed",
-                batch_id=batch.batch_id,
+                batch_id=batch.batch_id if batch else "batch-none",
                 revision=committed.revision,
                 overview_revision=committed.coverage_overview.revision,
-                count=len(batch.record_ids),
-                covered_range=str((batch.old_frontier + 1, batch.new_frontier)),
+                count=len(proposal.source_record_ids),
+                covered_range=(str((batch.old_frontier + 1, batch.new_frontier)) if batch else "[]"),
             )
         return committed
+
+    async def curate_if_needed(self, *, force: bool = False) -> LongTermMemoryDocument | None:
+        """[2026-07-20] 兼容旧调用；可拒绝轮次必须改用 propose 并随事务发布。"""
+        proposal = await self.propose(force=force)
+        return self.commit(proposal) if proposal is not None else None
 
     def _validate_response(self, text: str, batch: CurationBatch) -> dict:
         try:
@@ -209,7 +234,7 @@ class CurationService:
         self.store.guard.ensure_safe(proposal.overview_update.text)
         return proposal.model_dump(mode="python")
 
-    def _merge_and_commit(self, document, batch, records, proposal) -> LongTermMemoryDocument:
+    def _merge_document(self, document, batch, records, proposal) -> LongTermMemoryDocument:
         by_id = {item.record_id: item for item in records}
         memories = list(document.memories)
         manual_texts = {
@@ -265,4 +290,4 @@ class CurationService:
             ),
             memories=tuple(memories),
         )
-        return self.store.commit(updated)
+        return updated

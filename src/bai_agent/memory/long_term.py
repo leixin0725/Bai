@@ -20,6 +20,7 @@ from bai_agent.domain.models import (
     MemoryStatus,
     SourceReference,
     SourceRelation,
+    canonical_json,
     content_hash,
     new_id,
     utc_now,
@@ -215,6 +216,26 @@ class LongTermStore:
         self.loaded_hash = content_hash(payload)
         self._refresh_last_valid(payload)
         return validated
+
+    def publish_target(
+        self,
+        *,
+        baseline_revision: int | None,
+        baseline_sha256: str | None,
+        target: LongTermMemoryDocument,
+        target_sha256: str | None,
+    ) -> LongTermMemoryDocument:
+        """[2026-07-20] READY_TO_COMMIT 只在基线或同一目标上前滚，不覆盖人工修改。"""
+        expected_target = content_hash(canonical_json(target.model_dump(mode="json")))
+        if target_sha256 != expected_target:
+            raise BaiError("TURN_TRANSACTION_INVALID", "长期记忆目标摘要不匹配。")
+        current = self.load()
+        current_identity = content_hash(canonical_json(current.model_dump(mode="json")))
+        if current_identity == expected_target:
+            return current
+        if current.revision != baseline_revision or current_identity != baseline_sha256:
+            raise BaiError("TURN_TRANSACTION_CONFLICT", "长期记忆基线已变化，未覆盖人工修改。")
+        return self.commit(target)
 
     def initialize_with_manual_memory(self, text: str, records: tuple) -> LongTermMemoryDocument:
         safe_text = self.guard.ensure_safe(text)

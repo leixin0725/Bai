@@ -13,6 +13,7 @@ dependencies = [
   "openai>=1.97,<3",
   "pydantic>=2.11,<3",
   "ruamel.yaml>=0.18,<0.19",
+  "textual>=8.2,<9",
 ]
 
 [project.optional-dependencies]
@@ -34,7 +35,6 @@ addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
-  "performance: Windows 参考性能验收",
+  "performance: Linux 强制性能门禁或 Windows 次要参考验收",
   "provider_smoke: 需要显式外部 Provider 凭据的隔离冒烟测试",
 ]
-

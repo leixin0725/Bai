@@ -10,13 +10,16 @@ from bai_agent.domain.models import (
     CompletionRequest,
     Message,
     Role,
+    RawRecord,
     StateResolutionContext,
     ToolCall,
     ToolExecutionContext,
     TrustLevel,
     canonical_json,
     new_id,
+    utc_now,
 )
+from bai_agent.memory.transaction import PreTurnCheckpoint, TurnUnitOfWork
 from bai_agent.memory.selection import select_long_term
 
 
@@ -36,6 +39,7 @@ class SingleTurnController:
         max_tool_rounds: int = 0,
         memory_budgets: dict[str, int] | None = None,
         tool_definitions: tuple[dict, ...] = (),
+        transaction_root=None,
     ) -> None:
         self.repository = repository
         self.provider = provider
@@ -49,6 +53,7 @@ class SingleTurnController:
         self.max_tool_rounds = max_tool_rounds
         self.memory_budgets = memory_budgets or {}
         self.tool_definitions = tool_definitions
+        self.transaction_root = transaction_root
 
     async def run_turn(
         self,
@@ -62,20 +67,39 @@ class SingleTurnController:
         resolution = self.state_resolver.resolve(
             StateResolutionContext(turn_id=resolved_turn_id, untrusted_text=content)
         )
-        existing = [item for item in self.repository.read_all() if item.turn_id == resolved_turn_id]
+        all_before = self.repository.read_all()
+        existing = [item for item in all_before if item.turn_id == resolved_turn_id]
+        uow = None
         if existing:
             if not resume_pending or len(existing) != 1 or existing[0].role != Role.USER:
                 raise BaiError("TURN_ALREADY_CONFIRMED", "轮次已存在或不是可恢复 pending 状态。")
             user_record = existing[0]
             content = user_record.content
         else:
-            user_record = self.repository.append(
-                role=Role.USER,
-                content=content,
-                turn_id=resolved_turn_id,
-                state_id=resolution.state_id,
-                config_revision=config_revision,
-            )
+            if self.transaction_root is not None:
+                user_record = RawRecord.create(
+                    record_id=new_id("rec"),
+                    global_sequence=len(all_before) + 1,
+                    turn_id=resolved_turn_id,
+                    role=Role.USER,
+                    content=content,
+                    created_at=utc_now(),
+                    state_id=resolution.state_id,
+                    config_revision=config_revision,
+                )
+                uow = TurnUnitOfWork(self.transaction_root, self.repository, self.long_term_store)
+                uow.begin(
+                    PreTurnCheckpoint.capture(self.repository, self.long_term_store, resolution.state_id),
+                    user_record,
+                )
+            else:
+                user_record = self.repository.append(
+                    role=Role.USER,
+                    content=content,
+                    turn_id=resolved_turn_id,
+                    state_id=resolution.state_id,
+                    config_revision=config_revision,
+                )
             if self.tracer:
                 self.tracer.emit(
                     "turn.user_persisted",
@@ -185,13 +209,35 @@ class SingleTurnController:
                 raise BaiError("TOOL_ROUND_LIMIT", "工具调用超过配置轮数限制。")
         except asyncio.CancelledError:
             raise
-        assistant = self.repository.append(
-            role=Role.ASSISTANT,
-            content=result.text,
-            turn_id=resolved_turn_id,
-            state_id=resolution.state_id,
-            config_revision=config_revision,
-        )
+        except BaiError as exc:
+            if uow is not None and (exc.retryable or exc.code.startswith(("PROVIDER_", "NETWORK_"))):
+                uow.pending(exc.code)
+                uow.commit()
+            raise
+        if uow is not None:
+            assistant = RawRecord.create(
+                record_id=new_id("rec"),
+                global_sequence=len(all_before) + 2,
+                turn_id=resolved_turn_id,
+                role=Role.ASSISTANT,
+                content=result.text,
+                created_at=utc_now(),
+                state_id=resolution.state_id,
+                config_revision=config_revision,
+            )
+            uow.ready(assistant)
+            uow.commit()
+            assistant = next(
+                item for item in self.repository.read_all() if item.record_id == assistant.record_id
+            )
+        else:
+            assistant = self.repository.append(
+                role=Role.ASSISTANT,
+                content=result.text,
+                turn_id=resolved_turn_id,
+                state_id=resolution.state_id,
+                config_revision=config_revision,
+            )
         if self.tracer:
             self.tracer.emit(
                 "turn.assistant_persisted",

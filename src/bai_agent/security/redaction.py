@@ -18,3 +18,7 @@ def redact_text(value: str) -> str:
         result = pattern.sub("[REDACTED]", result)
     return result
 
+
+def safe_prompt_error(code: str) -> str:
+    """[2026-07-20] prompt 安全错误只返回稳定错误码，不拼接载荷或匹配片段。"""
+    return f"{code}: 提示载荷安全检查失败；原值未显示或记录。"

@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import RawRecord, Role, canonical_json, new_id, utc_now
+from bai_agent.domain.models import RawRecord, Role, canonical_json, content_hash, new_id, utc_now
 from bai_agent.memory.recovery import atomic_write, find_temporary_files
 from bai_agent.security.credentials import CredentialGuard
 from bai_agent.security.permissions import PermissionStatus, ensure_private_path
@@ -120,6 +120,78 @@ class RawRecordArchive:
         if records and records[-1].role == Role.USER:
             return records[-1]
         return None
+
+    def identity_hash(self, records: tuple[RawRecord, ...] | None = None) -> str:
+        values = self.read_all() if records is None else records
+        return content_hash(
+            canonical_json(
+                [{"record_id": item.record_id, "content_sha256": item.content_sha256} for item in values]
+            )
+        )
+
+    def append_pending_user(self, record: RawRecord, checkpoint_hash: str) -> RawRecord:
+        """[2026-07-20] 普通失败前滚为单条 USER；重放只接受基线或同一目标。"""
+        records = self.read_all()
+        existing = next((item for item in records if item.record_id == record.record_id), None)
+        if existing is not None:
+            if existing.role != Role.USER or existing.turn_id != record.turn_id or existing.content_sha256 != record.content_sha256:
+                raise BaiError("TURN_TRANSACTION_CONFLICT", "pending 目标记录身份冲突。")
+            return existing
+        if self.identity_hash(records) != checkpoint_hash:
+            raise BaiError("TURN_TRANSACTION_CONFLICT", "raw 基线已变化，未覆盖外部修改。")
+        return self.append(
+            role=Role.USER,
+            content=record.content,
+            turn_id=record.turn_id,
+            state_id=record.state_id,
+            config_revision=record.config_revision,
+            record_id=record.record_id,
+            created_at=record.created_at,
+        )
+
+    def append_complete_turn(
+        self,
+        user: RawRecord,
+        assistant: RawRecord,
+        checkpoint_hash: str,
+    ) -> tuple[RawRecord, RawRecord]:
+        """[2026-07-20] 完整轮次按 USER/ASSISTANT 固定顺序幂等前滚，支持跨分段恢复。"""
+        records = self.read_all()
+        by_id = {item.record_id: item for item in records}
+        published_user = by_id.get(user.record_id)
+        if published_user is None:
+            if self.identity_hash(records) != checkpoint_hash:
+                raise BaiError("TURN_TRANSACTION_CONFLICT", "raw 基线已变化，未覆盖外部修改。")
+            published_user = self.append(
+                role=Role.USER,
+                content=user.content,
+                turn_id=user.turn_id,
+                state_id=user.state_id,
+                config_revision=user.config_revision,
+                record_id=user.record_id,
+                created_at=user.created_at,
+            )
+            records = self.read_all()
+        elif published_user.role != Role.USER or published_user.content_sha256 != user.content_sha256:
+            raise BaiError("TURN_TRANSACTION_CONFLICT", "USER 目标记录身份冲突。")
+        by_id = {item.record_id: item for item in records}
+        published_assistant = by_id.get(assistant.record_id)
+        if published_assistant is None:
+            tail = records[-1] if records else None
+            if tail is None or tail.record_id != published_user.record_id:
+                raise BaiError("TURN_TRANSACTION_CONFLICT", "ASSISTANT 发布前 raw 尾部不匹配。")
+            published_assistant = self.append(
+                role=Role.ASSISTANT,
+                content=assistant.content,
+                turn_id=assistant.turn_id,
+                state_id=assistant.state_id,
+                config_revision=assistant.config_revision,
+                record_id=assistant.record_id,
+                created_at=assistant.created_at,
+            )
+        elif published_assistant.role != Role.ASSISTANT or published_assistant.content_sha256 != assistant.content_sha256:
+            raise BaiError("TURN_TRANSACTION_CONFLICT", "ASSISTANT 目标记录身份冲突。")
+        return published_user, published_assistant
 
     def clear(self) -> int:
         """[2026-07-19] 从末段向前删除，故障中断时剩余记录仍保持连续前缀。"""

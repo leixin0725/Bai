@@ -222,3 +222,6 @@ default_enabled = false
 - 配置中出现疑似真实凭据或 `api_key_env` 指向不存在变量。
 - 同一轮修改文件不改变 revision，下一轮才采用新快照。
 - 源码扫描证明没有人格正文、模型名、URL、行为阈值、超时或采样值。
+# 002 调试扩展同步（2026-07-20）
+
+配置快照现在为 agent、provider、tool、state、persona 与 prompt 文件保留项目相对路径、UTF-8 SHA-256 和统一 revision。`agent.toml` 的 `[debug_prompt]` 只维护 `color`、上下文风险阈值与估算安全裕度；调试启用状态仍只来自 `chat --debug-prompts`，不得落入配置。Provider 能力单独声明 context window、output cap 与 estimator，非法上限必须报错，不能用本地 `context_budget` 冒充模型容量。

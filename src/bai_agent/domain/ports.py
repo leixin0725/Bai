@@ -5,8 +5,13 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from bai_agent.domain.models import (
+    ApprovalDecision,
     CompletionRequest,
     CompletionResult,
+    ContextUsageEstimate,
+    MaterializedSendPayload,
+    ModelCallDraft,
+    PreparedProviderRequest,
     RawRecord,
     StateResolutionContext,
     StateResolutionResult,
@@ -42,3 +47,62 @@ class Clock(Protocol):
 class LoopPolicy(Protocol):
     def next_action(self, state: Any) -> Any: ...
 
+
+class ProviderAdapter(Protocol):
+    """[2026-07-20] Provider 仅准备、唯一物化并发送一次；重试属于网关。"""
+
+    def prepare(self, draft: ModelCallDraft, attempt: int) -> PreparedProviderRequest: ...
+
+    def materialize_sdk_kwargs(self, request: PreparedProviderRequest) -> MaterializedSendPayload: ...
+
+    async def send_once(self, payload: MaterializedSendPayload) -> CompletionResult: ...
+
+
+class ApprovalPresenter(Protocol):
+    async def decide(
+        self,
+        request: PreparedProviderRequest,
+        payload: MaterializedSendPayload,
+        estimate: ContextUsageEstimate,
+        warning: str,
+    ) -> ApprovalDecision: ...
+
+    def clear(self) -> None: ...
+
+
+class TokenEstimator(Protocol):
+    def estimate(
+        self,
+        request: PreparedProviderRequest,
+        payload: MaterializedSendPayload,
+    ) -> ContextUsageEstimate: ...
+
+
+class ModelCallGateway(Protocol):
+    async def complete(self, draft: ModelCallDraft) -> CompletionResult: ...
+
+
+class TurnUnitOfWorkPort(Protocol):
+    def begin(self, checkpoint: Any, provisional_user_record: RawRecord) -> None: ...
+
+    def discard(self) -> None: ...
+
+    def pending(self, failure_code: str) -> None: ...
+
+    def ready(self, assistant_record: RawRecord, target_long_term_document: Any | None = None) -> None: ...
+
+    def commit(self) -> None: ...
+
+
+class RecoverableWriteTool(Protocol):
+    def prepare(self, arguments: dict[str, Any], context: Any) -> Any: ...
+
+    def commit(self, prepared: Any) -> Any: ...
+
+    def rollback(self, prepared: Any) -> None: ...
+
+
+class CompensatingWriteTool(Protocol):
+    compensation_contract: str
+
+    def compensate(self, result: Any, context: Any) -> None: ...

@@ -244,3 +244,6 @@ next_cursor | null
 - 任意用户/记忆/工具文本不能改变 StaticStateResolver 结果。
 - 替换测试 StateMachineResolver 或 Provider 无需改 Controller/Memory/PromptAssembler。
 - 默认 loop 的 Provider/Tool 调用均为 0；测试 Runner 达到迭代、deadline、预算或取消必停。
+# 002 模型与工具安全边界同步（2026-07-20）
+
+所有 provider 调用统一采用 `prepare()`、唯一 `materialize_sdk_kwargs()` 与 `send_once()`；认证仍由 transport 单独注入，不属于可展示提示载荷。载荷在显示前和发送前复用凭据门禁，命中时只返回脱敏错误并沿用安全事件阻断。当前注册工具必须声明 `read_only=true`；未来写工具必须具备可恢复 `prepare/commit/rollback` 或明确补偿契约，否则在任何副作用前拒绝。

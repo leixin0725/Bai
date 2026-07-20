@@ -186,3 +186,6 @@ read_raw_records(record_ids)
 - 指定 Windows 参考环境中，10,000 条永久原始记录/1,000 条长期记忆至少 100 次全新进程启动的 nearest-rank p95；从进程创建计时到配置、原始索引、长期 YAML 与覆盖概览可供首轮组装，网络调用为 0。
 
 每个崩溃测试恢复后只能观察到完整旧状态或完整新状态，不得出现半条记录、无来源记忆、提前前沿或原始记录减少。
+# 002 可拒绝轮次事务同步（2026-07-20）
+
+用户输入在模型生成前写入私有 `memory/.state/turn-transaction.json`，而不是立即进入不可变 raw 归档。`PREPARED` 在明确拒绝或未决定重启时丢弃；普通 provider/网络失败转为 `READY_PENDING` 并幂等发布一条 USER pending；成功结果转为 `READY_TO_COMMIT` 后按 USER、ASSISTANT、长期记忆固定顺序幂等前滚。两个 READY 状态不得回滚，基线冲突时停止恢复且不覆盖人工修改。journal 禁止包含最终模型载荷、提示来源、认证信息、工具正文或拒绝墓碑。

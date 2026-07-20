@@ -9,6 +9,56 @@ from typing import Any
 from bai_agent.domain.errors import BaiError
 
 
+TOKEN_ESTIMATORS = frozenset({"deepseek_character_v1"})
+
+
+def validate_debug_prompt(value: Any) -> dict[str, Any]:
+    """[2026-07-20] 调试显示策略可缺省，但不能持久化启用状态或绕过 TTY。"""
+    raw = {} if value is None else require_mapping(value, "debug_prompt")
+    defaults = {
+        "color": "auto",
+        "high_context_percent": 80,
+        "critical_context_percent": 95,
+        "estimate_safety_margin_percent": 10,
+    }
+    result = defaults | raw
+    try:
+        high = result["high_context_percent"]
+        critical = result["critical_context_percent"]
+        margin = result["estimate_safety_margin_percent"]
+        if result["color"] not in {"auto", "always", "never"}:
+            raise ValueError
+        if any(isinstance(item, bool) or not isinstance(item, int) for item in (high, critical, margin)):
+            raise ValueError
+        if not (0 < high < critical <= 100 and 0 <= margin <= 50):
+            raise ValueError
+        if "enabled" in raw or "debug_prompts" in raw:
+            raise ValueError
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BaiError("CONFIG_INVALID", "debug_prompt 配置字段、类型或阈值无效。") from exc
+    return result
+
+
+def validate_provider_capabilities(provider: dict[str, Any], profile: dict[str, Any]) -> None:
+    """[2026-07-20] 模型容量只来自当前 profile；非法输出上限不得静默截断。"""
+    try:
+        cap = provider["max_output_cap"]
+        estimator = provider["token_estimator"]
+        output = profile["max_output_tokens"]
+        capacity = profile.get("context_window_tokens")
+        if any(isinstance(item, bool) or not isinstance(item, int) or item <= 0 for item in (cap, output)):
+            raise ValueError
+        if output > cap:
+            raise ValueError
+        if capacity is not None:
+            if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0 or output > capacity:
+                raise ValueError
+        if estimator not in TOKEN_ESTIMATORS:
+            raise ValueError
+    except (KeyError, TypeError, ValueError) as exc:
+        raise BaiError("PROVIDER_CAPABILITY_INVALID", "Provider 容量、输出上限或 estimator 配置无效。") from exc
+
+
 def resolve_inside(root: Path, reference: str) -> Path:
     unresolved = root / reference
     if unresolved.is_symlink():
@@ -50,6 +100,7 @@ def validate_agent(agent: dict[str, Any]) -> None:
         )
         if component_total > int(budget["max_input_tokens"]):
             raise ValueError
+        validate_debug_prompt(agent.get("debug_prompt"))
     except (KeyError, TypeError, ValueError) as exc:
         raise BaiError("CONFIG_INVALID", "配置数值缺失、类型错误或交叉约束无效。") from exc
 

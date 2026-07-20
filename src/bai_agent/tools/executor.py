@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 
 from bai_agent.domain.errors import BaiError
@@ -62,10 +63,25 @@ class ToolExecutor:
             self.guard.ensure_safe(json.dumps(call.arguments, ensure_ascii=False))
             registered = self.registry.resolve(call.name, context.persona_id)
             validate_object_schema(call.arguments, registered.definition.input_schema)
+            prepared = None
+            if not registered.read_only:
+                try:
+                    prepared = registered.implementation.prepare(call.arguments, context)
+                    if inspect.isawaitable(prepared):
+                        prepared = await prepared
+                except Exception as exc:
+                    raise BaiError("TOOL_PREPARE_FAILED", "写工具准备失败，未执行任何副作用。") from exc
             result = await asyncio.wait_for(
                 registered.implementation.execute(call.arguments, context),
                 timeout=self.deadline_seconds,
             )
+            if not registered.read_only and all(
+                callable(getattr(registered.implementation, name, None))
+                for name in ("prepare", "commit", "rollback")
+            ):
+                committed = registered.implementation.commit(prepared)
+                if inspect.isawaitable(committed):
+                    await committed
             serialized = json.dumps(result.data, ensure_ascii=False)
             self.guard.ensure_safe(serialized)
             if len(serialized.encode("utf-8")) > self.max_result_bytes:

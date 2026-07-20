@@ -14,6 +14,8 @@ class RegisteredTool:
     implementation: object
     enabled: bool
     allowed_personas: tuple[str, ...]
+    read_only: bool
+    compensation_contract: str | None = None
 
 
 class ToolRegistry:
@@ -27,11 +29,18 @@ class ToolRegistry:
         *,
         enabled: bool,
         allowed_personas: tuple[str, ...],
+        read_only: bool = True,
+        compensation_contract: str | None = None,
     ) -> None:
         if definition.name in self._tools:
             raise BaiError("TOOL_DUPLICATE", "工具名称重复。")
+        if not read_only:
+            transactional = all(callable(getattr(implementation, name, None)) for name in ("prepare", "commit", "rollback"))
+            compensating = bool(compensation_contract) and callable(getattr(implementation, "compensate", None))
+            if not transactional and not compensating:
+                raise BaiError("TOOL_RECOVERY_REQUIRED", "写工具缺少可恢复事务或明确补偿契约。")
         self._tools[definition.name] = RegisteredTool(
-            definition, implementation, enabled, allowed_personas
+            definition, implementation, enabled, allowed_personas, read_only, compensation_contract
         )
 
     def resolve(self, name: str, persona_id: str) -> RegisteredTool:
@@ -51,4 +60,3 @@ class ToolRegistry:
             if item.enabled
             and ("*" in item.allowed_personas or persona_id in item.allowed_personas)
         )
-

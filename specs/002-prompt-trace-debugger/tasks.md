@@ -24,8 +24,8 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 **Purpose**: 引入唯一的新运行时依赖并建立模块目录；与 Phase 2 合并为第一个重大修改提交。
 
-- [ ] T001 在 `pyproject.toml` 增加 Textual `>=8.2,<9` 兼容范围，确认 Python 3.13/3.14 支持且不引入第二套 TUI 框架；若要求可复现锁定则在同文件记录项目采用范围约束而非虚构 lockfile
-- [ ] T002 [P] 创建 `src/bai_agent/model_calls/__init__.py` 与 `src/bai_agent/debug/__init__.py`，只导出稳定公共入口并以 `[2026-07-20]` zh-CN 模块注释说明职责边界
+- [X] T001 在 `pyproject.toml` 增加 Textual `>=8.2,<9` 兼容范围，确认 Python 3.13/3.14 支持且不引入第二套 TUI 框架；若要求可复现锁定则在同文件记录项目采用范围约束而非虚构 lockfile
+- [X] T002 [P] 创建 `src/bai_agent/model_calls/__init__.py` 与 `src/bai_agent/debug/__init__.py`，只导出稳定公共入口并以 `[2026-07-20]` zh-CN 模块注释说明职责边界
 
 ---
 
@@ -37,33 +37,33 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ### Tests for foundational contracts（先写并确认失败）
 
-- [ ] T003 [P] 在 `tests/unit/test_config_validation.py` 增加 debug color/阈值、context window、output cap、estimator registry 的正常/缺失/类型错误/越界测试并确认失败
-- [ ] T004 [P] 在 `tests/unit/test_config_assets.py` 增加 `ConfigAsset` 相对路径、UTF-8 摘要、统一 revision、文件后改不冒充旧来源及路径逃逸失败测试并确认失败
-- [ ] T005 [P] 在 `tests/unit/test_model_call_models.py` 增加来源、part、draft、PreparedProviderRequest、MaterializedSendPayload、call+attempt+materialized digest approval、无 prompt/part/SourceRef 的 ActualUsageSummary 及 PREPARED/READY_PENDING/READY_TO_COMMIT 值对象冻结、校验和摘要测试并确认失败
-- [ ] T006 [P] 在 `tests/contract/test_model_call_ports.py` 固定 `ProviderAdapter.prepare/materialize_sdk_kwargs/send_once`、`ApprovalPresenter`、`TokenEstimator`、`ModelCallGateway` 与 `TurnUnitOfWork` 最小端口签名，并断言每 attempt 只 materialize 一次后确认失败
-- [ ] T007 [P] 为 BR-008/BR-009 在 `tests/unit/test_turn_transaction.py` 增加 ABSENT→PREPARED→READY_PENDING/READY_TO_COMMIT→ABSENT、明确拒绝 discard、两种 READY 分别幂等前滚、非法状态和基线冲突测试并确认失败
-- [ ] T008 [P] 为 BR-008 在 `tests/fault_injection/test_turn_transaction_recovery.py` 覆盖 PREPARED/READY_PENDING/READY_TO_COMMIT 临时写、fsync、replace、raw 单/双记录、跨 segment、manifest、long-term、last-valid 和 cleanup 中断恢复并确认失败
-- [ ] T009 [P] 为 BR-009 在 `tests/integration/test_turn_transaction_pending.py` 增加 retry exhausted/non-retryable provider failure/网络中断将暂存 USER 经 READY_PENDING 幂等发布为且仅为一条既有 pending、重启可 `--resume-pending`，而明确 reject 不形成 pending 的测试并确认失败
-- [ ] T010 [P] 在 `tests/integration/test_curation_transaction_proposal.py` 增加 curation 只产生 proposal、整轮 READY_TO_COMMIT 前不写 `long_term.yaml`、reject 与 READY_PENDING 丢弃 proposal、READY_TO_COMMIT 发布来源索引的测试并确认失败
-- [ ] T011 [P] 为 BR-010 在 `tests/contract/test_tool_transaction_capabilities.py` 审计当前工具全部只读，增加只读工具允许执行、声明 prepare/commit/rollback 或明确补偿契约的 fake 写工具可暂存、能力缺失/不实或 prepare 失败时副作用调用为 0 的测试并确认失败
-- [ ] T012 [P] 为 BR-007 与 CR-001、CR-002、CR-003 在 `tests/unit/test_prompt_credential_guard.py` 增加认证/payload 分离、显示前和发送前命中、脱敏错误、日志/journal 禁区及安全事件门禁测试并确认失败
+- [X] T003 [P] 在 `tests/unit/test_config_validation.py` 增加 debug color/阈值、context window、output cap、estimator registry 的正常/缺失/类型错误/越界测试并确认失败
+- [X] T004 [P] 在 `tests/unit/test_config_assets.py` 增加 `ConfigAsset` 相对路径、UTF-8 摘要、统一 revision、文件后改不冒充旧来源及路径逃逸失败测试并确认失败
+- [X] T005 [P] 在 `tests/unit/test_model_call_models.py` 增加来源、part、draft、PreparedProviderRequest、MaterializedSendPayload、call+attempt+materialized digest approval、无 prompt/part/SourceRef 的 ActualUsageSummary 及 PREPARED/READY_PENDING/READY_TO_COMMIT 值对象冻结、校验和摘要测试并确认失败
+- [X] T006 [P] 在 `tests/contract/test_model_call_ports.py` 固定 `ProviderAdapter.prepare/materialize_sdk_kwargs/send_once`、`ApprovalPresenter`、`TokenEstimator`、`ModelCallGateway` 与 `TurnUnitOfWork` 最小端口签名，并断言每 attempt 只 materialize 一次后确认失败
+- [X] T007 [P] 为 BR-008/BR-009 在 `tests/unit/test_turn_transaction.py` 增加 ABSENT→PREPARED→READY_PENDING/READY_TO_COMMIT→ABSENT、明确拒绝 discard、两种 READY 分别幂等前滚、非法状态和基线冲突测试并确认失败
+- [X] T008 [P] 为 BR-008 在 `tests/fault_injection/test_turn_transaction_recovery.py` 覆盖 PREPARED/READY_PENDING/READY_TO_COMMIT 临时写、fsync、replace、raw 单/双记录、跨 segment、manifest、long-term、last-valid 和 cleanup 中断恢复并确认失败
+- [X] T009 [P] 为 BR-009 在 `tests/integration/test_turn_transaction_pending.py` 增加 retry exhausted/non-retryable provider failure/网络中断将暂存 USER 经 READY_PENDING 幂等发布为且仅为一条既有 pending、重启可 `--resume-pending`，而明确 reject 不形成 pending 的测试并确认失败
+- [X] T010 [P] 在 `tests/integration/test_curation_transaction_proposal.py` 增加 curation 只产生 proposal、整轮 READY_TO_COMMIT 前不写 `long_term.yaml`、reject 与 READY_PENDING 丢弃 proposal、READY_TO_COMMIT 发布来源索引的测试并确认失败
+- [X] T011 [P] 为 BR-010 在 `tests/contract/test_tool_transaction_capabilities.py` 审计当前工具全部只读，增加只读工具允许执行、声明 prepare/commit/rollback 或明确补偿契约的 fake 写工具可暂存、能力缺失/不实或 prepare 失败时副作用调用为 0 的测试并确认失败
+- [X] T012 [P] 为 BR-007 与 CR-001、CR-002、CR-003 在 `tests/unit/test_prompt_credential_guard.py` 增加认证/payload 分离、显示前和发送前命中、脱敏错误、日志/journal 禁区及安全事件门禁测试并确认失败
 
 ### Foundational implementation
 
-- [ ] T013 在 `src/bai_agent/domain/models.py` 实现 ConfigAsset、SourceRef、RequestPart、ModelCallDraft、PreparedProviderRequest、不可变 MaterializedSendPayload、call+attempt+digest approval、无 prompt/part/SourceRef 的 ActualUsageSummary、PreTurnCheckpoint、TurnWorkingSet 和三态 transaction 值对象，并加入 `[2026-07-20]` zh-CN 不变量注释
-- [ ] T014 在 `src/bai_agent/domain/ports.py` 实现 provider `prepare()`/唯一 `materialize_sdk_kwargs()`/`send_once()`、批准展示、token 估算、网关、事务和写工具恢复/补偿能力端口，在 `src/bai_agent/domain/errors.py` 增加脱敏领域错误码
-- [ ] T015 在 `src/bai_agent/config/loader.py` 将 persona、prompt、state、tools、agent 和 provider 配置加载为保留项目相对路径/hash/revision 的 ConfigAsset
-- [ ] T016 在 `src/bai_agent/config/validation.py` 实现 `[debug_prompt]`、模型容量、最大输出上限和 estimator id 校验，禁止静默截断、路径逃逸及用本地输入预算冒充模型容量
-- [ ] T017 [P] 在 `config/agent.toml` 增加 color、高/危占用阈值和估算安全裕度，保持调试启用状态不落配置
-- [ ] T018 [P] 在 `config/providers.toml` 增加 provider output cap、estimator id 和 profile context window 能力字段，本阶段不迁移生产模型 id
-- [ ] T019 在 `src/bai_agent/memory/transaction.py` 实现私有原子 journal、PREPARED reject discard、READY_PENDING 发布 USER pending、READY_TO_COMMIT 发布完整轮次和 fail-closed 恢复，并以 zh-CN 日期注释记录不可逆边界
-- [ ] T020 [P] 在 `src/bai_agent/memory/archive.py` 实现以 turn/record id 与 checkpoint hash 校验的幂等 `append_pending_user()` 和 `append_complete_turn()`，保证跨 segment 恢复不重复
-- [ ] T021 [P] 在 `src/bai_agent/memory/long_term.py` 实现按基线 revision/hash 或已达目标身份判断的幂等目标文档发布，冲突时不覆盖人工修改
-- [ ] T022 [P] 在 `src/bai_agent/memory/curation.py` 将整理拆为无写入 `propose()` 与仅由 READY_TO_COMMIT 发布路径调用的 commit，proposal 保留完整来源索引
-- [ ] T023 [P] 在 `src/bai_agent/tools/registry.py`、`src/bai_agent/tools/executor.py` 与 `config/tools.toml` 声明并审计当前工具全部只读，实现未来写工具可恢复 prepare/commit/rollback 或明确补偿能力门禁，能力缺失/不实或 prepare 失败时在副作用前失败
-- [ ] T024 [P] 在 `src/bai_agent/security/redaction.py` 和 `src/bai_agent/security/incidents.py` 实现 prompt payload 显示前/发送前凭据检测、无原值错误及既有安全事件门禁复用
-- [ ] T025 为 DR-003/DR-004 更新 `specs/001-persistent-memory-agent/contracts/configuration.md`、`specs/001-persistent-memory-agent/contracts/storage.md` 与 `specs/001-persistent-memory-agent/contracts/model-and-tools.md`，同步三态事务、失败转 pending、工具副作用能力、配置资产和凭据边界
-- [ ] T026 运行 `pytest tests/unit/test_config_validation.py tests/unit/test_config_assets.py tests/unit/test_model_call_models.py tests/contract/test_model_call_ports.py tests/unit/test_turn_transaction.py tests/fault_injection/test_turn_transaction_recovery.py tests/integration/test_turn_transaction_pending.py tests/integration/test_curation_transaction_proposal.py tests/contract/test_tool_transaction_capabilities.py tests/unit/test_prompt_credential_guard.py -q`、配置校验、文档链接/示例检查与 `git diff --check`，随后通过 Git 扩展原子提交 Phase 1—2 的 `pyproject.toml`、`config/`、`src/bai_agent/{config,domain,memory,security,tools,model_calls,debug}/`、测试和对应 `specs/` 文档
+- [X] T013 在 `src/bai_agent/domain/models.py` 实现 ConfigAsset、SourceRef、RequestPart、ModelCallDraft、PreparedProviderRequest、不可变 MaterializedSendPayload、call+attempt+digest approval、无 prompt/part/SourceRef 的 ActualUsageSummary、PreTurnCheckpoint、TurnWorkingSet 和三态 transaction 值对象，并加入 `[2026-07-20]` zh-CN 不变量注释
+- [X] T014 在 `src/bai_agent/domain/ports.py` 实现 provider `prepare()`/唯一 `materialize_sdk_kwargs()`/`send_once()`、批准展示、token 估算、网关、事务和写工具恢复/补偿能力端口，在 `src/bai_agent/domain/errors.py` 增加脱敏领域错误码
+- [X] T015 在 `src/bai_agent/config/loader.py` 将 persona、prompt、state、tools、agent 和 provider 配置加载为保留项目相对路径/hash/revision 的 ConfigAsset
+- [X] T016 在 `src/bai_agent/config/validation.py` 实现 `[debug_prompt]`、模型容量、最大输出上限和 estimator id 校验，禁止静默截断、路径逃逸及用本地输入预算冒充模型容量
+- [X] T017 [P] 在 `config/agent.toml` 增加 color、高/危占用阈值和估算安全裕度，保持调试启用状态不落配置
+- [X] T018 [P] 在 `config/providers.toml` 增加 provider output cap、estimator id 和 profile context window 能力字段，本阶段不迁移生产模型 id
+- [X] T019 在 `src/bai_agent/memory/transaction.py` 实现私有原子 journal、PREPARED reject discard、READY_PENDING 发布 USER pending、READY_TO_COMMIT 发布完整轮次和 fail-closed 恢复，并以 zh-CN 日期注释记录不可逆边界
+- [X] T020 [P] 在 `src/bai_agent/memory/archive.py` 实现以 turn/record id 与 checkpoint hash 校验的幂等 `append_pending_user()` 和 `append_complete_turn()`，保证跨 segment 恢复不重复
+- [X] T021 [P] 在 `src/bai_agent/memory/long_term.py` 实现按基线 revision/hash 或已达目标身份判断的幂等目标文档发布，冲突时不覆盖人工修改
+- [X] T022 [P] 在 `src/bai_agent/memory/curation.py` 将整理拆为无写入 `propose()` 与仅由 READY_TO_COMMIT 发布路径调用的 commit，proposal 保留完整来源索引
+- [X] T023 [P] 在 `src/bai_agent/tools/registry.py`、`src/bai_agent/tools/executor.py` 与 `config/tools.toml` 声明并审计当前工具全部只读，实现未来写工具可恢复 prepare/commit/rollback 或明确补偿能力门禁，能力缺失/不实或 prepare 失败时在副作用前失败
+- [X] T024 [P] 在 `src/bai_agent/security/redaction.py` 和 `src/bai_agent/security/incidents.py` 实现 prompt payload 显示前/发送前凭据检测、无原值错误及既有安全事件门禁复用
+- [X] T025 为 DR-003/DR-004 更新 `specs/001-persistent-memory-agent/contracts/configuration.md`、`specs/001-persistent-memory-agent/contracts/storage.md` 与 `specs/001-persistent-memory-agent/contracts/model-and-tools.md`，同步三态事务、失败转 pending、工具副作用能力、配置资产和凭据边界
+- [X] T026 运行 `pytest tests/unit/test_config_validation.py tests/unit/test_config_assets.py tests/unit/test_model_call_models.py tests/contract/test_model_call_ports.py tests/unit/test_turn_transaction.py tests/fault_injection/test_turn_transaction_recovery.py tests/integration/test_turn_transaction_pending.py tests/integration/test_curation_transaction_proposal.py tests/contract/test_tool_transaction_capabilities.py tests/unit/test_prompt_credential_guard.py -q`、配置校验、文档链接/示例检查与 `git diff --check`，随后通过 Git 扩展原子提交 Phase 1—2 的 `pyproject.toml`、`config/`、`src/bai_agent/{config,domain,memory,security,tools,model_calls,debug}/`、测试和对应 `specs/` 文档
 
 **Checkpoint**: 在任何公开调试入口出现前，拒绝、普通失败、崩溃恢复、凭据和写工具副作用已有失败优先测试及可恢复基础。
 

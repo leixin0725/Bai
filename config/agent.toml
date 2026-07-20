@@ -41,6 +41,12 @@ long_term_tokens = 16384
 short_term_tokens = 32768
 tool_result_tokens = 4096
 
+[debug_prompt]
+color = "auto"
+high_context_percent = 80
+critical_context_percent = 95
+estimate_safety_margin_percent = 10
+
 [memory_overview]
 max_chars = 12000
 max_spans = 2048

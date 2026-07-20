@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from bai_agent.config.loader import load_config
+from bai_agent.config.validation import validate_debug_prompt, validate_provider_capabilities
 from bai_agent.domain.errors import BaiError
 
 
@@ -57,3 +58,32 @@ def test_revision_changes_when_prompt_changes(tmp_path: Path, monkeypatch: pytes
     second = load_config(tmp_path / "config")
     assert first.revision != second.revision
 
+
+@pytest.mark.parametrize("color", ["auto", "always", "never"])
+def test_debug_prompt_policy_accepts_documented_values(color: str) -> None:
+    policy = validate_debug_prompt({"color": color})
+    assert policy["high_context_percent"] == 80
+    assert policy["critical_context_percent"] == 95
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"color": "sometimes"},
+        {"high_context_percent": 95, "critical_context_percent": 80},
+        {"estimate_safety_margin_percent": 51},
+    ],
+)
+def test_debug_prompt_policy_rejects_invalid_values(value: dict) -> None:
+    with pytest.raises(BaiError, match="debug_prompt"):
+        validate_debug_prompt(value)
+
+
+def test_provider_capability_validation_rejects_caps_and_unknown_estimator() -> None:
+    provider = {"max_output_cap": 384000, "token_estimator": "deepseek_character_v1"}
+    profile = {"context_window_tokens": 1000000, "max_output_tokens": 8192}
+    validate_provider_capabilities(provider, profile)
+    with pytest.raises(BaiError):
+        validate_provider_capabilities(provider, profile | {"max_output_tokens": 400000})
+    with pytest.raises(BaiError):
+        validate_provider_capabilities(provider | {"token_estimator": "missing"}, profile)

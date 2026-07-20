@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from hashlib import sha256
 import json
+from pathlib import PurePosixPath
 from types import MappingProxyType
 from typing import Any, Mapping
 from uuid import UUID, uuid4
@@ -36,6 +37,25 @@ def canonical_json(value: JsonValue | Mapping[str, Any]) -> str:
 def content_hash(content: str | bytes) -> str:
     payload = content.encode("utf-8") if isinstance(content, str) else content
     return "sha256:" + sha256(payload).hexdigest()
+
+
+def freeze_json(value: Any) -> Any:
+    """[2026-07-20] 递归冻结唯一物化载荷，禁止批准后嵌套字段发生突变。"""
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): freeze_json(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(freeze_json(item) for item in value)
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise ValueError("物化载荷只能包含 JSON 值")
+
+
+def thaw_json(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): thaw_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [thaw_json(item) for item in value]
+    return value
 
 
 def _validate_prefixed_uuid(value: str, prefix: str) -> str:
@@ -443,6 +463,340 @@ class ToolResult(FrozenModel):
     error_code: str | None = None
 
 
+class SourceKind(StrEnum):
+    CONFIG_FILE = "config_file"
+    DATA_FILE = "data_file"
+    RUNTIME = "runtime"
+    GENERATED = "generated"
+
+
+class Participation(StrEnum):
+    INCLUDED = "included"
+    EXCLUDED = "excluded"
+    EMPTY = "empty"
+    UNKNOWN_SOURCE = "unknown_source"
+
+
+class TransactionState(StrEnum):
+    PREPARED = "PREPARED"
+    READY_PENDING = "READY_PENDING"
+    READY_TO_COMMIT = "READY_TO_COMMIT"
+
+
+class ApprovalValue(StrEnum):
+    APPROVE = "approve"
+    REJECT = "reject"
+
+
+class ConfigAsset(FrozenModel):
+    """[2026-07-20] 配置资产绑定实际加载内容，后续文件修改不能改变本次来源。"""
+
+    asset_id: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    project_relative_path: str = Field(min_length=1)
+    content: str
+    content_sha256: str
+    revision: str
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "ConfigAsset":
+        path = PurePosixPath(self.project_relative_path.replace("\\", "/"))
+        if path.is_absolute() or ".." in path.parts or self.project_relative_path.startswith(("/", "\\")):
+            raise ValueError("配置资产路径必须位于项目内")
+        if self.content_sha256 != content_hash(self.content):
+            raise ValueError("配置资产正文摘要不匹配")
+        if not self.revision.startswith("sha256:") or len(self.revision) != 71:
+            raise ValueError("配置资产 revision 无效")
+        return self
+
+
+class SourceRef(FrozenModel):
+    source_kind: SourceKind
+    source_id: str = Field(min_length=1)
+    project_relative_path: str | None = None
+    content_sha256: str | None = None
+    revision: str | None = None
+    entity_ids: tuple[str, ...] = ()
+    producer: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "SourceRef":
+        if self.source_kind in {SourceKind.CONFIG_FILE, SourceKind.DATA_FILE}:
+            if not self.project_relative_path or not self.content_sha256:
+                raise ValueError("文件来源必须包含路径与内容摘要")
+            path = PurePosixPath(self.project_relative_path.replace("\\", "/"))
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError("来源路径必须是项目相对路径")
+        elif self.project_relative_path is not None:
+            raise ValueError("运行时或生成来源不得伪造文件路径")
+        if self.source_kind == SourceKind.RUNTIME and not self.entity_ids:
+            raise ValueError("运行时来源必须包含关联标识")
+        return self
+
+
+class RequestPart(FrozenModel):
+    part_id: str = Field(min_length=1)
+    order: int = Field(ge=0)
+    participation: Participation
+    trust: TrustLevel
+    payload_pointer: str | None = None
+    text_span: tuple[int, int] | None = None
+    content: str
+    sources: tuple[SourceRef, ...] = ()
+    exclusion_reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_part(self) -> "RequestPart":
+        if self.participation == Participation.INCLUDED:
+            if not self.payload_pointer or not self.sources:
+                raise ValueError("参与请求的片段必须包含 pointer 与来源")
+            if self.text_span is not None and not (0 <= self.text_span[0] <= self.text_span[1]):
+                raise ValueError("正文区间无效")
+        elif self.participation == Participation.UNKNOWN_SOURCE and self.sources:
+            raise ValueError("未知来源片段不能带伪造来源")
+        elif not self.exclusion_reason and self.participation != Participation.EMPTY:
+            raise ValueError("非参与片段必须说明原因")
+        return self
+
+
+class ModelCallDraft(FrozenModel):
+    call_id: str = Field(min_length=1)
+    turn_id: str = Field(min_length=1)
+    flow_id: str = Field(min_length=1)
+    call_sequence: int = Field(ge=1)
+    purpose: str = Field(min_length=1)
+    persona_id: str | None = None
+    state_id: str | None = None
+    config_revision: str
+    model_profile_id: str
+    request: CompletionRequest
+    parts: tuple[RequestPart, ...]
+
+    @model_validator(mode="after")
+    def validate_parts(self) -> "ModelCallDraft":
+        orders = [item.order for item in self.parts]
+        if orders != sorted(orders) or len(orders) != len(set(orders)):
+            raise ValueError("调用片段顺序必须严格且唯一")
+        return self
+
+
+class PreparedProviderRequest(FrozenModel):
+    call_id: str
+    attempt: int = Field(ge=1)
+    provider_id: str
+    model: str
+    provider_request: Any
+    max_output_tokens: int = Field(gt=0)
+    parts: tuple[RequestPart, ...]
+    call_sequence: int = Field(ge=1)
+    purpose: str
+    turn_id: str
+    flow_id: str
+    persona_id: str | None = None
+    state_id: str | None = None
+    config_revision: str
+
+    @field_validator("provider_request", mode="before")
+    @classmethod
+    def freeze_provider_request(cls, value: Any) -> Any:
+        return freeze_json(value)
+
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class MaterializedSendPayload:
+    """[2026-07-20] TUI 与 sender 共享这一份无认证、深度不可变发送载荷。"""
+
+    call_id: str
+    attempt: int
+    provider_id: str
+    model: str
+    sdk_kwargs: Mapping[str, Any]
+    canonical_payload_sha256: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        call_id: str,
+        attempt: int,
+        provider_id: str,
+        model: str,
+        sdk_kwargs: Mapping[str, Any],
+    ) -> "MaterializedSendPayload":
+        frozen = freeze_json(sdk_kwargs)
+        if not isinstance(frozen, Mapping):
+            raise ValueError("SDK 参数必须是映射")
+        digest = content_hash(canonical_json(thaw_json(frozen)))
+        return cls(call_id, attempt, provider_id, model, frozen, digest)
+
+    def verify_digest(self) -> None:
+        if content_hash(canonical_json(thaw_json(self.sdk_kwargs))) != self.canonical_payload_sha256:
+            raise ValueError("物化载荷摘要不匹配")
+
+
+class ApprovalDecision(FrozenModel):
+    decision: ApprovalValue
+    call_id: str
+    attempt: int = Field(ge=1)
+    payload_sha256: str
+    decided_at: float
+
+    @classmethod
+    def approve(cls, payload: MaterializedSendPayload, *, decided_at: float = 0.0) -> "ApprovalDecision":
+        return cls(
+            decision=ApprovalValue.APPROVE,
+            call_id=payload.call_id,
+            attempt=payload.attempt,
+            payload_sha256=payload.canonical_payload_sha256,
+            decided_at=decided_at,
+        )
+
+    @classmethod
+    def reject(cls, payload: MaterializedSendPayload, *, decided_at: float = 0.0) -> "ApprovalDecision":
+        return cls(
+            decision=ApprovalValue.REJECT,
+            call_id=payload.call_id,
+            attempt=payload.attempt,
+            payload_sha256=payload.canonical_payload_sha256,
+            decided_at=decided_at,
+        )
+
+    def validate_payload(self, payload: MaterializedSendPayload) -> None:
+        payload.verify_digest()
+        if (
+            self.call_id != payload.call_id
+            or self.attempt != payload.attempt
+            or self.payload_sha256 != payload.canonical_payload_sha256
+        ):
+            raise ValueError("批准令牌与当前物化载荷不匹配")
+
+
+class ContextUsageEstimate(FrozenModel):
+    status: str
+    estimated_input_tokens: int | None = Field(default=None, ge=0)
+    part_tokens: dict[str, int] = Field(default_factory=dict)
+    protocol_overhead_tokens: int | None = Field(default=None, ge=0)
+    max_output_tokens: int = Field(ge=0)
+    projected_peak_tokens: int | None = Field(default=None, ge=0)
+    context_capacity: int | None = Field(default=None, gt=0)
+    projected_percent: float | None = None
+    projected_remaining_tokens: int | None = None
+    risk: str | None = None
+    method: str | None = None
+    confidence: str | None = None
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def validate_conservation(self) -> "ContextUsageEstimate":
+        if self.status == "estimated":
+            if self.estimated_input_tokens is None or self.protocol_overhead_tokens is None:
+                raise ValueError("估算状态必须包含输入与协议开销")
+            if self.estimated_input_tokens != sum(self.part_tokens.values()) + self.protocol_overhead_tokens:
+                raise ValueError("输入估算不守恒")
+            if self.projected_peak_tokens != self.estimated_input_tokens + self.max_output_tokens:
+                raise ValueError("峰值估算不守恒")
+        elif not self.reason:
+            raise ValueError("不可估算状态必须说明原因")
+        return self
+
+
+class ActualUsageSummary(FrozenModel):
+    status: str
+    actual_input_tokens: int | None = Field(default=None, ge=0)
+    actual_output_tokens: int | None = Field(default=None, ge=0)
+    actual_total_tokens: int | None = Field(default=None, ge=0)
+    actual_percent: float | None = None
+    estimated_input_tokens: int | None = Field(default=None, ge=0)
+    input_estimation_error: int | None = None
+    reason: str | None = None
+
+    @classmethod
+    def actual(
+        cls,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        context_capacity: int | None,
+        estimated_input_tokens: int | None,
+    ) -> "ActualUsageSummary":
+        total = input_tokens + output_tokens
+        return cls(
+            status="actual",
+            actual_input_tokens=input_tokens,
+            actual_output_tokens=output_tokens,
+            actual_total_tokens=total,
+            actual_percent=(total / context_capacity * 100 if context_capacity else None),
+            estimated_input_tokens=estimated_input_tokens,
+            input_estimation_error=(input_tokens - estimated_input_tokens if estimated_input_tokens is not None else None),
+        )
+
+    @classmethod
+    def unavailable(cls, reason: str) -> "ActualUsageSummary":
+        return cls(status="unavailable", reason=reason)
+
+
+class PreTurnCheckpoint(FrozenModel):
+    raw_count: int = Field(ge=0)
+    raw_tail_id: str | None = None
+    raw_sha256: str
+    long_term_revision: int | None = Field(default=None, ge=0)
+    long_term_sha256: str | None = None
+    agent_state: str
+
+    @classmethod
+    def capture(cls, archive: Any, long_term_store: Any | None, agent_state: str) -> "PreTurnCheckpoint":
+        records = archive.read_all()
+        raw_identity = [
+            {"record_id": item.record_id, "content_sha256": item.content_sha256}
+            for item in records
+        ]
+        document = long_term_store.load() if long_term_store is not None else None
+        return cls(
+            raw_count=len(records),
+            raw_tail_id=records[-1].record_id if records else None,
+            raw_sha256=content_hash(canonical_json(raw_identity)),
+            long_term_revision=document.revision if document is not None else None,
+            long_term_sha256=(content_hash(canonical_json(document.model_dump(mode="json"))) if document is not None else None),
+            agent_state=agent_state,
+        )
+
+
+class TurnWorkingSet(FrozenModel):
+    checkpoint: PreTurnCheckpoint
+    provisional_user_record: RawRecord
+    curation_proposal: Any | None = None
+    tool_results: tuple[ToolResult, ...] = ()
+    state_candidate: str | None = None
+    assistant_record: RawRecord | None = None
+
+
+class TurnTransactionJournal(FrozenModel):
+    schema_version: int = 1
+    state: TransactionState
+    transaction_id: str
+    turn_id: str
+    checkpoint: PreTurnCheckpoint
+    provisional_user_record: RawRecord
+    pending_failure_code: str | None = None
+    assistant_record: RawRecord | None = None
+    target_long_term_document: dict[str, Any] | None = None
+    target_long_term_sha256: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state_fields(self) -> "TurnTransactionJournal":
+        if self.state == TransactionState.PREPARED and any(
+            value is not None
+            for value in (self.pending_failure_code, self.assistant_record, self.target_long_term_document)
+        ):
+            raise ValueError("PREPARED 不得包含待发布结果")
+        if self.state == TransactionState.READY_PENDING:
+            if not self.pending_failure_code or self.assistant_record is not None:
+                raise ValueError("READY_PENDING 只能发布一条 USER pending")
+        if self.state == TransactionState.READY_TO_COMMIT and self.assistant_record is None:
+            raise ValueError("READY_TO_COMMIT 必须包含 assistant 记录")
+        return self
+
+
 @dataclass(frozen=True, slots=True)
 class PersonaProfile:
     persona_id: str
@@ -472,6 +826,7 @@ class ConfigSnapshot:
     personas: tuple[PersonaProfile, ...]
     prompts: Mapping[str, str]
     settings: Mapping[str, Any]
+    assets: tuple[ConfigAsset, ...] = ()
 
     @classmethod
     def create(cls, **values: Any) -> "ConfigSnapshot":
