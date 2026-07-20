@@ -10,6 +10,7 @@ from bai_agent.domain.models import (
     PromptContext,
     PromptSegment,
     ConfigAsset,
+    LongTermMemoryItem,
     Participation,
     RawRecord,
     RequestPart,
@@ -25,6 +26,7 @@ from bai_agent.domain.models import (
     content_hash,
 )
 from bai_agent.memory.selection import validate_complete_coverage
+from bai_agent.memory.temporal import MemoryTemporalProjector
 from bai_agent.prompting.temporal import annotate_history
 
 
@@ -58,13 +60,14 @@ class PromptAssembler:
         config_revision: str,
         state_resolution: StateResolutionResult,
         memory_overview: str | MemoryCoverageOverview,
-        long_term_memories: Iterable[str],
+        long_term_memories: Iterable[str | LongTermMemoryItem],
         long_term_source_ids: Iterable[str] = (),
         recent_records: Iterable[RawRecord],
         current_input: str,
         all_raw_records: Iterable[RawRecord] | None = None,
         curated_through: int = 0,
         budgets: dict[str, int] | None = None,
+        memory_projector: MemoryTemporalProjector | None = None,
     ) -> PromptContext:
         if len(state_resolution.ordered_persona_ids) != len(self.state_personas):
             raise BaiError("STATE_PERSONA_MISSING", "状态人格引用无法完整解析。")
@@ -86,33 +89,64 @@ class PromptAssembler:
         long_items = tuple(long_term_memories)
         long_source_ids = tuple(long_term_source_ids)
         recent = tuple(recent_records)
+        raw_snapshot = tuple(all_raw_records) if all_raw_records is not None else None
         coverage = None
         overview_text = memory_overview.text if isinstance(memory_overview, MemoryCoverageOverview) else memory_overview
-        if all_raw_records is not None:
+        if raw_snapshot is not None:
             overview = (
                 memory_overview
                 if isinstance(memory_overview, MemoryCoverageOverview)
                 else MemoryCoverageOverview.empty()
             )
             coverage = validate_complete_coverage(
-                all_raw_records,
+                raw_snapshot,
                 overview,
                 curated_through=curated_through,
                 recent_records=recent,
             )
+        projector = memory_projector
+        if projector is None and raw_snapshot is not None:
+            projector = MemoryTemporalProjector.from_records(raw_snapshot)
+        overview_history = None
+        if (
+            self.temporal_policy is not None
+            and projector is not None
+            and isinstance(memory_overview, MemoryCoverageOverview)
+        ):
+            overview_entry = projector.project_overview(memory_overview)
+            if overview_entry is not None:
+                overview_history = annotate_history((overview_entry,), self.temporal_policy)
+                overview_text = overview_history.text
+
         limits = budgets or {}
         overview_limit = limits.get("overview_chars", len(overview_text))
         if len(overview_text) > overview_limit:
             raise BaiError("PROMPT_BUDGET_EXCEEDED", "记忆覆盖概览超过配置预算。")
-        long_limit = limits.get("long_term_chars", sum(len(item) for item in long_items) + len(long_items))
-        selected_long: list[str] = []
-        used_long = 0
-        for item in long_items:
-            if used_long + len(item) > long_limit:
-                continue
-            selected_long.append(item)
-            used_long += len(item)
-        long_text = "\n".join(selected_long) or "[]"
+        long_history = None
+        if (
+            self.temporal_policy is not None
+            and projector is not None
+            and all(isinstance(item, LongTermMemoryItem) for item in long_items)
+            and long_items
+        ):
+            long_entries = tuple(projector.project_memory(item) for item in long_items)
+            long_history = annotate_history(long_entries, self.temporal_policy)
+            long_text = long_history.text
+            long_source_ids = tuple(item.memory_id for item in long_items)
+            long_limit = limits.get("long_term_chars", len(long_text))
+            if len(long_text) > long_limit:
+                raise BaiError("PROMPT_BUDGET_EXCEEDED", "长期记忆超过配置预算。")
+        else:
+            string_items = tuple(str(item) for item in long_items)
+            long_limit = limits.get("long_term_chars", sum(len(item) for item in string_items) + len(string_items))
+            selected_long: list[str] = []
+            used_long = 0
+            for item in string_items:
+                if used_long + len(item) > long_limit:
+                    continue
+                selected_long.append(item)
+                used_long += len(item)
+            long_text = "\n".join(selected_long) or "[]"
         recent_history = None
         if self.temporal_policy is not None and recent:
             recent_entries = tuple(
@@ -161,10 +195,12 @@ class PromptAssembler:
                         if isinstance(memory_overview, MemoryCoverageOverview)
                         else ()
                     ),
+                    fragments=overview_history.fragments if overview_history is not None else (),
                 ),
                 PromptSegment(
                     segment_id="long_term_memories", trust=TrustLevel.UNTRUSTED_DATA,
                     content=long_text, source_ids=long_source_ids,
+                    fragments=long_history.fragments if long_history is not None else (),
                 ),
                 PromptSegment(
                     segment_id="recent_records",

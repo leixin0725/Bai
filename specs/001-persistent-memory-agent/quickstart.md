@@ -139,6 +139,21 @@ python -m bai_agent --config-dir config --data-dir data memory validate
 
 成功 JSON 包含 `raw_records`、`long_term_items`、`curated_through_sequence`、`coverage_spans`、`coverage_gaps: 0`、`dangling_sources: 0` 和 `direct_range`。
 
+聊天提示中的三个历史区块独立标注：
+
+- `memory_overview` 使用全部 coverage records 的最早—最晚 `SOURCE_RANGE`；
+- `long_term_memories` 按既有相关性顺序逐项使用全部 `source_refs` 的 `SOURCE_RANGE`；
+- `recent_records` 使用每条 raw 的 EVENT 点时间。
+
+运行：
+
+```bash
+pytest tests/unit/test_memory_temporal_projection.py tests/unit/test_temporal_prompt_budget.py -q
+pytest tests/integration/test_temporal_chat_context.py tests/integration/test_long_term_store.py -q
+```
+
+验收来源引用乱序、重复、范围相等/重叠和时间倒退时仍保持选择顺序；来源缺失、hash 不匹配、coverage 错误和非法时间全部在 provider 前失败。现行 schema v1 不使用 YAML 记忆的整理时间降级，未知格式也不进入 `RECORDED`。测试同时比较构建前后 raw/YAML/last-valid 字节，确认无需迁移且 marker 不持久化。
+
 ## 5. 来源查询
 
 从 `long_term.yaml` 选择 `memory_id`：

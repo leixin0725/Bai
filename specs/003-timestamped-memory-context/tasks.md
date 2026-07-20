@@ -85,21 +85,21 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 ### Tests for User Story 2（先写并确认失败）
 
-- [ ] T019 [P] [US2] 为 BR-005/BR-006 在 `tests/unit/test_memory_temporal_projection.py` 增加 raw EVENT、长期记忆/overview 全来源 min/max、引用乱序/重复/重叠/相等端点、通用 RECORDED formatter、当前没有持久化 RECORDED 入口、现行 v1/未识别格式禁止降级及 missing/unreadable/hash/time invalid 失败测试并确认失败
-- [ ] T020 [P] [US2] 为 BR-001/BR-002/BR-010 在 `tests/integration/test_temporal_chat_context.py` 增加 overview、long-term、recent 三个非空区块各自首 marker、相关性顺序保持、范围跳跃/倒序分段、非日志排除和单次 raw snapshot 读取测试并确认失败
-- [ ] T021 [P] [US2] 为 BR-008 在 `tests/unit/test_temporal_prompt_budget.py` 增加 long-term 按既有相关性顺序计算 annotated 增量成本、marker 恰好占满预算、候选跳过稳定和 overview/long-term 超限不删 marker/来源测试并确认失败
-- [ ] T022 [P] [US2] 为 BR-001/BR-005/BR-009/BR-010 在 `tests/integration/test_temporal_curation_context.py` 增加 batch_records/existing_memories/current_overview 独立标注、canonical JSON body 子串、重复正文绝对 span、metadata/output schema 排除、proposal schema 不变和来源失败 provider=0 测试并确认失败
-- [ ] T023 [P] [US2] 为 FR-023/BR-005 在 `tests/integration/test_long_term_store.py` 增加既有合法 raw/YAML 无迁移可读、构建前后文件字节与 UTC 时间不变、last-valid 恢复后仍严格校验实际来源、未识别格式不得走 RECORDED 以及 marker 不持久化测试并确认失败
+- [X] T019 [P] [US2] 为 BR-005/BR-006 在 `tests/unit/test_memory_temporal_projection.py` 增加 raw EVENT、长期记忆/overview 全来源 min/max、引用乱序/重复/重叠/相等端点、通用 RECORDED formatter、当前没有持久化 RECORDED 入口、现行 v1/未识别格式禁止降级及 missing/unreadable/hash/time invalid 失败测试并确认失败
+- [X] T020 [P] [US2] 为 BR-001/BR-002/BR-010 在 `tests/integration/test_temporal_chat_context.py` 增加 overview、long-term、recent 三个非空区块各自首 marker、相关性顺序保持、范围跳跃/倒序分段、非日志排除和单次 raw snapshot 读取测试并确认失败
+- [X] T021 [P] [US2] 为 BR-008 在 `tests/unit/test_temporal_prompt_budget.py` 增加 long-term 按既有相关性顺序计算 annotated 增量成本、marker 恰好占满预算、候选跳过稳定和 overview/long-term 超限不删 marker/来源测试并确认失败
+- [X] T022 [P] [US2] 为 BR-001/BR-005/BR-009/BR-010 在 `tests/integration/test_temporal_curation_context.py` 增加 batch_records/existing_memories/current_overview 独立标注、canonical JSON body 子串、重复正文绝对 span、metadata/output schema 排除、proposal schema 不变和来源失败 provider=0 测试并确认失败
+- [X] T023 [P] [US2] 为 FR-023/BR-005 在 `tests/integration/test_long_term_store.py` 增加既有合法 raw/YAML 无迁移可读、构建前后文件字节与 UTC 时间不变、last-valid 恢复后仍严格校验实际来源、未识别格式不得走 RECORDED 以及 marker 不持久化测试并确认失败
 
 ### Implementation for long-term chat memory
 
-- [ ] T024 [US2] 新增 `src/bai_agent/memory/temporal.py`，用单个 immutable `raw_by_id` 投影 raw/long-term/coverage 为统一日志项，复用现有来源/hash/coverage 错误并对全部 refs 求 UTC min/max，禁止 N+1 archive 读取和损坏来源 RECORDED 降级
-- [ ] T025 [US2] 在 `src/bai_agent/memory/selection.py` 保持相关性顺序，用统一 annotator 计算每个长期候选的精确 annotated 增量成本，超限沿用显式选择策略且不单独删除 marker、正文或来源
-- [ ] T026 [US2] 在 `src/bai_agent/prompting/assembler.py` 将 `memory_overview`、`long_term_memories`、`recent_records` 作为三个独立 block 渲染，平移 marker/body spans 到最终 segment，并让范围相等仍使用 SOURCE_RANGE 模板
-- [ ] T027 [US2] 在 `src/bai_agent/application.py` 和 `src/bai_agent/runtime/controller.py` 为一轮聊天复用同一次 raw/long-term 已验证视图，把完整 item/coverage 时间来源传给 selector/assembler，禁止只传丢失时间的裸字符串
-- [ ] T028 [P] [US2] 为 DR-001 更新 `README.md` 的长期记忆/coverage 来源时间范围、相关性顺序、来源损坏失败和无存储迁移说明
-- [ ] T029 [P] [US2] 为 DR-003/DR-004/DR-005 更新 `specs/001-persistent-memory-agent/contracts/model-and-tools.md`、`specs/001-persistent-memory-agent/contracts/storage.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步 UTC 事实来源、动态范围、RECORDED 仅作未来显式版本适配扩展且当前无持久化适配器、last-valid 边界和聊天三 block 验收
-- [ ] T030 [US2] 运行 `tests/unit/test_memory_temporal_projection.py`、`tests/integration/test_temporal_chat_context.py`、`tests/unit/test_temporal_prompt_budget.py`、`tests/integration/test_long_term_store.py` 及现有 archive/selection/coverage 回归，执行文档链接/默认值检查和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US2 的 Memory/Prompt 实现、测试和对应 README/001 文档
+- [X] T024 [US2] 新增 `src/bai_agent/memory/temporal.py`，用单个 immutable `raw_by_id` 投影 raw/long-term/coverage 为统一日志项，复用现有来源/hash/coverage 错误并对全部 refs 求 UTC min/max，禁止 N+1 archive 读取和损坏来源 RECORDED 降级
+- [X] T025 [US2] 在 `src/bai_agent/memory/selection.py` 保持相关性顺序，用统一 annotator 计算每个长期候选的精确 annotated 增量成本，超限沿用显式选择策略且不单独删除 marker、正文或来源
+- [X] T026 [US2] 在 `src/bai_agent/prompting/assembler.py` 将 `memory_overview`、`long_term_memories`、`recent_records` 作为三个独立 block 渲染，平移 marker/body spans 到最终 segment，并让范围相等仍使用 SOURCE_RANGE 模板
+- [X] T027 [US2] 在 `src/bai_agent/application.py` 和 `src/bai_agent/runtime/controller.py` 为一轮聊天复用同一次 raw/long-term 已验证视图，把完整 item/coverage 时间来源传给 selector/assembler，禁止只传丢失时间的裸字符串
+- [X] T028 [P] [US2] 为 DR-001 更新 `README.md` 的长期记忆/coverage 来源时间范围、相关性顺序、来源损坏失败和无存储迁移说明
+- [X] T029 [P] [US2] 为 DR-003/DR-004/DR-005 更新 `specs/001-persistent-memory-agent/contracts/model-and-tools.md`、`specs/001-persistent-memory-agent/contracts/storage.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步 UTC 事实来源、动态范围、RECORDED 仅作未来显式版本适配扩展且当前无持久化适配器、last-valid 边界和聊天三 block 验收
+- [X] T030 [US2] 运行 `tests/unit/test_memory_temporal_projection.py`、`tests/integration/test_temporal_chat_context.py`、`tests/unit/test_temporal_prompt_budget.py`、`tests/integration/test_long_term_store.py` 及现有 archive/selection/coverage 回归，执行文档链接/默认值检查和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US2 的 Memory/Prompt 实现、测试和对应 README/001 文档
 
 ### Implementation for curation history
 
@@ -295,3 +295,4 @@ Curation：T031 || T032 -> T033 -> T034
 ## Implementation Evidence
 
 - **T018 / 2026-07-20**: Foundation + US1 定向及既有 prompt/config 回归共 79 项通过；独立 `config validate` 使用无效占位凭据通过；12 份受影响 Markdown 的本地相对链接检查为 0 个断链，默认值/固定标签搜索一致，`git diff --check` 通过。
+- **T030 / 2026-07-20**: Memory/Prompt 定向及既有 archive/selection/coverage 回归共 53 项通过；5 份受影响 Markdown 的本地相对链接检查为 0 个断链，术语/默认值检查一致，`git diff --check` 通过。

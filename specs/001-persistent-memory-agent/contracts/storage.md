@@ -144,6 +144,14 @@ memories:
 - 若 `1..curated_through_sequence` 的 spans 有缺口/重叠，或前沿后的已确认记录不能完整留在近期窗口，Controller 必须在 Provider 调用前失败。
 - 来源原文从不因使用某条长期记忆而自动注入；仅显式调用 `memory_source_query` 后进入该 flow。
 
+### 8.1 构建期时间投影（2026-07-20）
+
+raw `created_at` 继续以 UTC 事实值保存，任何显示时区转换都不写回。每次聊天构建只读取一次已验证 raw 快照并建立 immutable `record_id -> RawRecord` 索引；长期记忆对全部 `source_refs` 校验 ID/hash 后取最早—最晚事件时间，coverage overview 还校验 sequence/连续性后取全部覆盖记录的范围。引用乱序或重复不改变长期记忆既有相关性顺序，也不能造成逐项 archive 读取。
+
+`long_term.yaml` 的 `created_at`/`updated_at` 是整理记录时间，不作为现行 schema v1 的事件发生时间。来源缺失、不可读、hash 不匹配、coverage 无效或时间非法时，提示构建在 provider 前失败；last-valid 恢复只选择一个候选文档，恢复后的文档仍必须通过实际 raw 来源校验。通用 formatter 保留 `RECORDED` 标签，但当前没有持久化适配器；schema v1 和未知格式不得走该路径。
+
+时间 marker、派生范围和显示时区都不是持久化字段。升级无需重写 JSONL/YAML、UTC 时间、正文、来源或备份；构建前后权威文件字节必须相同。
+
 ## 9. 只读来源读取
 
 存储端口为来源工具提供：

@@ -10,6 +10,7 @@ from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import Role
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.long_term import LongTermStore
+from bai_agent.memory.temporal import MemoryTemporalProjector
 
 
 REVISION = "sha256:" + "1" * 64
@@ -102,3 +103,39 @@ def test_valid_manual_text_edit_is_marked_and_revisioned(tmp_path: Path) -> None
     assert loaded.revision == created.revision + 1
     assert loaded.memories[0].text == "人工修正后的事实"
     assert loaded.memories[0].created_by.value == "manual"
+
+
+def test_temporal_projection_does_not_rewrite_existing_raw_or_yaml(tmp_path: Path) -> None:
+    store, archive = seeded_store(tmp_path)
+    document = store.initialize_with_manual_memory("事实", archive.read_all())
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    projector = MemoryTemporalProjector.from_records(archive.read_all())
+    assert projector.project_memory(document.memories[0]).body == "事实"
+    after = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert after == before
+
+
+def test_unrecognized_primary_uses_valid_fallback_but_never_recorded_projection(tmp_path: Path) -> None:
+    store, archive = seeded_store(tmp_path)
+    store.path.write_text("schema_version: 0\n", encoding="utf-8")
+    fallback = store.load()
+    assert store.read_only
+    assert fallback.schema_version == 1
+    projector = MemoryTemporalProjector.from_records(archive.read_all())
+    assert not hasattr(projector, "project_recorded")
+
+
+def test_last_valid_recovery_still_rejects_broken_actual_sources(tmp_path: Path) -> None:
+    store, archive = seeded_store(tmp_path)
+    document = store.initialize_with_manual_memory("事实", archive.read_all())
+    assert document.memories
+    store.path.write_text("revision: [invalid", encoding="utf-8")
+
+    class MissingArchive:
+        def read_all(self):
+            return ()
+
+    store.archive = MissingArchive()
+    with pytest.raises(BaiError) as raised:
+        store.load()
+    assert raised.value.code == "SOURCE_RECORD_MISSING"

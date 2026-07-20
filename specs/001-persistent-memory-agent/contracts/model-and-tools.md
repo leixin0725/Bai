@@ -249,11 +249,13 @@ next_cursor | null
 
 ## 12. 统一历史时间合同（2026-07-20）
 
-`PromptAssembler` 把每条近期 `RawRecord` 适配为统一日志项：正文仍是原有的 `role: content`，点时间严格使用已持久化的 `created_at`，来源绑定 raw record identity/hash。非空 `recent_records` 区块独立从首项开始分段；当前输入、基础人格和状态人格不进入时间线。
+`PromptAssembler` 把每条近期 `RawRecord` 适配为统一日志项：正文仍是原有的 `role: content`，点时间严格使用已持久化的 `created_at`，来源绑定 raw record identity/hash。`memory_overview`、`long_term_memories`、`recent_records` 三个区块分别从空状态分段；当前输入、基础人格和状态人格不进入时间线。
 
 默认 `config/history_timestamps.toml` 使用 `Asia/Shanghai`、30 分钟 gap、120 分钟 refresh 并启用跨日。首项、`gap >= 30m`、本地日期改变、从最近 marker 起达到 120 分钟或时间倒退时，在承载项正文前生成一个固定中文 marker；多原因不会生成多行，未命中时不逐条标记。
 
-marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `RequestPart`。marker 来源同时包含 `config:history_timestamps` 与承载 raw，信任级别固定为 `UNTRUSTED_DATA`；正文保持自身 raw 来源。recent 字符预算检查最终含 marker 的文本，不能在预算后追加或因超限单独删除 marker。时间标记不进入 raw 存储，也不改变 `memory_source_query` 合同。
+长期记忆与 coverage overview 复用同一次 raw 快照建立的 immutable index，逐一校验 record ID/hash/sequence 后，对全部来源 `created_at` 求 UTC min/max；引用顺序、重复引用和相关性顺序不会被时间排序改变，相等端点仍保持 `SOURCE_RANGE` 标签。任何来源损坏都 fail closed。`RECORDED` 只保留为未来明确 schema/version 的扩展语义，当前 schema v1 与未知格式没有该入口。
+
+marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `RequestPart`。marker 来源同时包含 `config:history_timestamps` 与承载 raw/长期实体，信任级别固定为 `UNTRUSTED_DATA`；正文保持自身来源。overview、long-term 和 recent 字符预算检查最终含 marker 的文本，不能在预算后追加或因超限单独删除 marker。时间标记不进入 raw/YAML 存储，也不改变 `memory_source_query` 合同。
 
 # 002 模型与工具安全边界同步（2026-07-20）
 

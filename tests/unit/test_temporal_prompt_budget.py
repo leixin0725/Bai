@@ -9,14 +9,23 @@ import pytest
 
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
+    CreatedBy,
+    LongTermMemoryItem,
+    MemoryKind,
+    MemoryStatus,
     RawRecord,
     Role,
     SourceKind,
     SourceRef,
+    SourceReference,
+    SourceRelation,
     StateResolutionResult,
     TemporalSegmentationPolicy,
     TrustLevel,
 )
+from bai_agent.memory.selection import select_long_term
+from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.temporal import annotate_history
 from bai_agent.prompting.assembler import PromptAssembler
 
 
@@ -102,3 +111,100 @@ def test_generated_marker_is_untrusted_has_config_and_raw_sources_and_body_canno
     body = next(part for part in parts if "只是正文" in part.content)
     assert body.trust is TrustLevel.UNTRUSTED_DATA
     assert all(source.source_id != "config:history_timestamps" for source in body.sources)
+
+
+def test_long_term_selection_uses_exact_annotated_increment_and_stably_skips_oversized_candidate() -> None:
+    assembler = _assembler()
+    policy = assembler.temporal_policy
+    assert policy is not None
+    records = tuple(
+        RawRecord.create(
+            record_id=f"rec-00000000-0000-4000-8000-{index:012d}",
+            global_sequence=index,
+            turn_id=f"turn-00000000-0000-4000-8000-{index:012d}",
+            role=Role.USER,
+            content=f"raw-{index}",
+            created_at=datetime(2026, 7, 20, tzinfo=timezone.utc) + timedelta(hours=index),
+            state_id="default",
+            config_revision=REVISION,
+        )
+        for index in range(1, 4)
+    )
+    projector = MemoryTemporalProjector.from_records(records)
+
+    def memory(index: int, text: str) -> LongTermMemoryItem:
+        return LongTermMemoryItem(
+            memory_id=f"mem-00000000-0000-4000-8000-{index:012d}",
+            kind=MemoryKind.FACT,
+            text=text,
+            status=MemoryStatus.ACTIVE,
+            source_refs=(
+                SourceReference(
+                    record_id=records[index - 1].record_id,
+                    relation=SourceRelation.SUPPORTS,
+                    record_sha256=records[index - 1].content_sha256,
+                ),
+            ),
+            created_by=CreatedBy.MANUAL,
+            created_at=records[index - 1].created_at,
+            updated_at=records[index - 1].created_at,
+        )
+
+    first = memory(1, "匹配-短一")
+    oversized = memory(2, "匹配-" + "很长" * 100)
+    third = memory(3, "短三")
+    expected = annotate_history(
+        (projector.project_memory(first), projector.project_memory(third)),
+        policy,
+    )
+    selected = select_long_term(
+        (first, oversized, third),
+        "匹配",
+        max_chars=len(expected.text),
+        temporal_projector=projector,
+        temporal_policy=policy,
+    )
+    assert selected == (first, third)
+    assert len(annotate_history(tuple(projector.project_memory(item) for item in selected), policy).text) == len(expected.text)
+
+
+def test_overview_and_long_term_overflow_never_remove_marker_or_source() -> None:
+    # US2 会在 assembler 中对最终 annotated overview/long-term 执行明确失败，不回退裸正文。
+    assembler = _assembler()
+    record = _record()
+    from bai_agent.domain.models import CoverageSpan, MemoryCoverageOverview
+
+    overview = MemoryCoverageOverview(
+        revision=1,
+        text="概览",
+        coverage_spans=(
+            CoverageSpan(
+                start_sequence=1,
+                end_sequence=1,
+                batch_id="batch-00000000-0000-4000-8000-000000000001",
+                record_ids=(record.record_id,),
+                record_hashes=(record.content_sha256,),
+            ),
+        ),
+    )
+    with pytest.raises(BaiError) as raised:
+        assembler.assemble(
+            flow_id="flow",
+            turn_id="turn-current",
+            config_revision=REVISION,
+            state_resolution=StateResolutionResult(
+                state_id="default",
+                ordered_persona_ids=("state_default",),
+                resolver_id="static",
+                resolver_version="1",
+                reason_code="configured_default",
+            ),
+            memory_overview=overview,
+            long_term_memories=(),
+            recent_records=(),
+            current_input="问题",
+            all_raw_records=(record,),
+            curated_through=1,
+            budgets={"overview_chars": len("概览"), "long_term_chars": 100, "recent_chars": 100},
+        )
+    assert raised.value.code == "PROMPT_BUDGET_EXCEEDED"

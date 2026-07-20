@@ -14,7 +14,10 @@ from bai_agent.domain.models import (
     MemoryStatus,
     RawRecord,
     SourceRef,
+    TemporalSegmentationPolicy,
 )
+from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.temporal import annotate_history
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +75,12 @@ def select_recent_complete_turns(
 
 
 def select_long_term(
-    memories: Iterable[LongTermMemoryItem], query: str, *, max_chars: int
+    memories: Iterable[LongTermMemoryItem],
+    query: str,
+    *,
+    max_chars: int,
+    temporal_projector: MemoryTemporalProjector | None = None,
+    temporal_policy: TemporalSegmentationPolicy | None = None,
 ) -> tuple[LongTermMemoryItem, ...]:
     terms = set(re.findall(r"[\w\u4e00-\u9fff]+", query.casefold()))
 
@@ -81,16 +89,28 @@ def select_long_term(
         manual = 1 if item.created_by == CreatedBy.MANUAL else 0
         return (-manual, -overlap, item.memory_id)
 
+    if (temporal_projector is None) != (temporal_policy is None):
+        raise BaiError("TEMPORAL_ENTRY_INVALID", "长期记忆选择必须同时提供时间投影与策略。")
+
     selected: list[LongTermMemoryItem] = []
     used = 0
     for item in sorted(
         (value for value in memories if value.status == MemoryStatus.ACTIVE), key=score
     ):
-        size = len(item.text)
-        if used + size > max_chars:
-            continue
-        selected.append(item)
-        used += size
+        if temporal_projector is not None and temporal_policy is not None:
+            candidate = (*selected, item)
+            entries = tuple(temporal_projector.project_memory(value) for value in candidate)
+            size = len(annotate_history(entries, temporal_policy).text)
+            if size > max_chars:
+                continue
+            selected.append(item)
+            used = size
+        else:
+            size = len(item.text)
+            if used + size > max_chars:
+                continue
+            selected.append(item)
+            used += size
     return tuple(selected)
 
 

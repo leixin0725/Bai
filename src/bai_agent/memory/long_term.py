@@ -88,7 +88,12 @@ class LongTermStore:
             raise BaiError("MEMORY_DOCUMENT_TOO_LARGE", "长期记忆文档超过配置大小上限。")
         return payload
 
-    def _parse_bytes(self, payload: bytes) -> LongTermMemoryDocument:
+    def _parse_bytes(
+        self,
+        payload: bytes,
+        *,
+        raw_records: tuple[RawRecord, ...] | None = None,
+    ) -> LongTermMemoryDocument:
         if len(payload) > self.max_document_bytes:
             raise BaiError("MEMORY_DOCUMENT_TOO_LARGE", "长期记忆文档超过配置大小上限。")
         try:
@@ -102,13 +107,21 @@ class LongTermStore:
             raise BaiError("MEMORY_DOCUMENT_TOO_LARGE", "长期记忆条目超过配置上限。")
         if len(document.coverage_overview.text) > self.max_overview_chars:
             raise BaiError("MEMORY_OVERVIEW_TOO_LARGE", "记忆覆盖概览超过配置上限。")
-        self._validate_sources(document)
+        self._validate_sources(document, raw_records=raw_records)
         return document
 
-    def _validate_sources(self, document: LongTermMemoryDocument) -> None:
+    def _validate_sources(
+        self,
+        document: LongTermMemoryDocument,
+        *,
+        raw_records: tuple[RawRecord, ...] | None = None,
+    ) -> None:
         if not document.memories and not document.coverage_overview.coverage_spans:
             return
-        raw = {item.record_id: item for item in self.archive.read_all()}
+        raw = {
+            item.record_id: item
+            for item in (self.archive.read_all() if raw_records is None else raw_records)
+        }
         for memory in document.memories:
             for source in memory.source_refs:
                 record = raw.get(source.record_id)
@@ -140,16 +153,23 @@ class LongTermStore:
             ensure_private_path(self.path, is_directory=False)
         return self.load()
 
-    def load(self) -> LongTermMemoryDocument:
+    def load(
+        self,
+        *,
+        raw_records: tuple[RawRecord, ...] | None = None,
+    ) -> LongTermMemoryDocument:
+        """[2026-07-20] 调用方已有 raw 快照时复用它，避免聊天构建重复读取 archive。"""
         try:
             payload = self.path.read_bytes()
-            document = self._parse_bytes(payload)
+            document = self._parse_bytes(payload, raw_records=raw_records)
         except (OSError, BaiError) as primary_error:
             if not self.last_valid_path.exists():
                 if isinstance(primary_error, BaiError):
                     raise
                 raise BaiError("MEMORY_DOCUMENT_INVALID", "长期记忆文件不存在或不可读。") from primary_error
-            fallback = self._parse_bytes(self.last_valid_path.read_bytes())
+            fallback = self._parse_bytes(
+                self.last_valid_path.read_bytes(), raw_records=raw_records
+            )
             self.read_only = True
             self.loaded_hash = None
             return fallback
@@ -158,7 +178,11 @@ class LongTermStore:
         if self.last_valid_path.exists():
             try:
                 previous_payload = self.last_valid_path.read_bytes()
-                previous = self._parse_bytes(previous_payload) if previous_payload != payload else None
+                previous = (
+                    self._parse_bytes(previous_payload, raw_records=raw_records)
+                    if previous_payload != payload
+                    else None
+                )
                 if previous is not None and document.memories != previous.memories:
                     if document.curation != previous.curation or document.coverage_overview.coverage_spans != previous.coverage_overview.coverage_spans:
                         raise BaiError("MEMORY_DOCUMENT_INVALID", "人工维护不能直接修改整理前沿或覆盖区间。")

@@ -26,6 +26,7 @@ from bai_agent.domain.models import (
 )
 from bai_agent.memory.transaction import PreTurnCheckpoint, TurnUnitOfWork
 from bai_agent.memory.selection import select_long_term
+from bai_agent.memory.temporal import MemoryTemporalProjector
 
 
 class SingleTurnController:
@@ -170,7 +171,8 @@ class SingleTurnController:
                 raise
         all_records = self.repository.read_all()
         if self.long_term_store:
-            long_document = self.long_term_store.load()
+            long_document = self.long_term_store.load(raw_records=all_records)
+            memory_projector = MemoryTemporalProjector.from_records(all_records)
             recent = tuple(
                 item
                 for item in all_records
@@ -180,16 +182,19 @@ class SingleTurnController:
                 long_document.memories,
                 content,
                 max_chars=self.memory_budgets.get("long_term_chars", 16_384),
+                temporal_projector=memory_projector,
+                temporal_policy=self.prompt_assembler.temporal_policy,
             )
             memory_overview = long_document.coverage_overview
-            long_term_texts = tuple(item.text for item in selected_memories)
+            long_term_values = selected_memories
             long_term_source_ids = tuple(item.memory_id for item in selected_memories)
             curated_through = long_document.curation.curated_through_sequence
             coverage_records = all_records
         else:
+            memory_projector = None
             recent = tuple(item for item in all_records if item.record_id != user_record.record_id)
             memory_overview = "[]"
-            long_term_texts = ()
+            long_term_values = ()
             long_term_source_ids = ()
             curated_through = 0
             coverage_records = None
@@ -199,13 +204,14 @@ class SingleTurnController:
             config_revision=config_revision,
             state_resolution=resolution,
             memory_overview=memory_overview,
-            long_term_memories=long_term_texts,
+            long_term_memories=long_term_values,
             long_term_source_ids=long_term_source_ids,
             recent_records=recent,
             current_input=content,
             all_raw_records=coverage_records,
             curated_through=curated_through,
             budgets=self.memory_budgets,
+            memory_projector=memory_projector,
         )
         if self.tracer:
             self.tracer.emit(
