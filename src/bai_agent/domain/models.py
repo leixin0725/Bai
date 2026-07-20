@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from hashlib import sha256
 import json
@@ -11,6 +11,7 @@ from pathlib import PurePosixPath
 from types import MappingProxyType
 from typing import Any, Mapping
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -204,6 +205,7 @@ class PromptSegment(FrozenModel):
     trust: TrustLevel
     content: str
     source_ids: tuple[str, ...] = ()
+    fragments: tuple["AnnotatedFragment", ...] = ()
 
 
 class PromptContext(FrozenModel):
@@ -544,6 +546,163 @@ class SourceRef(FrozenModel):
         return self
 
 
+class TemporalTimeKind(StrEnum):
+    """[2026-07-20] 显式时间语义决定可见标签，禁止根据端点是否相等猜测。"""
+
+    EVENT = "event"
+    SOURCE_RANGE = "source_range"
+    RECORDED = "recorded"
+
+
+class TemporalMarkerReason(StrEnum):
+    FIRST = "first"
+    LONG_GAP = "long_gap"
+    LOCAL_DATE_CHANGE = "local_date_change"
+    REFRESH = "refresh"
+    TIME_REVERSAL = "time_reversal"
+
+
+class AnnotatedFragmentKind(StrEnum):
+    MARKER = "marker"
+    BODY = "body"
+    SEPARATOR = "separator"
+
+
+class TemporalSpan(FrozenModel):
+    """[2026-07-20] 所有边界保留完整 aware datetime，显示精度不参与判定。"""
+
+    start: datetime
+    end: datetime
+    kind: TemporalTimeKind
+
+    @model_validator(mode="after")
+    def validate_span(self) -> "TemporalSpan":
+        if (
+            self.start.tzinfo is None
+            or self.start.utcoffset() is None
+            or self.end.tzinfo is None
+            or self.end.utcoffset() is None
+        ):
+            raise ValueError("时间范围必须包含 UTC 偏移")
+        if self.end.astimezone(timezone.utc) < self.start.astimezone(timezone.utc):
+            raise ValueError("时间范围结束时刻不能早于开始时刻")
+        if self.kind in {TemporalTimeKind.EVENT, TemporalTimeKind.RECORDED} and (
+            self.start.astimezone(timezone.utc) != self.end.astimezone(timezone.utc)
+        ):
+            raise ValueError("点时间语义要求起止时刻相同")
+        return self
+
+
+class TemporalLogEntry(FrozenModel):
+    """[2026-07-20] 通用标注器只接收有序正文、可信时间和真实来源。"""
+
+    entry_id: str = Field(min_length=1)
+    body: str
+    span: TemporalSpan
+    sources: tuple[SourceRef, ...] = Field(min_length=1)
+    trust: TrustLevel = TrustLevel.UNTRUSTED_DATA
+    metadata: Mapping[str, JsonValue] = Field(default_factory=dict)
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def freeze_metadata(cls, value: Any) -> Any:
+        return freeze_json(value)
+
+
+class TemporalSegmentationPolicy(FrozenModel):
+    """[2026-07-20] 一次构建只能使用一份完整、不可变且有来源的时间策略。"""
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        use_enum_values=False,
+        arbitrary_types_allowed=True,
+    )
+
+    display_timezone: ZoneInfo
+    display_timezone_name: str = Field(min_length=1)
+    long_gap: timedelta
+    continuous_refresh: timedelta
+    split_on_local_date_change: bool
+    config_source: SourceRef
+
+    @model_validator(mode="after")
+    def validate_policy(self) -> "TemporalSegmentationPolicy":
+        if self.display_timezone.key != self.display_timezone_name:
+            raise ValueError("显示时区名称必须与已解析 IANA 时区一致")
+        if self.long_gap <= timedelta(0):
+            raise ValueError("长间隔必须为正值")
+        if self.continuous_refresh < self.long_gap:
+            raise ValueError("连续段刷新阈值不能小于长间隔")
+        return self
+
+
+class TemporalMarker(FrozenModel):
+    before_entry_id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+    reasons: frozenset[TemporalMarkerReason] = Field(min_length=1)
+    span: TemporalSpan
+    sources: tuple[SourceRef, ...] = Field(min_length=1)
+    trust: TrustLevel = TrustLevel.UNTRUSTED_DATA
+
+    @field_validator("trust")
+    @classmethod
+    def validate_marker_trust(cls, value: TrustLevel) -> TrustLevel:
+        if value is not TrustLevel.UNTRUSTED_DATA:
+            raise ValueError("时间标记只能是不可信数据元数据")
+        return value
+
+
+class AnnotatedFragment(FrozenModel):
+    fragment_id: str = Field(min_length=1)
+    kind: AnnotatedFragmentKind
+    entry_id: str = Field(min_length=1)
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+    content: str
+    sources: tuple[SourceRef, ...] = Field(min_length=1)
+    trust: TrustLevel
+
+    @model_validator(mode="after")
+    def validate_fragment(self) -> "AnnotatedFragment":
+        if self.end < self.start or self.end - self.start != len(self.content):
+            raise ValueError("时间标注片段区间与正文长度不一致")
+        if self.kind is AnnotatedFragmentKind.MARKER and self.trust is not TrustLevel.UNTRUSTED_DATA:
+            raise ValueError("时间标记片段不能提升信任级别")
+        return self
+
+
+class AnnotatedHistory(FrozenModel):
+    text: str
+    entries: tuple[TemporalLogEntry, ...]
+    fragments: tuple[AnnotatedFragment, ...]
+    markers: tuple[TemporalMarker, ...]
+
+    @model_validator(mode="after")
+    def validate_history(self) -> "AnnotatedHistory":
+        entry_ids = [entry.entry_id for entry in self.entries]
+        if len(entry_ids) != len(set(entry_ids)):
+            raise ValueError("时间日志项 ID 不能重复")
+        marker_ids = [marker.before_entry_id for marker in self.markers]
+        if len(marker_ids) != len(set(marker_ids)) or any(item not in set(entry_ids) for item in marker_ids):
+            raise ValueError("时间标记必须唯一关联现有日志项")
+        fragment_ids = [fragment.fragment_id for fragment in self.fragments]
+        if len(fragment_ids) != len(set(fragment_ids)):
+            raise ValueError("时间标注片段 ID 不能重复")
+        cursor = 0
+        for fragment in self.fragments:
+            if fragment.start != cursor or fragment.end > len(self.text):
+                raise ValueError("时间标注片段必须连续、无重叠且不越界")
+            if self.text[fragment.start : fragment.end] != fragment.content:
+                raise ValueError("时间标注片段无法从最终正文回读")
+            cursor = fragment.end
+        if cursor != len(self.text):
+            raise ValueError("时间标注片段未覆盖完整最终正文")
+        if not self.entries and (self.text or self.fragments or self.markers):
+            raise ValueError("空日志区块不能生成时间标注内容")
+        return self
+
+
 class RequestPart(FrozenModel):
     part_id: str = Field(min_length=1)
     order: int = Field(ge=0)
@@ -872,3 +1031,7 @@ class ConfigSnapshot:
         values["prompts"] = _freeze(dict(values["prompts"]))
         values["settings"] = _freeze(dict(values["settings"]))
         return cls(**values)
+
+
+# [2026-07-20] PromptSegment 的精确片段类型在同模块后段声明，统一在模块加载完成后解析。
+PromptSegment.model_rebuild()

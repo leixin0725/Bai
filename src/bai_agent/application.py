@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from bai_agent.config.loader import load_config
 from bai_agent.debug.tui import TextualApprovalPresenter
-from bai_agent.domain.models import SourceKind, SourceRef
+from bai_agent.domain.models import SourceKind, SourceRef, TemporalSegmentationPolicy
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.curation import CurationPolicy, CurationService
 from bai_agent.memory.long_term import LongTermStore
@@ -23,6 +25,33 @@ from bai_agent.states.resolver import StaticStateResolver
 from bai_agent.tools.executor import ToolExecutor
 from bai_agent.tools.memory_source import MemorySourceQueryTool
 from bai_agent.tools.registry import ToolRegistry
+
+
+def _temporal_policy(snapshot) -> TemporalSegmentationPolicy:
+    """[2026-07-20] 时间策略只由同一已验证快照及其真实配置资产构造。"""
+    settings = snapshot.settings["history_timestamps.toml"]
+    asset = next(
+        item for item in snapshot.assets if item.asset_id == "config:history_timestamps"
+    )
+    source = SourceRef(
+        source_kind=SourceKind.CONFIG_FILE,
+        source_id=asset.asset_id,
+        project_relative_path=f"config/{asset.project_relative_path}",
+        content_sha256=asset.content_sha256,
+        revision=snapshot.revision,
+        producer="config_loader",
+    )
+    zone_name = str(settings["display_timezone"])
+    return TemporalSegmentationPolicy(
+        display_timezone=ZoneInfo(zone_name),
+        display_timezone_name=zone_name,
+        long_gap=timedelta(minutes=int(settings["long_gap_minutes"])),
+        continuous_refresh=timedelta(
+            minutes=int(settings["continuous_segment_refresh_minutes"])
+        ),
+        split_on_local_date_change=bool(settings["split_on_local_date_change"]),
+        config_source=source,
+    )
 
 
 class AgentApplication:
@@ -71,6 +100,7 @@ class AgentApplication:
             persona_prompts.state_prompts(states[fresh.default_state_id]),
             base_asset=assets.get("persona:chat"),
             state_assets=state_asset_values,
+            temporal_policy=_temporal_policy(fresh),
         )
         chat_provider = self.controller.provider
         curator_provider = self.controller.curation_service.provider
@@ -190,6 +220,7 @@ def build_application(
                 for persona_id in states[snapshot.default_state_id]
                 if f"persona:{persona_id}" in assets
             ),
+            temporal_policy=_temporal_policy(snapshot),
         )
         managed_provider = provider is None
         if managed_provider:

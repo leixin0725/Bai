@@ -246,6 +246,15 @@ next_cursor | null
 - 任意用户/记忆/工具文本不能改变 StaticStateResolver 结果。
 - 替换测试 StateMachineResolver 或 Provider 无需改 Controller/Memory/PromptAssembler。
 - 默认 loop 的 Provider/Tool 调用均为 0；测试 Runner 达到迭代、deadline、预算或取消必停。
+
+## 12. 统一历史时间合同（2026-07-20）
+
+`PromptAssembler` 把每条近期 `RawRecord` 适配为统一日志项：正文仍是原有的 `role: content`，点时间严格使用已持久化的 `created_at`，来源绑定 raw record identity/hash。非空 `recent_records` 区块独立从首项开始分段；当前输入、基础人格和状态人格不进入时间线。
+
+默认 `config/history_timestamps.toml` 使用 `Asia/Shanghai`、30 分钟 gap、120 分钟 refresh 并启用跨日。首项、`gap >= 30m`、本地日期改变、从最近 marker 起达到 120 分钟或时间倒退时，在承载项正文前生成一个固定中文 marker；多原因不会生成多行，未命中时不逐条标记。
+
+marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `RequestPart`。marker 来源同时包含 `config:history_timestamps` 与承载 raw，信任级别固定为 `UNTRUSTED_DATA`；正文保持自身 raw 来源。recent 字符预算检查最终含 marker 的文本，不能在预算后追加或因超限单独删除 marker。时间标记不进入 raw 存储，也不改变 `memory_source_query` 合同。
+
 # 002 模型与工具安全边界同步（2026-07-20）
 
 所有 provider 调用统一采用 `prepare()`、唯一 `materialize_sdk_kwargs()` 与 `send_once()`；认证仍由 transport 单独注入，不属于可展示提示载荷。载荷在显示前和发送前复用凭据门禁，命中时只返回脱敏错误并沿用安全事件阻断。当前注册工具必须声明 `read_only=true`；未来写工具必须具备可恢复 `prepare/commit/rollback` 或明确补偿契约，否则在任何副作用前拒绝。

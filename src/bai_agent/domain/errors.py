@@ -49,6 +49,13 @@ class DebugPresentationError(BaiError):
         super().__init__("DEBUG_PRESENTATION_FAILED", message)
 
 
+class TemporalEntryError(BaiError):
+    """[2026-07-20] 无法可信标注的时间项必须在模型调用前明确失败。"""
+
+    def __init__(self, message: str = "历史时间元数据无效，模型调用已阻止。") -> None:
+        super().__init__("TEMPORAL_ENTRY_INVALID", message)
+
+
 def fail(code: str, message: str, *, retryable: bool = False) -> "NoReturn":
     """[2026-07-19] 用统一入口避免不同适配器自行拼接不安全异常文本。"""
     raise BaiError(code, message, retryable=retryable)

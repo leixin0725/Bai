@@ -1,0 +1,5 @@
+schema_version = 1
+display_timezone = "Asia/Shanghai"
+long_gap_minutes = 30
+continuous_segment_refresh_minutes = 120
+split_on_local_date_change = true

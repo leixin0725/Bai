@@ -5,11 +5,52 @@ from __future__ import annotations
 from pathlib import Path
 from string import Template
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from bai_agent.domain.errors import BaiError
 
 
 TOKEN_ESTIMATORS = frozenset({"deepseek_character_v1"})
+
+HISTORY_TIMESTAMP_FIELDS = frozenset(
+    {
+        "schema_version",
+        "display_timezone",
+        "long_gap_minutes",
+        "continuous_segment_refresh_minutes",
+        "split_on_local_date_change",
+    }
+)
+
+
+def validate_history_timestamps(value: Any) -> dict[str, Any]:
+    """[2026-07-20] 独立时间策略严格拒绝缺失、未知、宽松类型和本地时区回退。"""
+    try:
+        raw = require_mapping(value, "history_timestamps.toml")
+        if set(raw) != HISTORY_TIMESTAMP_FIELDS:
+            raise ValueError("字段集合不匹配")
+        schema = raw["schema_version"]
+        zone_name = raw["display_timezone"]
+        gap = raw["long_gap_minutes"]
+        refresh = raw["continuous_segment_refresh_minutes"]
+        split = raw["split_on_local_date_change"]
+        if type(schema) is not int or schema != 1:
+            raise ValueError("schema_version")
+        if not isinstance(zone_name, str) or not zone_name.strip():
+            raise ValueError("display_timezone")
+        if type(gap) is not int or not 1 <= gap <= 1440:
+            raise ValueError("long_gap_minutes")
+        if type(refresh) is not int or not 1 <= refresh <= 10080 or refresh < gap:
+            raise ValueError("continuous_segment_refresh_minutes")
+        if type(split) is not bool:
+            raise ValueError("split_on_local_date_change")
+        ZoneInfo(zone_name)
+    except (KeyError, TypeError, ValueError, ZoneInfoNotFoundError) as exc:
+        raise BaiError(
+            "CONFIG_INVALID",
+            "history_timestamps.toml 字段、类型、范围、关系或 IANA 时区无效。",
+        ) from exc
+    return dict(raw)
 
 
 def validate_debug_prompt(value: Any) -> dict[str, Any]:

@@ -66,6 +66,14 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 调试界面会完整暴露当前请求中的私人记忆，只应在可信本地终端使用；复制功能会把框内内容写入由终端/操作系统管理的剪贴板，使用后可按需清除。API Key/Authorization 由 transport 单独持有，既不进入可展示载荷，也不进入 journal、日志或实际用量摘要。若 TUI 运行期失败，未决定的 `PREPARED` journal 会在下一次持锁启动时安全丢弃；`READY_PENDING` 先前滚为唯一 USER pending，再由默认丢弃、显式丢弃或显式恢复策略处理；`READY_TO_COMMIT` 按 USER、ASSISTANT、可选长期记忆顺序幂等发布。恢复或尾部校验冲突会阻止新输入和 provider，不覆盖人工修改。
 
+## 历史时间段标注
+
+模型看到的近期聊天会按聊天软件式的稀疏规则显示时间，而不是每条消息都重复显示。每个非空历史区块的第一项有标记；相邻事件间隔达到 30 分钟、本地日期改变、从最近标记起持续达到 120 分钟或时间倒退时，下一项重新显示标记。边界使用完整的带时区事件时间计算，正文中的仿冒标记不会改变分段。
+
+默认策略位于独立文件 `config/history_timestamps.toml`：显示时区为 `Asia/Shanghai`，长间隔为 30 分钟，连续段刷新为 120 分钟，并启用跨本地日期分段。固定格式为 `[时间：YYYY-MM-DD HH:mm ±HH:MM]`、`[时间范围：YYYY-MM-DD HH:mm ±HH:MM 至 YYYY-MM-DD HH:mm ±HH:MM]` 和 `[记录时间：YYYY-MM-DD HH:mm ±HH:MM]`，标签与结构不可由配置覆盖。
+
+时间标记只作用于历史数据；当前输入、基础人格、状态人格和系统规则不标注。标记与对应历史正文都保持 `UNTRUSTED_DATA`，并分别记录时间配置及原始记录来源；预算按最终含标记文本计算。标记仅在提示构建期生成，不写回 `data/memory/raw/*.jsonl` 或长期记忆文件。
+
 ## 记忆与安全
 
 运行数据默认位于 `data/memory/`：`raw/*.jsonl` 中已完成 USER/ASSISTANT 轮次不可变；唯一未配对的合法尾部 USER 是可放弃的未完成轮次。`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：

@@ -97,6 +97,29 @@ pytest tests/performance/test_prompt_trace_release.py tests/integration/test_pro
 
 估算字段使用 `≈`：`input = sum(parts) + protocol overhead`，`peak = input + max_output_tokens`。能力取自配置中的 `deepseek-v4-flash` 1M context/384K output cap；两个 profile 仍预留 8192 输出且保持原有生成参数。合法实际 usage 只在 TUI 清除后的普通输出显示；缺失、负数或不守恒 usage 显示不可用。
 
+### 3.2 近期聊天时间段（2026-07-20）
+
+默认配置文件：
+
+```toml
+schema_version = 1
+display_timezone = "Asia/Shanghai"
+long_gap_minutes = 30
+continuous_segment_refresh_minutes = 120
+split_on_local_date_change = true
+```
+
+运行：
+
+```bash
+pytest tests/unit/test_temporal_annotation.py tests/unit/test_temporal_annotation_properties.py -q
+pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_temporal_chat_context.py tests/unit/test_temporal_prompt_budget.py -q
+```
+
+验收时固定检查：密集消息只有首 marker；相邻 gap 恰好 30 分钟时新分段；连续短间隔在最近 marker 后恰好 120 分钟时刷新；跨 `Asia/Shanghai` 自然日和时间倒退时分段；同刻事件保持一段。输出使用完整日期、分钟和 offset。`current_input`、人格及状态指令保持无标记；原始 `role: content` 是 marker 后的逐字连续子串。
+
+配置修改只在下一份完整快照边界生效，缺失或无效文件必须在请求前失败。生成 marker 不写入 raw/长期记忆；直接检查 `data/memory/` 构建前后字节可证明无持久化副作用。
+
 ## 4. 记忆组织与完整覆盖
 
 `data/memory/raw/*.jsonl` 永久保存所有确认的用户/Assistant 原文，分段只影响物理存储。`data/memory/long_term.yaml` 在同一个 revision 内保存：

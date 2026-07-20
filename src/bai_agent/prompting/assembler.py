@@ -16,11 +16,16 @@ from bai_agent.domain.models import (
     SourceKind,
     SourceRef,
     StateResolutionResult,
+    TemporalLogEntry,
+    TemporalSegmentationPolicy,
+    TemporalSpan,
+    TemporalTimeKind,
     TrustLevel,
     MemoryCoverageOverview,
     content_hash,
 )
 from bai_agent.memory.selection import validate_complete_coverage
+from bai_agent.prompting.temporal import annotate_history
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +34,7 @@ class PromptAssembler:
     state_personas: tuple[str, ...]
     base_asset: ConfigAsset | None = None
     state_assets: tuple[ConfigAsset, ...] = ()
+    temporal_policy: TemporalSegmentationPolicy | None = None
 
     @classmethod
     def mvp(
@@ -38,10 +44,11 @@ class PromptAssembler:
         *,
         base_asset: ConfigAsset | None = None,
         state_assets: tuple[ConfigAsset, ...] = (),
+        temporal_policy: TemporalSegmentationPolicy | None = None,
     ) -> "PromptAssembler":
         if not base_persona.strip() or any(not item.strip() for item in state_personas):
             raise BaiError("PROMPT_SEGMENT_MISSING", "强制提示段缺失。")
-        return cls(base_persona, state_personas, base_asset, state_assets)
+        return cls(base_persona, state_personas, base_asset, state_assets, temporal_policy)
 
     def assemble(
         self,
@@ -106,7 +113,37 @@ class PromptAssembler:
             selected_long.append(item)
             used_long += len(item)
         long_text = "\n".join(selected_long) or "[]"
-        recent_text = "\n".join(f"{item.role.value}: {item.content}" for item in recent)
+        recent_history = None
+        if self.temporal_policy is not None and recent:
+            recent_entries = tuple(
+                TemporalLogEntry(
+                    entry_id=item.record_id,
+                    body=f"{item.role.value}: {item.content}",
+                    span=TemporalSpan(
+                        start=item.created_at,
+                        end=item.created_at,
+                        kind=TemporalTimeKind.EVENT,
+                    ),
+                    sources=(
+                        SourceRef(
+                            source_kind=SourceKind.DATA_FILE,
+                            source_id=f"raw:{item.record_id}",
+                            project_relative_path="data/memory/raw",
+                            content_sha256=item.content_sha256,
+                            revision=config_revision,
+                            entity_ids=(item.record_id,),
+                            producer="raw_record_selector",
+                        ),
+                    ),
+                    trust=TrustLevel.UNTRUSTED_DATA,
+                    metadata={"role": item.role.value, "record_id": item.record_id},
+                )
+                for item in recent
+            )
+            recent_history = annotate_history(recent_entries, self.temporal_policy)
+            recent_text = recent_history.text
+        else:
+            recent_text = "\n".join(f"{item.role.value}: {item.content}" for item in recent)
         if len(recent_text) > limits.get("recent_chars", len(recent_text)):
             raise BaiError("PROMPT_BUDGET_EXCEEDED", "近期原文超过预算，必须先完成整理。")
         recent_text = recent_text or "[]"
@@ -134,6 +171,7 @@ class PromptAssembler:
                     trust=TrustLevel.UNTRUSTED_DATA,
                     content=recent_text,
                     source_ids=tuple(item.record_id for item in recent),
+                    fragments=recent_history.fragments if recent_history is not None else (),
                 ),
                 PromptSegment(
                     segment_id="current_input", trust=TrustLevel.USER_INSTRUCTION,
@@ -184,7 +222,24 @@ class PromptAssembler:
     def request_parts(self, context: PromptContext) -> tuple[RequestPart, ...]:
         """[2026-07-20] part 来源来自加载/选择关系，绝不根据相同正文反向搜索。"""
         parts: list[RequestPart] = []
+        order = 0
         for index, segment in enumerate(context.segments):
+            if segment.fragments:
+                for fragment in segment.fragments:
+                    parts.append(
+                        RequestPart(
+                            part_id=f"message:{index}:{fragment.fragment_id}",
+                            order=order,
+                            participation=Participation.INCLUDED,
+                            trust=fragment.trust,
+                            payload_pointer=f"/messages/{index}/content",
+                            text_span=(fragment.start, fragment.end),
+                            content=fragment.content,
+                            sources=fragment.sources,
+                        )
+                    )
+                    order += 1
+                continue
             sources: tuple[SourceRef, ...]
             if segment.segment_id == "base_persona" and self.base_asset is not None:
                 sources = (self._asset_source(self.base_asset),)
@@ -235,7 +290,7 @@ class PromptAssembler:
             parts.append(
                 RequestPart(
                     part_id=f"message:{index}:{segment.segment_id}",
-                    order=index,
+                    order=order,
                     participation=participation,
                     trust=segment.trust,
                     payload_pointer=f"/messages/{index}/content" if participation == Participation.INCLUDED else None,
@@ -244,6 +299,7 @@ class PromptAssembler:
                     sources=sources if participation == Participation.INCLUDED else (),
                 )
             )
+            order += 1
         return tuple(parts)
 
     @staticmethod

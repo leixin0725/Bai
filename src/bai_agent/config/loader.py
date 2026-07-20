@@ -13,6 +13,7 @@ from bai_agent.config.validation import (
     resolve_inside,
     validate_agent,
     validate_debug_prompt,
+    validate_history_timestamps,
     validate_provider_capabilities,
     validate_template,
 )
@@ -20,7 +21,14 @@ from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import ConfigAsset, ConfigSnapshot, PersonaProfile, content_hash
 
 
-MANIFESTS = ("agent.toml", "providers.toml", "states.toml", "tools.toml", "logging.toml")
+MANIFESTS = (
+    "agent.toml",
+    "providers.toml",
+    "states.toml",
+    "tools.toml",
+    "logging.toml",
+    "history_timestamps.toml",
+)
 
 
 def _read_toml(path: Path) -> dict:
@@ -54,6 +62,9 @@ def load_config(
     agent = documents["agent.toml"]
     validate_agent(agent)
     agent["debug_prompt"] = validate_debug_prompt(agent.get("debug_prompt"))
+    documents["history_timestamps.toml"] = validate_history_timestamps(
+        documents["history_timestamps.toml"]
+    )
     env = os.environ if environ is None else environ
 
     providers = documents["providers.toml"].get("providers", [])
@@ -68,7 +79,18 @@ def load_config(
 
     loaded_paths: dict[str, Path] = {name: root / name for name in MANIFESTS}
     asset_ids: dict[str, tuple[str, str]] = {
-        name: (f"config:{Path(name).stem}", "agent_config" if name == "agent.toml" else "provider_config" if name == "providers.toml" else "tool_config" if name == "tools.toml" else "state_prompt")
+        name: (
+            f"config:{Path(name).stem}",
+            "history_timestamp_policy"
+            if name == "history_timestamps.toml"
+            else "agent_config"
+            if name == "agent.toml"
+            else "provider_config"
+            if name == "providers.toml"
+            else "tool_config"
+            if name == "tools.toml"
+            else "state_prompt",
+        )
         for name in MANIFESTS
     }
     persona_values: list[PersonaProfile] = []
