@@ -117,19 +117,19 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ### Tests for User Story 2（先写并确认失败）
 
-- [ ] T051 [P] [US2] 为 BR-003 在 `tests/unit/test_model_call_sequence.py` 增加 call sequence、purpose、attempt 单调递增及漏记/重复/覆盖/越序阻断测试
-- [ ] T052 [P] [US2] 在 `tests/integration/test_prompt_trace_multi_call.py` 增加 curation→chat→tool continuation→retry 的逐项展示、前项门禁、失败状态与下一 attempt 不合并测试
-- [ ] T053 [P] [US2] 为 BR-005 在 `tests/contract/test_prompt_tui_presentation.py` 增加稳定颜色、`NO_COLOR`/never/交互式不支持颜色降级、文本标签、分组缩进、控制字符和数百来源展开测试；明确不把输出重定向当作降级环境
-- [ ] T054 [P] [US2] 在 `tests/contract/test_prompt_call_identity.py` 增加 turn/flow/call/purpose/persona/state/provider/model/config/attempt/status 字段完整性与跨 retry 稳定性测试
+- [X] T051 [P] [US2] 为 BR-003 在 `tests/unit/test_model_call_sequence.py` 增加 call sequence、purpose、attempt 单调递增及漏记/重复/覆盖/越序阻断测试
+- [X] T052 [P] [US2] 在 `tests/integration/test_prompt_trace_multi_call.py` 增加 curation→chat→tool continuation→retry 的逐项展示、前项门禁、失败状态与下一 attempt 不合并测试
+- [X] T053 [P] [US2] 为 BR-005 在 `tests/contract/test_prompt_tui_presentation.py` 增加稳定颜色、`NO_COLOR`/never/交互式不支持颜色降级、文本标签、分组缩进、控制字符和数百来源展开测试；明确不把输出重定向当作降级环境
+- [X] T054 [P] [US2] 在 `tests/contract/test_prompt_call_identity.py` 增加 turn/flow/call/purpose/persona/state/provider/model/config/attempt/status 字段完整性与跨 retry 稳定性测试
 
 ### Implementation for User Story 2
 
-- [ ] T055 [US2] 在 `src/bai_agent/model_calls/gateway.py` 实现轮内 call sequence、attempt 与状态转换的单一分配器，禁止调用方自行编号或覆盖历史状态
-- [ ] T056 [P] [US2] 在 `src/bai_agent/memory/curation.py` 和 `src/bai_agent/runtime/controller.py` 补齐 curator/chat/tool/future persona 的调用用途、persona/state/config revision 元数据
-- [ ] T057 [P] [US2] 在 `src/bai_agent/debug/tui.py` 增加完整调用标题、稳定来源色板、等价无色标签和超长/数百来源可滚动分组，previous attempt 退出后不得恢复正文
-- [ ] T058 [P] [US2] 为 DR-001 更新 `README.md` 的多调用顺序、整理/工具/retry 逐次批准及交互式颜色/无色边界说明
-- [ ] T059 [P] [US2] 为 DR-002 更新 `specs/001-persistent-memory-agent/quickstart.md` 和 `specs/002-prompt-trace-debugger/quickstart.md` 的多调用、retry、颜色降级与非 TTY 失败验收
-- [ ] T060 [US2] 运行 `tests/unit/test_model_call_sequence.py tests/integration/test_prompt_trace_multi_call.py tests/contract/test_prompt_tui_presentation.py tests/contract/test_prompt_call_identity.py -q`、curation/tool/provider 回归、文档命令和 `git diff --check`，随后通过 Git 扩展原子提交 US2 的 gateway/callers/TUI/tests 与 README/quickstart
+- [X] T055 [US2] 在 `src/bai_agent/model_calls/gateway.py` 实现轮内 call sequence、attempt 与状态转换的单一分配器，禁止调用方自行编号或覆盖历史状态
+- [X] T056 [P] [US2] 在 `src/bai_agent/memory/curation.py` 和 `src/bai_agent/runtime/controller.py` 补齐 curator/chat/tool/future persona 的调用用途、persona/state/config revision 元数据
+- [X] T057 [P] [US2] 在 `src/bai_agent/debug/tui.py` 增加完整调用标题、稳定来源色板、等价无色标签和超长/数百来源可滚动分组，previous attempt 退出后不得恢复正文
+- [X] T058 [P] [US2] 为 DR-001 更新 `README.md` 的多调用顺序、整理/工具/retry 逐次批准及交互式颜色/无色边界说明
+- [X] T059 [P] [US2] 为 DR-002 更新 `specs/001-persistent-memory-agent/quickstart.md` 和 `specs/002-prompt-trace-debugger/quickstart.md` 的多调用、retry、颜色降级与非 TTY 失败验收
+- [X] T060 [US2] 运行 `tests/unit/test_model_call_sequence.py tests/integration/test_prompt_trace_multi_call.py tests/contract/test_prompt_tui_presentation.py tests/contract/test_prompt_call_identity.py -q`、curation/tool/provider 回归、文档命令和 `git diff --check`，随后通过 Git 扩展原子提交 US2 的 gateway/callers/TUI/tests 与 README/quickstart
 
 **Checkpoint**: US2 可独立证明多调用顺序、身份和视觉降级，不引入新的 provider 路径。
 

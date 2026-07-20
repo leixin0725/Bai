@@ -48,6 +48,8 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 明确拒绝不会形成历史或 pending；已经批准的请求若因普通 provider/网络错误且重试结束，则只发布一条 USER pending，可用 `--resume-pending` 恢复。该模式默认关闭、退出即失效，也不会保存原始追踪。stdin/stdout 任一不是 TTY 时以 `DEBUG_TTY_REQUIRED` 在任何持久化和模型发送前失败。
 
+同一轮的 memory curation → chat → tool continuation 按网关分配的严格 call sequence 逐项出现；provider retry 保持逻辑 call 身份，但以新的 attempt、状态和批准项展示，前一项未决定时不会处理后一项。交互 TTY 的稳定色板只增强来源类别，`NO_COLOR=1` 或 `debug_prompt.color="never"` 时仍保留 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]`、分组边界与缩进。输出重定向不是无色模式，会按非 TTY 规则失败。
+
 ## 记忆与安全
 
 运行数据默认位于 `data/memory/`：`raw/*.jsonl` 是不可变原始记录，`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：

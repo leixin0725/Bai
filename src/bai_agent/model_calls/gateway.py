@@ -21,6 +21,32 @@ class UnavailableTokenEstimator:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class CallAttemptState:
+    turn_id: str
+    call_id: str
+    call_sequence: int
+    purpose: str
+    attempt: int
+    status: str
+
+
+class CallIdentityAllocator:
+    """[2026-07-20] 轮内逻辑调用序号只由网关分配，调用方给出的编号不被信任。"""
+
+    def __init__(self) -> None:
+        self._next_by_turn: dict[str, int] = {}
+        self._seen_call_ids: set[str] = set()
+
+    def assign(self, draft: ModelCallDraft) -> ModelCallDraft:
+        if draft.call_id in self._seen_call_ids:
+            raise BaiError("MODEL_CALL_IDENTITY_INVALID", "调用身份重复、覆盖或越序。")
+        sequence = self._next_by_turn.get(draft.turn_id, 1)
+        self._next_by_turn[draft.turn_id] = sequence + 1
+        self._seen_call_ids.add(draft.call_id)
+        return draft.model_copy(update={"call_sequence": sequence})
+
+
 class ModelCallGateway:
     is_model_call_gateway = True
 
@@ -34,6 +60,7 @@ class ModelCallGateway:
         credential_guard: PromptCredentialGuard | None = None,
         max_attempts: int = 1,
         backoff_seconds: float = 0.05,
+        identity_allocator: CallIdentityAllocator | None = None,
     ) -> None:
         if debug_enabled and presenter is None:
             raise DebugPresentationError("调试已启用但未提供批准界面。")
@@ -46,17 +73,40 @@ class ModelCallGateway:
         self.backoff_seconds = max(0.0, float(backoff_seconds))
         self.sender_payload: MaterializedSendPayload | None = None
         self.last_estimate: ContextUsageEstimate | None = None
+        self.identity_allocator = identity_allocator or CallIdentityAllocator()
+        self.call_states: list[CallAttemptState] = []
+        self._serial_lock = asyncio.Lock()
 
     async def complete(self, draft: ModelCallDraft):
+        async with self._serial_lock:
+            assigned = self.identity_allocator.assign(draft)
+            return await self._complete_assigned(assigned)
+
+    def _record(self, draft: ModelCallDraft, attempt: int, status: str) -> None:
+        self.call_states.append(
+            CallAttemptState(
+                turn_id=draft.turn_id,
+                call_id=draft.call_id,
+                call_sequence=draft.call_sequence,
+                purpose=draft.purpose,
+                attempt=attempt,
+                status=status,
+            )
+        )
+
+    async def _complete_assigned(self, draft: ModelCallDraft):
         last_error: BaiError | None = None
         for attempt in range(1, self.max_attempts + 1):
             prepared = self.adapter.prepare(draft, attempt)
+            self._record(draft, attempt, "prepared")
             payload = self.adapter.materialize_sdk_kwargs(prepared)
+            self._record(draft, attempt, "materialized")
             payload.verify_digest()
             validate_provenance(payload.sdk_kwargs, prepared.parts)
             self.credential_guard.before_display(payload.sdk_kwargs)
             estimate = self.estimator.estimate(prepared, payload)
             self.last_estimate = estimate
+            self._record(draft, attempt, "display_ready")
             if self.debug_enabled:
                 try:
                     decision = await self.presenter.decide(
@@ -73,17 +123,23 @@ class ModelCallGateway:
                     raise DebugPresentationError() from exc
                 if decision.decision != ApprovalValue.APPROVE:
                     self.presenter.clear()
+                    self._record(draft, attempt, "rejected")
                     raise TurnRejected()
                 decision.validate_payload(payload)
+                self._record(draft, attempt, "approved")
                 # [2026-07-20] 网络发送前先清除正文与来源；sender 只接管不可变 payload。
                 self.presenter.clear()
             self.credential_guard.before_send(payload.sdk_kwargs)
             payload.verify_digest()
             self.sender_payload = payload
+            self._record(draft, attempt, "sender_owned")
             try:
-                return await self.adapter.send_once(payload)
+                result = await self.adapter.send_once(payload)
+                self._record(draft, attempt, "completed")
+                return result
             except BaiError as exc:
                 last_error = exc
+                self._record(draft, attempt, "provider_failed")
                 if not exc.retryable or attempt >= self.max_attempts:
                     raise
                 if self.backoff_seconds:

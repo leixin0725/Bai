@@ -60,13 +60,13 @@ class SingleTurnController:
         self.tool_definitions = tool_definitions
         self.transaction_root = transaction_root
 
-    async def _complete(self, request: CompletionRequest, parts: tuple[RequestPart, ...], *, sequence: int, purpose: str, state_id: str, config_revision: str):
+    async def _complete(self, request: CompletionRequest, parts: tuple[RequestPart, ...], *, purpose: str, state_id: str, config_revision: str):
         if getattr(self.provider, "is_model_call_gateway", False):
             draft = ModelCallDraft(
                 call_id=new_id("call"),
                 turn_id=request.turn_id,
                 flow_id=request.flow_id,
-                call_sequence=sequence,
+                call_sequence=0,
                 purpose=purpose,
                 persona_id="chat",
                 state_id=state_id,
@@ -137,7 +137,6 @@ class SingleTurnController:
                 if uow is not None and hasattr(self.curation_service, "propose"):
                     curation_proposal = await self.curation_service.propose(
                         turn_id=resolved_turn_id,
-                        call_sequence=1,
                     )
                 else:
                     await self.curation_service.curate_if_needed()
@@ -215,10 +214,9 @@ class SingleTurnController:
             model_profile_id="chat",
         )
         parts = self.prompt_assembler.request_parts(context)
-        call_sequence = 2 if curation_proposal is not None else 1
         try:
             result = await self._complete(
-                request, parts, sequence=call_sequence, purpose="chat",
+                request, parts, purpose="chat",
                 state_id=resolution.state_id, config_revision=config_revision,
             )
             seen_call_ids: set[str] = set()
@@ -275,9 +273,8 @@ class SingleTurnController:
                             ),
                         ),
                     )
-                call_sequence += 1
                 result = await self._complete(
-                    request, parts, sequence=call_sequence, purpose="tool_continuation",
+                    request, parts, purpose="tool_continuation",
                     state_id=resolution.state_id, config_revision=config_revision,
                 )
             if result.tool_calls:

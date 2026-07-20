@@ -563,7 +563,7 @@ class ModelCallDraft(FrozenModel):
     call_id: str = Field(min_length=1)
     turn_id: str = Field(min_length=1)
     flow_id: str = Field(min_length=1)
-    call_sequence: int = Field(ge=1)
+    call_sequence: int = Field(default=0, ge=0)
     purpose: str = Field(min_length=1)
     persona_id: str | None = None
     state_id: str | None = None

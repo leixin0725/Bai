@@ -13,7 +13,7 @@ from bai_agent.memory.curation import CurationPolicy, CurationService
 from bai_agent.memory.long_term import LongTermStore
 from bai_agent.memory.recovery import WriterLease
 from bai_agent.memory.transaction import TurnUnitOfWork
-from bai_agent.model_calls.gateway import LegacyProviderAdapter, ModelCallGateway
+from bai_agent.model_calls.gateway import CallIdentityAllocator, LegacyProviderAdapter, ModelCallGateway
 from bai_agent.prompting.assembler import PromptAssembler
 from bai_agent.prompting.personas import PersonaPromptSet
 from bai_agent.providers.registry import create_provider
@@ -74,6 +74,7 @@ class AgentApplication:
         chat_provider = self.controller.provider
         curator_provider = self.controller.curation_service.provider
         if self.managed_provider:
+            identity_allocator = self.controller.provider.identity_allocator
             providers = settings["providers.toml"]
             chat_profile = providers["model_profiles"]["chat"]
             chat_config = next(
@@ -85,6 +86,7 @@ class AgentApplication:
                 debug_enabled=self.debug_prompts,
                 presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
                 max_attempts=int(chat_config.get("retry", {}).get("max_attempts", 1)),
+                identity_allocator=identity_allocator,
             )
             curator_profile = providers["model_profiles"]["memory_curator"]
             curator_config = next(
@@ -96,6 +98,7 @@ class AgentApplication:
                 debug_enabled=self.debug_prompts,
                 presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
                 max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
+                identity_allocator=identity_allocator,
             )
         # [2026-07-19] 所有新对象先完整校验构造，再一次替换轮次边界快照。
         self.controller.state_resolver = resolver
@@ -196,6 +199,7 @@ def build_application(
             provider_config = {"retry": {"max_attempts": 1}}
             curator_config = provider_config
         color_policy = str(settings["agent.toml"]["debug_prompt"]["color"])
+        identity_allocator = CallIdentityAllocator()
         chat_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
         curator_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
         provider = ModelCallGateway(
@@ -203,12 +207,14 @@ def build_application(
             debug_enabled=debug_prompts,
             presenter=chat_presenter,
             max_attempts=int(provider_config.get("retry", {}).get("max_attempts", 1)),
+            identity_allocator=identity_allocator,
         )
         curator_provider = ModelCallGateway(
             curator_adapter,
             debug_enabled=debug_prompts,
             presenter=curator_presenter,
             max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
+            identity_allocator=identity_allocator,
         )
         short = settings["agent.toml"]["short_term"]
         curation_service = CurationService(

@@ -77,8 +77,11 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 每个 curation/chat/tool continuation/retry 都先展示唯一物化后的最终 provider 载荷及来源；逐次按 `A` 批准，或按 `R` 拒绝并确认 raw、长期记忆、pending 与轮前一致。批准后界面先清除再发送；普通 provider 失败只产生一条 USER pending，随后用既有 `--resume-pending`。自动验收不调用真实 DeepSeek：
 
+调用标题必须显示 turn/flow/call sequence/purpose/persona/state/provider/model/config revision/attempt/status。Curation、chat、tool continuation 依真实顺序逐项批准；retry 是同一逻辑 call 的新 attempt，不与失败项合并。交互 TTY 可用 `NO_COLOR=1` 验收纯文本等价标签；管道或重定向必须得到 `DEBUG_TTY_REQUIRED`，不能当作无色降级。
+
 ```bash
 pytest tests/contract/test_model_call_gateway.py tests/integration/test_prompt_trace_single_call.py -q
+pytest tests/integration/test_prompt_trace_multi_call.py tests/contract/test_prompt_tui_presentation.py -q
 ```
 
 ## 4. 记忆组织与完整覆盖

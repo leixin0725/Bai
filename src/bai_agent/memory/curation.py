@@ -238,7 +238,7 @@ class CurationService:
                     response = await self.provider.complete(
                         ModelCallDraft(
                             call_id=f"call-{batch.batch_id}", turn_id=resolved_turn_id,
-                            flow_id=request.flow_id, call_sequence=call_sequence,
+                            flow_id=request.flow_id, call_sequence=0,
                             purpose="memory_curation", persona_id="memory_curator", state_id=None,
                             config_revision=self.config_revision, model_profile_id="memory_curator",
                             request=request, parts=parts,

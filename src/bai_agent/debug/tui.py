@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
+
+from rich.text import Text
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -18,6 +21,28 @@ from bai_agent.domain.models import (
     canonical_json,
     thaw_json,
 )
+
+
+SOURCE_PALETTE = {
+    "config_file": "cyan",
+    "data_file": "green",
+    "runtime": "yellow",
+    "generated": "magenta",
+}
+
+
+def resolve_color_enabled(
+    policy: str,
+    *,
+    environ: dict[str, str] | os._Environ[str] | None = None,
+    supports_color: bool,
+) -> bool:
+    values = os.environ if environ is None else environ
+    if policy == "never":
+        return False
+    if policy == "always":
+        return supports_color
+    return supports_color and "NO_COLOR" not in values
 
 
 def safe_terminal_text(value: str) -> str:
@@ -73,6 +98,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         yield Static(
             f"调用 {request.call_sequence} / attempt {request.attempt} · {request.purpose} · "
             f"persona={request.persona_id or 'unknown'} · state={request.state_id or 'unknown'}\n"
+            f"turn={request.turn_id} · flow={request.flow_id} · status=waiting_approval\n"
             f"provider={request.provider_id} · model={request.model} · config={request.config_revision}",
             id="identity",
             markup=False,
@@ -80,7 +106,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         yield Static(self.warning, id="warning", markup=False)
         yield Static(self._usage_text(), id="usage", markup=False)
         with ScrollableContainer(id="trace-scroll"):
-            yield Static(self._trace_text(), id="trace", markup=False)
+            yield Static(self._trace_renderable(), id="trace", markup=False)
         with Horizontal(id="actions"):
             yield Button("批准并发送 [A]", id="approve", variant="success", disabled=True)
             yield Button("拒绝并撤销整轮 [R]", id="reject", variant="error")
@@ -104,23 +130,35 @@ class PromptApprovalApp(App[ApprovalDecision]):
             f"= 峰值{self.estimate.projected_peak_tokens} / 容量{capacity} ({percent}) [{self.estimate.risk}]"
         )
 
-    def _trace_text(self) -> str:
+    def _trace_renderable(self) -> Text:
         assert self.request is not None and self.payload is not None
-        lines = ["[最终 provider 载荷]", safe_terminal_text(canonical_json(thaw_json(self.payload.sdk_kwargs)))]
+        rendered = Text()
+        rendered.append("[最终 provider 载荷]\n", style="bold")
+        rendered.append(safe_terminal_text(canonical_json(thaw_json(self.payload.sdk_kwargs))))
+        color_enabled = resolve_color_enabled(
+            self.color_policy,
+            environ=os.environ,
+            supports_color=getattr(self.console, "color_system", None) is not None,
+        )
         for part in self.request.parts:
-            lines.append(
-                f"\n[{part.part_id}] [{part.participation.value}] [{part.trust.value}] 来源={len(part.sources)}"
+            rendered.append(
+                f"\n\n[{part.part_id}] [{part.participation.value}] [{part.trust.value}] 来源={len(part.sources)}\n",
+                style="bold",
             )
-            lines.append(safe_terminal_text(part.content))
+            rendered.append(safe_terminal_text(part.content))
             for source in part.sources:
                 location = source.project_relative_path or "runtime"
-                lines.append(
-                    f"  来源 {source.source_kind.value}:{location} producer={source.producer} "
-                    f"ids={','.join(source.entity_ids) or '-'}"
+                rendered.append(
+                    f"\n  [{source.source_kind.value}] 来源={location} producer={source.producer} "
+                    f"ids={','.join(source.entity_ids) or '-'}",
+                    style=(SOURCE_PALETTE[source.source_kind.value] if color_enabled else None),
                 )
             if part.exclusion_reason:
-                lines.append(f"  原因 {part.exclusion_reason}")
-        return "\n".join(lines)
+                rendered.append(f"\n  原因 {part.exclusion_reason}")
+        return rendered
+
+    def _trace_text(self) -> str:
+        return self._trace_renderable().plain
 
     def _finish(self, approve: bool) -> None:
         if self.payload is None:

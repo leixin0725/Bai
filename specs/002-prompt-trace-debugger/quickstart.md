@@ -102,6 +102,8 @@ pytest tests/contract -k "model_call_gateway" -q
 
 预期：整理、聊天、工具结果续接、未来辅助人格和 provider retry 每个物理 attempt 都按真实顺序独立出现；每次只有一个 approval，前一项未决定时不处理后一项；retry 不恢复上一项 TUI。
 
+标题同时核对 turn、flow、call sequence、purpose、persona、state、provider、model、config revision、attempt 和 status；call sequence 由共享网关分配器生成，调用方不能覆盖。retry 保持逻辑 call 字段稳定，只增加 attempt 并保留前一失败状态。
+
 ## 6. 验收普通失败与 pending
 
 ```bash
@@ -128,6 +130,8 @@ Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
 ```
 
 预期：无 ANSI 颜色，但调用、included/excluded/empty、来源类型、边界、缩进和操作含义仍完整。
+
+稳定色板为 config_file=cyan、data_file=green、runtime=yellow、generated=magenta；颜色不是唯一语义。`NO_COLOR`/`never`/终端不支持颜色只适用于 stdin/stdout 都是 TTY 的交互环境，输出重定向必须 fail closed。
 
 非交互门禁由自动化验证，避免把私人 prompt 真正重定向到磁盘：
 
