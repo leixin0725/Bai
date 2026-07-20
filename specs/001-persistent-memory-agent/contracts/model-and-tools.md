@@ -257,6 +257,8 @@ next_cursor | null
 
 marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `RequestPart`。marker 来源同时包含 `config:history_timestamps` 与承载 raw/长期实体，信任级别固定为 `UNTRUSTED_DATA`；正文保持自身来源。overview、long-term 和 recent 字符预算检查最终含 marker 的文本，不能在预算后追加或因超限单独删除 marker。时间标记不进入 raw/YAML 存储，也不改变 `memory_source_query` 合同。
 
+记忆整理提示中的 `batch_records`、`existing_memories`、`current_overview` 也分别从空状态调用同一分段器。三个变量都采用“marker 行 + 单项 canonical JSON 行”，原有字段、JSON 排序/转义与 `CurationProposal` parser 不变；marker 不属于 JSON 或 `memory_curation_v1` 输出 schema，batch metadata 也不标注。模板替换在写入最终字符串时同步平移 fragment span，禁止用正文搜索来推断重复 JSON 的来源。
+
 # 002 模型与工具安全边界同步（2026-07-20）
 
 所有 provider 调用统一采用 `prepare()`、唯一 `materialize_sdk_kwargs()` 与 `send_once()`；认证仍由 transport 单独注入，不属于可展示提示载荷。载荷在显示前和发送前复用凭据门禁，命中时只返回脱敏错误并沿用安全事件阻断。当前注册工具必须声明 `read_only=true`；未来写工具必须具备可恢复 `prepare/commit/rollback` 或明确补偿契约，否则在任何副作用前拒绝。

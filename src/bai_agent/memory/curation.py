@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
+    AnnotatedHistory,
     CompletionRequest,
     CreatedBy,
     CoverageSpan,
@@ -32,8 +33,13 @@ from bai_agent.domain.models import (
     SourceReference,
     SourceRelation,
     TrustLevel,
+    TemporalLogEntry,
+    TemporalSegmentationPolicy,
+    canonical_json,
     content_hash,
 )
+from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.temporal import annotate_history
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +49,16 @@ class ProposedCuration:
     target_document: LongTermMemoryDocument
     source_record_ids: tuple[str, ...]
     batch: CurationBatch | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PromptPiece:
+    """模板展开时同步携带最终正文片段，避免从重复文本反查位置。"""
+
+    piece_id: str
+    content: str
+    sources: tuple[SourceRef, ...]
+    trust: TrustLevel
 
 
 class CurationPolicy:
@@ -113,6 +129,7 @@ class CurationService:
         curator_persona: str,
         prompt_template: str,
         config_revision: str,
+        temporal_policy: TemporalSegmentationPolicy | None = None,
         max_attempts: int = 1,
         tracer=None,
     ) -> None:
@@ -123,6 +140,7 @@ class CurationService:
         self.curator_persona = curator_persona
         self.prompt_template = prompt_template
         self.config_revision = config_revision
+        self.temporal_policy = temporal_policy
         self.max_attempts = max(1, max_attempts)
         self.tracer = tracer
 
@@ -133,8 +151,8 @@ class CurationService:
         turn_id: str | None = None,
         call_sequence: int = 1,
     ) -> ProposedCuration | None:
-        document = self.store.load()
         records = self.archive.read_all()
+        document = self.store.load(raw_records=records)
         batch = self.policy.next_batch(
             records,
             curated_through=document.curation.curated_through_sequence,
@@ -145,33 +163,101 @@ class CurationService:
             return None
         indexed = {item.record_id: item for item in records}
         batch_records = tuple(indexed[item] for item in batch.record_ids)
-        rendered_records = json.dumps(
-            [
-                {
-                    "record_id": item.record_id,
-                    "global_sequence": item.global_sequence,
-                    "role": item.role.value,
-                    "content": item.content,
-                    "content_sha256": item.content_sha256,
-                }
-                for item in batch_records
-            ],
-            ensure_ascii=False,
-            separators=(",", ":"),
+        projector = MemoryTemporalProjector.from_records(records)
+        batch_entries = tuple(
+            projector.project_raw(
+                item,
+                body=canonical_json(
+                    {
+                        "record_id": item.record_id,
+                        "global_sequence": item.global_sequence,
+                        "role": item.role.value,
+                        "content": item.content,
+                        "content_sha256": item.content_sha256,
+                    }
+                ),
+            )
+            for item in batch_records
         )
+        memory_entries = tuple(
+            projector.project_memory(item, body=canonical_json(item.model_dump(mode="json")))
+            for item in document.memories
+        )
+        overview_body = canonical_json(document.coverage_overview.model_dump(mode="json"))
+        overview_entry = projector.project_overview(document.coverage_overview, body=overview_body)
+
+        prompt_source = SourceRef(
+            source_kind=SourceKind.CONFIG_FILE,
+            source_id="prompt:memory_curation",
+            project_relative_path="config/prompts/memory_curation.md",
+            content_sha256=content_hash(self.prompt_template),
+            revision=self.config_revision,
+            producer="config_loader",
+        )
+        persona_source = SourceRef(
+            source_kind=SourceKind.CONFIG_FILE,
+            source_id="persona:memory_curator",
+            project_relative_path="config/personas/memory_curator.md",
+            content_sha256=content_hash(self.curator_persona),
+            revision=self.config_revision,
+            producer="config_loader",
+        )
+        batch_source = SourceRef(
+            source_kind=SourceKind.DATA_FILE,
+            source_id=f"curation-batch:{batch.batch_id}",
+            project_relative_path="data/memory/raw",
+            content_sha256=batch.content_sha256,
+            revision=projector.raw_revision,
+            entity_ids=batch.record_ids,
+            producer="curation_policy",
+        )
+        long_term_source = SourceRef(
+            source_kind=SourceKind.DATA_FILE,
+            source_id=f"memory:document:{document.revision}",
+            project_relative_path="data/memory/long_term.yaml",
+            content_sha256=content_hash(canonical_json(document.model_dump(mode="json"))),
+            revision=str(document.revision),
+            entity_ids=tuple(item.memory_id for item in document.memories),
+            producer="long_term_store",
+        )
+
+        block_values = {
+            "batch_records": self._history_pieces("batch_records", batch_entries),
+            "existing_memories": self._history_pieces(
+                "existing_memories", memory_entries, empty_sources=(long_term_source,)
+            ),
+            "current_overview": self._history_pieces(
+                "current_overview",
+                (overview_entry,) if overview_entry is not None else (),
+                empty_text=overview_body,
+                empty_sources=(long_term_source,),
+            ),
+        }
+        scalar_values = {
+            "batch_metadata": _PromptPiece(
+                "batch_metadata", canonical_json(batch.model_dump(mode="json")), (batch_source,),
+                TrustLevel.UNTRUSTED_DATA,
+            ),
+            "curator_persona": _PromptPiece(
+                "curator_persona", self.curator_persona, (persona_source,),
+                TrustLevel.TRUSTED_INSTRUCTION,
+            ),
+            "untrusted_boundary": _PromptPiece(
+                "untrusted_boundary", "untrusted_data", (prompt_source,),
+                TrustLevel.TRUSTED_INSTRUCTION,
+            ),
+            "output_schema": _PromptPiece(
+                "output_schema", "memory_curation_v1", (prompt_source,),
+                TrustLevel.TRUSTED_INSTRUCTION,
+            ),
+        }
         try:
-            prompt = Template(self.prompt_template).substitute(
-                batch_records=rendered_records,
-                batch_metadata=json.dumps(batch.model_dump(mode="json"), ensure_ascii=False),
-                existing_memories=json.dumps(
-                    [item.model_dump(mode="json") for item in document.memories], ensure_ascii=False
-                ),
-                current_overview=json.dumps(
-                    document.coverage_overview.model_dump(mode="json"), ensure_ascii=False
-                ),
-                curator_persona=self.curator_persona,
-                untrusted_boundary="untrusted_data",
-                output_schema="memory_curation_v1",
+            prompt, prompt_pieces = self._expand_prompt(
+                {
+                    **block_values,
+                    **{name: (piece,) for name, piece in scalar_values.items()},
+                },
+                template_source=prompt_source,
             )
         except (KeyError, ValueError) as exc:
             raise BaiError("PROMPT_TEMPLATE_INVALID", "记忆整理模板变量无效。") from exc
@@ -200,25 +286,6 @@ class CurationService:
                         revision=self.config_revision,
                         producer="config_loader",
                     )
-                    prompt_sources = (
-                        SourceRef(
-                            source_kind=SourceKind.CONFIG_FILE,
-                            source_id="prompt:memory_curation",
-                            project_relative_path="config/prompts/memory_curation.md",
-                            content_sha256=content_hash(self.prompt_template),
-                            revision=self.config_revision,
-                            producer="config_loader",
-                        ),
-                        SourceRef(
-                            source_kind=SourceKind.DATA_FILE,
-                            source_id=f"curation-batch:{batch.batch_id}",
-                            project_relative_path="data/memory/raw",
-                            content_sha256=batch.content_sha256,
-                            revision=self.archive.identity_hash(),
-                            entity_ids=batch.record_ids,
-                            producer="curation_policy",
-                        ),
-                    )
                     parts = (
                         RequestPart(
                             part_id=f"curation:{batch.batch_id}:system", order=0,
@@ -227,12 +294,18 @@ class CurationService:
                             payload_pointer="/messages/0/content", text_span=(0, len(self.curator_persona)),
                             content=self.curator_persona, sources=(system_source,),
                         ),
-                        RequestPart(
-                            part_id=f"curation:{batch.batch_id}:user", order=1,
-                            participation=Participation.INCLUDED,
-                            trust=TrustLevel.UNTRUSTED_DATA,
-                            payload_pointer="/messages/1/content", text_span=(0, len(prompt)),
-                            content=prompt, sources=prompt_sources,
+                        *(
+                            RequestPart(
+                                part_id=f"curation:{batch.batch_id}:user:{index}:{piece.piece_id}",
+                                order=index,
+                                participation=Participation.INCLUDED,
+                                trust=piece.trust,
+                                payload_pointer="/messages/1/content",
+                                text_span=(start, end),
+                                content=piece.content,
+                                sources=piece.sources,
+                            )
+                            for index, (piece, start, end) in enumerate(prompt_pieces, start=1)
                         ),
                     )
                     response = await self.provider.complete(
@@ -260,6 +333,112 @@ class CurationService:
             source_record_ids=batch.record_ids,
             batch=batch,
         )
+
+    def _history_pieces(
+        self,
+        block_name: str,
+        entries: tuple[TemporalLogEntry, ...],
+        *,
+        empty_text: str = "[]",
+        empty_sources: tuple[SourceRef, ...] = (),
+    ) -> tuple[_PromptPiece, ...]:
+        if not entries:
+            return (
+                _PromptPiece(
+                    f"{block_name}:empty",
+                    empty_text,
+                    empty_sources,
+                    TrustLevel.UNTRUSTED_DATA,
+                ),
+            )
+        if self.temporal_policy is None:
+            result: list[_PromptPiece] = []
+            for index, entry in enumerate(entries):
+                if index:
+                    result.append(
+                        _PromptPiece(
+                            f"{block_name}:{entry.entry_id}:separator",
+                            "\n",
+                            entry.sources,
+                            entry.trust,
+                        )
+                    )
+                result.append(
+                    _PromptPiece(
+                        f"{block_name}:{entry.entry_id}:body",
+                        entry.body,
+                        entry.sources,
+                        entry.trust,
+                    )
+                )
+            return tuple(result)
+        annotated: AnnotatedHistory = annotate_history(entries, self.temporal_policy)
+        return tuple(
+            _PromptPiece(
+                f"{block_name}:{fragment.fragment_id}",
+                fragment.content,
+                fragment.sources,
+                fragment.trust,
+            )
+            for fragment in annotated.fragments
+        )
+
+    def _expand_prompt(
+        self,
+        values: dict[str, tuple[_PromptPiece, ...]],
+        *,
+        template_source: SourceRef,
+    ) -> tuple[str, tuple[tuple[_PromptPiece, int, int], ...]]:
+        """单次扫描 Template，并在追加字符时记录最终绝对 span。"""
+        text_parts: list[str] = []
+        positioned: list[tuple[_PromptPiece, int, int]] = []
+        cursor = 0
+
+        def append(piece: _PromptPiece) -> None:
+            nonlocal cursor
+            if not piece.content:
+                return
+            start = cursor
+            text_parts.append(piece.content)
+            cursor += len(piece.content)
+            positioned.append((piece, start, cursor))
+
+        template_cursor = 0
+        for match_index, match in enumerate(Template.pattern.finditer(self.prompt_template)):
+            literal = self.prompt_template[template_cursor : match.start()]
+            append(
+                _PromptPiece(
+                    f"template:{match_index}:literal",
+                    literal,
+                    (template_source,),
+                    TrustLevel.TRUSTED_INSTRUCTION,
+                )
+            )
+            if match.group("escaped") is not None:
+                append(
+                    _PromptPiece(
+                        f"template:{match_index}:escaped",
+                        "$",
+                        (template_source,),
+                        TrustLevel.TRUSTED_INSTRUCTION,
+                    )
+                )
+            elif match.group("named") is not None or match.group("braced") is not None:
+                name = match.group("named") or match.group("braced")
+                for piece in values[name]:
+                    append(piece)
+            else:
+                raise ValueError("Invalid placeholder in string")
+            template_cursor = match.end()
+        append(
+            _PromptPiece(
+                "template:tail",
+                self.prompt_template[template_cursor:],
+                (template_source,),
+                TrustLevel.TRUSTED_INSTRUCTION,
+            )
+        )
+        return "".join(text_parts), tuple(positioned)
 
     def commit(self, proposal: ProposedCuration) -> LongTermMemoryDocument:
         """[2026-07-20] 该入口仅供 READY_TO_COMMIT 发布路径调用。"""

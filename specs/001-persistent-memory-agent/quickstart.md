@@ -154,6 +154,17 @@ pytest tests/integration/test_temporal_chat_context.py tests/integration/test_lo
 
 验收来源引用乱序、重复、范围相等/重叠和时间倒退时仍保持选择顺序；来源缺失、hash 不匹配、coverage 错误和非法时间全部在 provider 前失败。现行 schema v1 不使用 YAML 记忆的整理时间降级，未知格式也不进入 `RECORDED`。测试同时比较构建前后 raw/YAML/last-valid 字节，确认无需迁移且 marker 不持久化。
 
+### 4.1 记忆整理的三个时间区块
+
+整理提示分别标注 `batch_records`、`existing_memories`、`current_overview`；每个非空区块拥有自己的首 marker。历史项保持一项一行 canonical JSON，marker 位于 JSON 前一行，批次元数据、边界指令和输出 schema 不进入时间线。`memory_candidates` 与 `overview_update` 的返回结构不变。
+
+```powershell
+pytest tests/integration/test_temporal_curation_context.py tests/integration/test_curation_workflow.py tests/integration/test_curation_transaction_proposal.py -q
+pytest tests/unit/test_prompt_provenance.py tests/unit/test_context_estimation.py tests/unit/test_context_estimation_properties.py -q
+```
+
+验收时应使用跨三个区块的重复正文，逐个检查最终 prompt 的绝对 `[start,end)` span 可回读对应 marker/JSON 且互不重叠；破损来源必须在 provider 调用前失败。JSON 示例可直接用 `json.loads()` 解析，且其中不得出现时间 marker 字段。
+
 ## 5. 来源查询
 
 从 `long_term.yaml` 选择 `memory_id`：

@@ -74,6 +74,8 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 时间标记只作用于历史数据；当前输入、基础人格、状态人格和系统规则不标注。聊天中的 `memory_overview`、`long_term_memories`、`recent_records` 分别从空状态分段，因此三个非空区块各有自己的首标记。recent 使用 raw `created_at` 点时间；长期记忆和 coverage overview 对全部已验证 `source_refs` 求最早—最晚事件时间并显示 `[时间范围：… 至 …]`，不会把整理时间冒充发生时间。
 
+记忆整理同样把 `batch_records`、`existing_memories`、`current_overview` 作为三个独立历史区块。每项正文仍是一行 canonical JSON，marker 只占前一行，不进入记录对象或 `memory_curation_v1` 输出 schema；批次元数据和输出格式指令不标注。构建器在模板展开时直接累计每个 marker/JSON 片段的绝对位置，因此即使不同区块含有重复正文，调试与审批仍能精确显示各自来源。
+
 标记与对应历史正文都保持 `UNTRUSTED_DATA`，并分别记录时间配置、长期实体及原始记录来源；overview、长期选择和 recent 预算都按最终含标记文本计算。来源缺失、摘要不符、coverage 不连续或时间无效会在 provider 前失败，不使用记忆 `created_at` 降级。通用合同保留 `[记录时间：…]` 供未来明确 schema/version 的适配器复用，但当前没有持久化 `RECORDED` 入口。标记仅在提示构建期生成，不写回 `data/memory/raw/*.jsonl` 或长期记忆文件，既有文件无需迁移。
 
 ## 记忆与安全

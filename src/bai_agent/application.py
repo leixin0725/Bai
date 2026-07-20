@@ -145,6 +145,7 @@ class AgentApplication:
         self.controller.curation_service.curator_persona = persona_prompts.memory_curator
         self.controller.curation_service.prompt_template = fresh.prompts["memory_curation"]
         self.controller.curation_service.config_revision = fresh.revision
+        self.controller.curation_service.temporal_policy = _temporal_policy(fresh)
         budget = settings["agent.toml"]["context_budget"]
         self.controller.memory_budgets = {
             "overview_chars": int(settings["agent.toml"]["memory_overview"]["max_chars"]),
@@ -280,6 +281,7 @@ def build_application(
             curator_persona=persona_prompts.memory_curator,
             prompt_template=snapshot.prompts["memory_curation"],
             config_revision=snapshot.revision,
+            temporal_policy=_temporal_policy(snapshot),
             tracer=tracer,
         )
         tool_config = next(item for item in settings["tools.toml"]["tools"] if item["id"] == "memory_source_query")

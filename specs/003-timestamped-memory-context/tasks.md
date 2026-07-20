@@ -103,10 +103,10 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 ### Implementation for curation history
 
-- [ ] T031 [US2] 在 `src/bai_agent/memory/curation.py` 用同一 raw index/annotator 分别渲染 batch_records、existing_memories、current_overview，以“marker 行 + 单项 canonical JSON 行”保留现有字段和 proposal parser，并在模板替换时直接累计最终绝对 spans
-- [ ] T032 [P] [US2] 在 `config/prompts/memory_curation.md` 保留变量名、batch metadata、untrusted boundary 和 output schema，只调整三类历史变量的行式表示说明且不得把 marker 放入 JSON schema
-- [ ] T033 [P] [US2] 为 DR-003/DR-005 更新 `README.md`、`specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md` 的 curation 三 block、JSON 不变、重复正文 provenance 和验收命令
-- [ ] T034 [US2] 运行 `tests/integration/test_temporal_curation_context.py`、`tests/integration/test_curation_workflow.py`、`tests/integration/test_curation_transaction_proposal.py` 及现有 prompt provenance/estimation 回归，校验模板变量、canonical JSON、文档示例/链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US2 的 Curation 实现、测试、模板和对应文档
+- [X] T031 [US2] 在 `src/bai_agent/memory/curation.py` 用同一 raw index/annotator 分别渲染 batch_records、existing_memories、current_overview，以“marker 行 + 单项 canonical JSON 行”保留现有字段和 proposal parser，并在模板替换时直接累计最终绝对 spans
+- [X] T032 [P] [US2] 在 `config/prompts/memory_curation.md` 保留变量名、batch metadata、untrusted boundary 和 output schema，只调整三类历史变量的行式表示说明且不得把 marker 放入 JSON schema
+- [X] T033 [P] [US2] 为 DR-003/DR-005 更新 `README.md`、`specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md` 的 curation 三 block、JSON 不变、重复正文 provenance 和验收命令
+- [X] T034 [US2] 运行 `tests/integration/test_temporal_curation_context.py`、`tests/integration/test_curation_workflow.py`、`tests/integration/test_curation_transaction_proposal.py` 及现有 prompt provenance/estimation 回归，校验模板变量、canonical JSON、文档示例/链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US2 的 Curation 实现、测试、模板和对应文档
 
 **Checkpoint**: US2 可独立证明聊天长期记忆与整理历史都使用真实来源范围；现有存储无需改写，损坏来源不会被记录时间掩盖。
 
@@ -296,3 +296,4 @@ Curation：T031 || T032 -> T033 -> T034
 
 - **T018 / 2026-07-20**: Foundation + US1 定向及既有 prompt/config 回归共 79 项通过；独立 `config validate` 使用无效占位凭据通过；12 份受影响 Markdown 的本地相对链接检查为 0 个断链，默认值/固定标签搜索一致，`git diff --check` 通过。
 - **T030 / 2026-07-20**: Memory/Prompt 定向及既有 archive/selection/coverage 回归共 53 项通过；5 份受影响 Markdown 的本地相对链接检查为 0 个断链，术语/默认值检查一致，`git diff --check` 通过。
+- **T034 / 2026-07-20**: Curation 三区块、事务提案、模板、provenance 与 estimation 回归共 21 项通过；7 个必需模板变量均保留，canonical JSON/重复正文绝对 span/损坏来源 provider=0 断言通过；4 份受影响 Markdown 的本地相对链接检查为 0 个断链，`git diff --check` 通过。

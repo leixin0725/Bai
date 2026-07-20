@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
+from ruamel.yaml import YAML
 
+from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
     CompletionResult,
     CoverageSpan,
@@ -25,6 +28,7 @@ from bai_agent.domain.models import (
     SourceReference,
     SourceRelation,
     TemporalSegmentationPolicy,
+    canonical_json,
 )
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.curation import CurationPolicy, CurationService
@@ -147,9 +151,88 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     assert prompt.count("[时间范围：") >= 2
     assert "META\n[时间" not in prompt
     assert "SCHEMA\n[时间" not in prompt
+    batch_bodies = tuple(
+        canonical_json(
+            {
+                "record_id": item.record_id,
+                "global_sequence": item.global_sequence,
+                "role": item.role.value,
+                "content": item.content,
+                "content_sha256": item.content_sha256,
+            }
+        )
+        for item in records[2:]
+    )
+    memory_body = canonical_json(existing.model_dump(mode="json"))
+    overview_body = canonical_json(store.load().coverage_overview.model_dump(mode="json"))
+    assert all(body in prompt for body in (*batch_bodies, memory_body, overview_body))
+    assert "[时间" not in memory_body
+    assert json.loads(memory_body)["text"] == "重复正文"
     included = tuple(part for part in draft.parts if part.payload_pointer == "/messages/1/content")
     assert len(included) > 3
     for part in included:
         assert prompt[part.text_span[0] : part.text_span[1]] == part.content
     for left, right in zip(sorted(included, key=lambda item: item.text_span), sorted(included, key=lambda item: item.text_span)[1:], strict=False):
         assert left.text_span[1] <= right.text_span[0]
+    duplicate_parts = tuple(part for part in included if "重复正文" in part.content)
+    assert len(duplicate_parts) == 2
+    assert duplicate_parts[0].text_span != duplicate_parts[1].text_span
+
+
+@pytest.mark.asyncio
+async def test_broken_memory_source_stops_curation_before_provider(tmp_path: Path) -> None:
+    archive = RawRecordArchive(tmp_path / "memory")
+    for index in range(1, 3):
+        archive.append(
+            role=Role.USER if index == 1 else Role.ASSISTANT,
+            content=f"正文-{index}",
+            turn_id="turn-00000000-0000-4000-8000-000000000001",
+            state_id="default",
+            config_revision=REVISION,
+            record_id=f"rec-00000000-0000-4000-8000-{index:012d}",
+            created_at=BASE + timedelta(minutes=index),
+        )
+    record = archive.read_all()[0]
+    store = LongTermStore(tmp_path / "memory", archive)
+    document = store.initialize()
+    payload = document.model_dump(mode="json")
+    payload["memories"] = [
+        {
+            "memory_id": "mem-00000000-0000-4000-8000-000000000001",
+            "kind": "fact",
+            "text": "损坏来源",
+            "status": "active",
+            "source_refs": [
+                {
+                    "record_id": record.record_id,
+                    "relation": "supports",
+                    "record_sha256": "sha256:" + "0" * 64,
+                }
+            ],
+            "created_by": "manual",
+            "created_at": BASE.isoformat(),
+            "updated_at": BASE.isoformat(),
+            "supersedes": [],
+            "tags": [],
+        }
+    ]
+    output = StringIO()
+    YAML().dump(payload, output)
+    damaged = output.getvalue()
+    store.path.write_text(damaged, encoding="utf-8")
+    store.last_valid_path.write_text(damaged, encoding="utf-8")
+    gateway = CapturingGateway()
+    service = CurationService(
+        archive,
+        store,
+        gateway,
+        CurationPolicy(max_records=2, reserved_records=0, min_batch_records=2, max_batch_records=2),
+        curator_persona="整理人格",
+        prompt_template="$batch_records",
+        config_revision=REVISION,
+        temporal_policy=_policy(),
+    )
+    with pytest.raises(BaiError) as raised:
+        await service.propose(force=True)
+    assert raised.value.code == "SOURCE_HASH_MISMATCH"
+    assert gateway.calls == []
