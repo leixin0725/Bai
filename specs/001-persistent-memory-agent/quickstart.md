@@ -165,6 +165,18 @@ pytest tests/unit/test_prompt_provenance.py tests/unit/test_context_estimation.p
 
 验收时应使用跨三个区块的重复正文，逐个检查最终 prompt 的绝对 `[start,end)` span 可回读对应 marker/JSON 且互不重叠；破损来源必须在 provider 调用前失败。JSON 示例可直接用 `json.loads()` 解析，且其中不得出现时间 marker 字段。
 
+### 4.2 工具调用与结果时间
+
+工具调用批次使用成功模型响应的接受时刻，工具结果使用结果已可发送的完成时刻。运行时 metadata 不进入 DTO/canonical JSON；模型侧仍是相邻的 `assistant(tool_calls)`→`tool(tool_call_id)`，marker 只位于各自 `content` 前。多轮 continuation 每次整体重建同一个 `tool_history`，不会把上一轮已经标注的字符串再次标注。
+
+```powershell
+pytest tests/contract/test_temporal_tool_protocol.py tests/integration/test_temporal_tool_continuation.py -q
+pytest tests/contract/test_deepseek_tool_calls.py tests/integration/test_prompt_debug_equivalence.py tests/unit/test_prompt_provenance.py -q
+pytest tests/contract/test_memory_source_tool.py tests/contract/test_prompt_temporal_context.py -q
+```
+
+验收时逐字段比较 call id/name/arguments/order、tool_call_id 与去掉可选 marker 后的 canonical result body。直接执行 `memory_source_query` 的输入、分页、权限、错误与返回 JSON 必须继续通过原 golden 测试，且不得出现时间字段。
+
 ## 5. 来源查询
 
 从 `long_term.yaml` 选择 `memory_id`：

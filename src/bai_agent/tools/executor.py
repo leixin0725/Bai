@@ -7,7 +7,15 @@ import inspect
 import json
 
 from bai_agent.domain.errors import BaiError
-from bai_agent.domain.models import ToolCall, ToolExecutionContext, ToolOutcome, ToolResult
+from bai_agent.domain.models import (
+    ToolCall,
+    ToolExecutionContext,
+    ToolOutcome,
+    ToolResult,
+    canonical_json,
+    content_hash,
+)
+from bai_agent.domain.ports import SystemClock
 from bai_agent.security.credentials import CredentialGuard
 
 
@@ -31,11 +39,13 @@ class ToolExecutor:
         *,
         deadline_seconds: float = 20,
         max_result_bytes: int = 131072,
+        clock=None,
         tracer=None,
     ) -> None:
         self.registry = registry
         self.deadline_seconds = deadline_seconds
         self.max_result_bytes = max_result_bytes
+        self.clock = clock or SystemClock()
         self.tracer = tracer
         self.guard = CredentialGuard()
         self._serial_lock = asyncio.Lock()
@@ -44,6 +54,14 @@ class ToolExecutor:
         # [2026-07-19] 首版串行执行工具，避免共享状态工具产生竞态或乱序审计。
         async with self._serial_lock:
             result = await self._execute(call, context)
+        body = canonical_json(result.model_dump(mode="json"))
+        result = ToolResult.model_validate(
+            {
+                **result.model_dump(mode="python"),
+                "completed_at": self.clock.now(),
+                "origin_id": f"tool-result:{call.call_id}:{content_hash(body)[7:]}",
+            }
+        )
         if self.tracer:
             self.tracer.emit(
                 "tool.executed",

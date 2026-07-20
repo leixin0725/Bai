@@ -120,26 +120,26 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 ### Tests for User Story 3（先写并确认失败）
 
-- [ ] T035 [P] [US3] 为 BR-005 在 `tests/unit/test_model_call_models.py` 增加 tool-call `accepted_at`、tool-result `completed_at` aware/冻结/稳定 origin identity、DTO `model_dump()` 与 canonical result JSON 排除运行时时间的测试并确认失败
-- [ ] T036 [P] [US3] 为 BR-001/BR-005/BR-010 在 `tests/contract/test_temporal_tool_protocol.py` 增加 marker-only assistant、单/多 tool calls、短/长执行、跨日、倒序、调用/结果分别分段、无新增 role、call id/name/arguments/order/tool_call_id 和 canonical body 逐字段不变测试并确认失败
-- [ ] T037 [P] [US3] 为 BR-005/BR-006 在 `tests/integration/test_temporal_tool_continuation.py` 用 deterministic clock 覆盖成功 attempt 才采样 accepted_at、可发送结果后采样 completed_at、审批/重试不重采样、四轮整体重建不重复 marker 和失败时发送 0 并确认失败
-- [ ] T038 [P] [US3] 为 BR-008/BR-009 在 `tests/integration/test_prompt_debug_equivalence.py` 与 `tests/unit/test_prompt_provenance.py` 增加 marker/body 同 pointer 非重叠 spans、配置+事件来源、无 whole-content 重叠、part token 守恒、固定 clock 下 debug on/off 最终 payload 逐字相同和篡改阻断测试并确认失败
-- [ ] T039 [P] [US3] 为 FR-025/BR-010 扩展 `tests/contract/test_memory_source_tool.py` 的 direct golden 输入/分页/权限/错误/返回 JSON 不变测试，并新增它作为外层 tool history body 时去掉 marker 后逐字相等的失败断言；确认新增断言失败但既有 golden 仍通过，且不得修改 `src/bai_agent/tools/memory_source.py`
-- [ ] T040 [P] [US3] 为 BR-006/BR-010 在 `tests/contract/test_prompt_temporal_context.py` 增加相同统一日志项经 chat/curation/tool/future fake consumer 得到相同边界/标签、七个现有 block 全清单和非日志排除合同测试并确认失败
+- [X] T035 [P] [US3] 为 BR-005 在 `tests/unit/test_model_call_models.py` 增加 tool-call `accepted_at`、tool-result `completed_at` aware/冻结/稳定 origin identity、DTO `model_dump()` 与 canonical result JSON 排除运行时时间的测试并确认失败
+- [X] T036 [P] [US3] 为 BR-001/BR-005/BR-010 在 `tests/contract/test_temporal_tool_protocol.py` 增加 marker-only assistant、单/多 tool calls、短/长执行、跨日、倒序、调用/结果分别分段、无新增 role、call id/name/arguments/order/tool_call_id 和 canonical body 逐字段不变测试并确认失败
+- [X] T037 [P] [US3] 为 BR-005/BR-006 在 `tests/integration/test_temporal_tool_continuation.py` 用 deterministic clock 覆盖成功 attempt 才采样 accepted_at、可发送结果后采样 completed_at、审批/重试不重采样、四轮整体重建不重复 marker 和失败时发送 0 并确认失败
+- [X] T038 [P] [US3] 为 BR-008/BR-009 在 `tests/integration/test_prompt_debug_equivalence.py` 与 `tests/unit/test_prompt_provenance.py` 增加 marker/body 同 pointer 非重叠 spans、配置+事件来源、无 whole-content 重叠、part token 守恒、固定 clock 下 debug on/off 最终 payload 逐字相同和篡改阻断测试并确认失败
+- [X] T039 [P] [US3] 为 FR-025/BR-010 扩展 `tests/contract/test_memory_source_tool.py` 的 direct golden 输入/分页/权限/错误/返回 JSON 不变测试，并新增它作为外层 tool history body 时去掉 marker 后逐字相等的失败断言；确认新增断言失败但既有 golden 仍通过，且不得修改 `src/bai_agent/tools/memory_source.py`
+- [X] T040 [P] [US3] 为 BR-006/BR-010 在 `tests/contract/test_prompt_temporal_context.py` 增加相同统一日志项经 chat/curation/tool/future fake consumer 得到相同边界/标签、七个现有 block 全清单和非日志排除合同测试并确认失败
 
 ### Implementation for User Story 3
 
-- [ ] T041 [US3] 在 `src/bai_agent/domain/models.py` 实现不落盘 `ToolHistoryEvent` 和稳定 origin identity，并为 `CompletionResult`/`ToolResult` 增加排除序列化的 aware 接受/完成时间；在 `src/bai_agent/domain/ports.py` 复用/扩展可注入 `Clock` 合同
-- [ ] T042 [US3] 在 `src/bai_agent/model_calls/gateway.py` 仅在 provider response 解析校验成功并被接受后为 tool-call batch 采样一次 accepted_at，失败 attempt、retry backoff 和 debug approval 不产生或重采样事件
-- [ ] T043 [P] [US3] 在 `src/bai_agent/tools/executor.py` 于参数/权限/大小/安全/事务处理完成且形成可发送 `ToolResult` 后采样一次 completed_at，保持 ToolResult canonical JSON schema 不含时间元数据
-- [ ] T044 [US3] 在 `src/bai_agent/runtime/controller.py` 保存当前轮未标注 tool events，每次 continuation 从整个 block 重建 assistant/tool message content 与 marker/body parts，保持结构化 call 字段、紧邻配对和原 body 连续子串
-- [ ] T045 [US3] 在 `src/bai_agent/providers/deepseek.py` 使用 controller 提供的 content fragments，只有缺失时才创建 whole-content fallback；为 tool_calls 保留原始 origin 来源并消除重叠 part/当前 draft 误归因
-- [ ] T046 [US3] 在 `src/bai_agent/model_calls/provenance.py` 拒绝同一 pointer 的 included text spans 重叠/越界/未覆盖，在 `src/bai_agent/model_calls/estimation.py` 让最终 marker 只计费一次并保持 part+protocol overhead 守恒
-- [ ] T047 [US3] 在 `src/bai_agent/application.py` 向 gateway、executor 和 controller 注入同一策略 annotator 与可测试 clock，确保配置在任何工具副作用前已完整校验
-- [ ] T048 [P] [US3] 为 DR-001 更新 `README.md`，列全七个现有日志 block、工具接受/完成时间、未来消费者接入规则、调试所见即所发及 `memory_source_query` 直接合同不变边界
-- [ ] T049 [P] [US3] 为 DR-003/DR-005 更新 `specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步工具 metadata envelope、assistant/tool 协议、外层 marker 与来源工具排除验收
-- [ ] T050 [P] [US3] 更新 `specs/002-prompt-trace-debugger/contracts/model-call.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，记录 marker/body non-overlap spans、最终预算、stable origin、debug on/off 等价和 DeepSeek whole-content fallback 限制
-- [ ] T051 [US3] 运行 `tests/unit/test_model_call_models.py`、`tests/contract/test_temporal_tool_protocol.py`、`tests/integration/test_temporal_tool_continuation.py`、`tests/integration/test_prompt_debug_equivalence.py`、`tests/unit/test_prompt_provenance.py`、`tests/contract/test_memory_source_tool.py`、`tests/contract/test_prompt_temporal_context.py` 及现有 DeepSeek/tool/gateway/estimation 回归，执行七 block 清单、文档链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US3 的 Tools/Provider 实现、测试和 README/001/002 文档
+- [X] T041 [US3] 在 `src/bai_agent/domain/models.py` 实现不落盘 `ToolHistoryEvent` 和稳定 origin identity，并为 `CompletionResult`/`ToolResult` 增加排除序列化的 aware 接受/完成时间；在 `src/bai_agent/domain/ports.py` 复用/扩展可注入 `Clock` 合同
+- [X] T042 [US3] 在 `src/bai_agent/model_calls/gateway.py` 仅在 provider response 解析校验成功并被接受后为 tool-call batch 采样一次 accepted_at，失败 attempt、retry backoff 和 debug approval 不产生或重采样事件
+- [X] T043 [P] [US3] 在 `src/bai_agent/tools/executor.py` 于参数/权限/大小/安全/事务处理完成且形成可发送 `ToolResult` 后采样一次 completed_at，保持 ToolResult canonical JSON schema 不含时间元数据
+- [X] T044 [US3] 在 `src/bai_agent/runtime/controller.py` 保存当前轮未标注 tool events，每次 continuation 从整个 block 重建 assistant/tool message content 与 marker/body parts，保持结构化 call 字段、紧邻配对和原 body 连续子串
+- [X] T045 [US3] 在 `src/bai_agent/providers/deepseek.py` 使用 controller 提供的 content fragments，只有缺失时才创建 whole-content fallback；为 tool_calls 保留原始 origin 来源并消除重叠 part/当前 draft 误归因
+- [X] T046 [US3] 在 `src/bai_agent/model_calls/provenance.py` 拒绝同一 pointer 的 included text spans 重叠/越界/未覆盖，在 `src/bai_agent/model_calls/estimation.py` 让最终 marker 只计费一次并保持 part+protocol overhead 守恒
+- [X] T047 [US3] 在 `src/bai_agent/application.py` 向 gateway、executor 和 controller 注入同一策略 annotator 与可测试 clock，确保配置在任何工具副作用前已完整校验
+- [X] T048 [P] [US3] 为 DR-001 更新 `README.md`，列全七个现有日志 block、工具接受/完成时间、未来消费者接入规则、调试所见即所发及 `memory_source_query` 直接合同不变边界
+- [X] T049 [P] [US3] 为 DR-003/DR-005 更新 `specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步工具 metadata envelope、assistant/tool 协议、外层 marker 与来源工具排除验收
+- [X] T050 [P] [US3] 更新 `specs/002-prompt-trace-debugger/contracts/model-call.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，记录 marker/body non-overlap spans、最终预算、stable origin、debug on/off 等价和 DeepSeek whole-content fallback 限制
+- [X] T051 [US3] 运行 `tests/unit/test_model_call_models.py`、`tests/contract/test_temporal_tool_protocol.py`、`tests/integration/test_temporal_tool_continuation.py`、`tests/integration/test_prompt_debug_equivalence.py`、`tests/unit/test_prompt_provenance.py`、`tests/contract/test_memory_source_tool.py`、`tests/contract/test_prompt_temporal_context.py` 及现有 DeepSeek/tool/gateway/estimation 回归，执行七 block 清单、文档链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US3 的 Tools/Provider 实现、测试和 README/001/002 文档
 
 **Checkpoint**: US3 可独立证明所有当前日志消费者共享规则、工具协议/来源/预算不被破坏，且来源追溯工具实现和直接返回完全不变。
 
@@ -297,3 +297,4 @@ Curation：T031 || T032 -> T033 -> T034
 - **T018 / 2026-07-20**: Foundation + US1 定向及既有 prompt/config 回归共 79 项通过；独立 `config validate` 使用无效占位凭据通过；12 份受影响 Markdown 的本地相对链接检查为 0 个断链，默认值/固定标签搜索一致，`git diff --check` 通过。
 - **T030 / 2026-07-20**: Memory/Prompt 定向及既有 archive/selection/coverage 回归共 53 项通过；5 份受影响 Markdown 的本地相对链接检查为 0 个断链，术语/默认值检查一致，`git diff --check` 通过。
 - **T034 / 2026-07-20**: Curation 三区块、事务提案、模板、provenance 与 estimation 回归共 21 项通过；7 个必需模板变量均保留，canonical JSON/重复正文绝对 span/损坏来源 provider=0 断言通过；4 份受影响 Markdown 的本地相对链接检查为 0 个断链，`git diff --check` 通过。
+- **T051 / 2026-07-20**: Tools/Provider 定向及既有 DeepSeek/tool/gateway/estimation 回归共 56 项通过，并额外完成全量非性能回归 334 passed/2 deselected；七个现有日志 block 清单、四轮整体重建、stable origin、debug on/off 等价和 `memory_source_query` direct golden 边界均通过；6 份受影响 Markdown 的本地相对链接检查为 0 个断链，`memory_source.py` 无改动，`git diff --check` 通过。

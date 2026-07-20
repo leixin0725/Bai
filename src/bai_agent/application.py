@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from bai_agent.config.loader import load_config
 from bai_agent.debug.tui import TextualApprovalPresenter
 from bai_agent.domain.models import SourceKind, SourceRef, TemporalSegmentationPolicy
+from bai_agent.domain.ports import SystemClock
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.curation import CurationPolicy, CurationService
 from bai_agent.memory.long_term import LongTermStore
@@ -119,6 +120,7 @@ class AgentApplication:
                 presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
                 max_attempts=int(chat_config.get("retry", {}).get("max_attempts", 1)),
                 identity_allocator=identity_allocator,
+                clock=self.controller.clock,
                 estimator=chat_estimator,
                 tracer=getattr(self.controller.provider, "tracer", None),
             )
@@ -134,6 +136,7 @@ class AgentApplication:
                 presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
                 max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
                 identity_allocator=identity_allocator,
+                clock=self.controller.clock,
                 estimator=curator_estimator,
                 tracer=getattr(self.controller.curation_service.provider, "tracer", None),
             )
@@ -146,6 +149,7 @@ class AgentApplication:
         self.controller.curation_service.prompt_template = fresh.prompts["memory_curation"]
         self.controller.curation_service.config_revision = fresh.revision
         self.controller.curation_service.temporal_policy = _temporal_policy(fresh)
+        self.controller.temporal_policy = _temporal_policy(fresh)
         budget = settings["agent.toml"]["context_budget"]
         self.controller.memory_budgets = {
             "overview_chars": int(settings["agent.toml"]["memory_overview"]["max_chars"]),
@@ -180,6 +184,7 @@ def build_application(
     tracer=None,
     debug_prompts: bool = False,
     presenter=None,
+    clock=None,
 ) -> AgentApplication:
     snapshot = load_config(config_dir, require_credentials=provider is None)
     settings = snapshot.settings
@@ -246,6 +251,7 @@ def build_application(
             chat_estimator = None
             curator_estimator = None
         color_policy = str(settings["agent.toml"]["debug_prompt"]["color"])
+        clock = clock or SystemClock()
         identity_allocator = CallIdentityAllocator()
         chat_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
         curator_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
@@ -255,6 +261,7 @@ def build_application(
             presenter=chat_presenter,
             max_attempts=int(provider_config.get("retry", {}).get("max_attempts", 1)),
             identity_allocator=identity_allocator,
+            clock=clock,
             estimator=chat_estimator,
             tracer=tracer,
         )
@@ -264,6 +271,7 @@ def build_application(
             presenter=curator_presenter,
             max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
             identity_allocator=identity_allocator,
+            clock=clock,
             estimator=curator_estimator,
             tracer=tracer,
         )
@@ -314,6 +322,7 @@ def build_application(
             registry,
             deadline_seconds=float(settings["agent.toml"]["runtime"]["tool_deadline_seconds"]),
             max_result_bytes=int(tool_config["max_result_bytes"]),
+            clock=clock,
             tracer=tracer,
         )
         budgets = settings["agent.toml"]["context_budget"]
@@ -338,6 +347,8 @@ def build_application(
                 for definition in registry.definitions_for("chat")
             ),
             transaction_root=memory_root,
+            temporal_policy=_temporal_policy(snapshot),
+            clock=clock,
         )
         return AgentApplication(
             snapshot,

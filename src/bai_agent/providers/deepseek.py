@@ -68,24 +68,53 @@ class DeepSeekProvider:
                         }
                     )
                 mapped["tool_calls"] = mapped_tool_calls
-                generated_source = SourceRef(
-                    source_kind=SourceKind.GENERATED,
-                    source_id=f"{draft.call_id}:assistant-tool-calls:{message_index}",
-                    entity_ids=tuple(call["id"] for call in mapped_tool_calls),
-                    producer="provider_response",
+                content_pointer = f"/messages/{message_index}/content"
+                upstream_content_parts = tuple(
+                    part
+                    for part in parts
+                    if part.participation is Participation.INCLUDED
+                    and part.payload_pointer == content_pointer
                 )
-                parts.append(
-                    RequestPart(
-                        part_id=f"{draft.call_id}:assistant-content:{message_index}",
-                        order=len(parts),
-                        participation=Participation.INCLUDED,
-                        trust=TrustLevel.UNTRUSTED_DATA,
-                        payload_pointer=f"/messages/{message_index}/content",
-                        text_span=(0, len(item.content)),
-                        content=item.content,
-                        sources=(generated_source,),
+                if upstream_content_parts:
+                    ordered_sources: list[SourceRef] = []
+                    seen_sources: set[tuple[object, ...]] = set()
+                    candidate_sources = tuple(
+                        source
+                        for part in upstream_content_parts
+                        for source in part.sources
+                        if source.producer == "model_call_gateway"
+                    ) or tuple(
+                        source for part in upstream_content_parts for source in part.sources
                     )
-                )
+                    for source in candidate_sources:
+                        identity = (
+                            source.source_kind, source.source_id, source.project_relative_path,
+                            source.content_sha256, source.revision, source.entity_ids, source.producer,
+                        )
+                        if identity not in seen_sources:
+                            seen_sources.add(identity)
+                            ordered_sources.append(source)
+                    tool_call_sources = tuple(ordered_sources)
+                else:
+                    generated_source = SourceRef(
+                        source_kind=SourceKind.GENERATED,
+                        source_id=f"{draft.call_id}:assistant-tool-calls:{message_index}",
+                        entity_ids=tuple(call["id"] for call in mapped_tool_calls),
+                        producer="provider_response",
+                    )
+                    tool_call_sources = (generated_source,)
+                    parts.append(
+                        RequestPart(
+                            part_id=f"{draft.call_id}:assistant-content:{message_index}",
+                            order=len(parts),
+                            participation=Participation.INCLUDED,
+                            trust=TrustLevel.UNTRUSTED_DATA,
+                            payload_pointer=content_pointer,
+                            text_span=(0, len(item.content)),
+                            content=item.content,
+                            sources=tool_call_sources,
+                        )
+                    )
                 parts.append(
                     RequestPart(
                         part_id=f"{draft.call_id}:assistant-tool-calls:{message_index}",
@@ -94,7 +123,7 @@ class DeepSeekProvider:
                         trust=TrustLevel.UNTRUSTED_DATA,
                         payload_pointer=f"/messages/{message_index}/tool_calls",
                         content=canonical_json(mapped_tool_calls),
-                        sources=(generated_source,),
+                        sources=tool_call_sources,
                     )
                 )
             messages.append(mapped)

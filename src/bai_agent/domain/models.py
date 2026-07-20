@@ -163,6 +163,25 @@ class CompletionResult(FrozenModel):
     tool_calls: tuple[dict[str, JsonValue], ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     usage_unavailable_reason: str | None = None
+    accepted_at: datetime | None = Field(default=None, exclude=True)
+    origin_call_id: str | None = Field(default=None, exclude=True)
+
+    @field_validator("accepted_at")
+    @classmethod
+    def validate_accepted_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("工具调用接受时间必须包含 UTC 偏移")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_runtime_identity(self) -> "CompletionResult":
+        if (self.accepted_at is None) != (self.origin_call_id is None):
+            raise ValueError("工具调用接受时间与 origin identity 必须同时存在")
+        if self.accepted_at is not None and not self.tool_calls:
+            raise ValueError("无工具调用的响应不能携带工具接受时间")
+        return self
 
 
 class StateResolutionContext(FrozenModel):
@@ -444,6 +463,11 @@ class ToolOutcome(StrEnum):
     EXECUTION_FAILURE = "execution_failure"
 
 
+class ToolHistoryEventKind(StrEnum):
+    TOOL_CALL_BATCH = "tool_call_batch"
+    TOOL_RESULT = "tool_result"
+
+
 class ToolDefinition(FrozenModel):
     tool_id: str
     name: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
@@ -473,6 +497,23 @@ class ToolResult(FrozenModel):
     outcome: ToolOutcome
     data: dict[str, JsonValue] = Field(default_factory=dict)
     error_code: str | None = None
+    completed_at: datetime | None = Field(default=None, exclude=True)
+    origin_id: str | None = Field(default=None, exclude=True)
+
+    @field_validator("completed_at")
+    @classmethod
+    def validate_completed_at(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("工具结果完成时间必须包含 UTC 偏移")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_runtime_identity(self) -> "ToolResult":
+        if (self.completed_at is None) != (self.origin_id is None):
+            raise ValueError("工具结果完成时间与 origin identity 必须同时存在")
+        return self
 
 
 class SourceKind(StrEnum):
@@ -543,6 +584,35 @@ class SourceRef(FrozenModel):
             raise ValueError("运行时或生成来源不得伪造文件路径")
         if self.source_kind == SourceKind.RUNTIME and not self.entity_ids:
             raise ValueError("运行时来源必须包含关联标识")
+        return self
+
+
+class ToolHistoryEvent(FrozenModel):
+    """当前轮未标注工具事件；时间与 origin 只存在于进程内。"""
+
+    event_id: str = Field(min_length=1)
+    kind: ToolHistoryEventKind
+    occurred_at: datetime
+    original_body: str
+    role: str
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str | None = None
+    sources: tuple[SourceRef, ...] = Field(min_length=1)
+
+    @field_validator("occurred_at")
+    @classmethod
+    def validate_occurred_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("工具历史事件时间必须包含 UTC 偏移")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_protocol_shape(self) -> "ToolHistoryEvent":
+        if self.kind is ToolHistoryEventKind.TOOL_CALL_BATCH:
+            if self.role != "assistant" or not self.tool_calls or self.tool_call_id is not None:
+                raise ValueError("工具调用批次必须映射为含 tool_calls 的 assistant 消息")
+        elif self.role != "tool" or self.tool_calls or not self.tool_call_id:
+            raise ValueError("工具结果必须映射为含 matching call id 的 tool 消息")
         return self
 
 
@@ -746,6 +816,9 @@ class ModelCallDraft(FrozenModel):
         orders = [item.order for item in self.parts]
         if orders != sorted(orders) or len(orders) != len(set(orders)):
             raise ValueError("调用片段顺序必须严格且唯一")
+        part_ids = [item.part_id for item in self.parts]
+        if len(part_ids) != len(set(part_ids)):
+            raise ValueError("调用片段 ID 必须稳定且唯一")
         return self
 
 

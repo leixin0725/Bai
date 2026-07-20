@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Protocol
 
 from bai_agent.domain.models import (
@@ -41,7 +42,14 @@ class ConfigSource(Protocol):
 
 
 class Clock(Protocol):
-    def now(self) -> Any: ...
+    def now(self) -> datetime: ...
+
+
+class SystemClock:
+    """进程默认 UTC 时钟；测试可用实现同一端口的确定时钟替换。"""
+
+    def now(self) -> datetime:
+        return datetime.now(timezone.utc)
 
 
 class LoopPolicy(Protocol):

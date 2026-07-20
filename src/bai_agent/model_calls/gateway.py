@@ -14,6 +14,7 @@ from bai_agent.domain.models import (
     MaterializedSendPayload,
     ModelCallDraft,
 )
+from bai_agent.domain.ports import SystemClock
 from bai_agent.model_calls.provenance import validate_provenance
 from bai_agent.security.credentials import PromptCredentialGuard
 
@@ -67,6 +68,7 @@ class ModelCallGateway:
         max_attempts: int = 1,
         backoff_seconds: float = 0.05,
         identity_allocator: CallIdentityAllocator | None = None,
+        clock=None,
         tracer=None,
     ) -> None:
         if debug_enabled and presenter is None:
@@ -82,6 +84,7 @@ class ModelCallGateway:
         self.last_estimate: ContextUsageEstimate | None = None
         self.last_actual_usage: ActualUsageSummary | None = None
         self.identity_allocator = identity_allocator or CallIdentityAllocator()
+        self.clock = clock or SystemClock()
         self.tracer = tracer
         self.call_states: list[CallAttemptState] = []
         self._serial_lock = asyncio.Lock()
@@ -155,6 +158,14 @@ class ModelCallGateway:
             self._record(draft, attempt, "sender_owned")
             try:
                 result = await self.adapter.send_once(payload)
+                if result.tool_calls:
+                    result = type(result).model_validate(
+                        {
+                            **result.model_dump(mode="python"),
+                            "accepted_at": self.clock.now(),
+                            "origin_call_id": draft.call_id,
+                        }
+                    )
                 self.last_actual_usage = self._actual_usage(result, estimate)
                 if self.tracer:
                     usage = self.last_actual_usage

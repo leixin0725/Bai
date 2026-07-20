@@ -76,6 +76,10 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 记忆整理同样把 `batch_records`、`existing_memories`、`current_overview` 作为三个独立历史区块。每项正文仍是一行 canonical JSON，marker 只占前一行，不进入记录对象或 `memory_curation_v1` 输出 schema；批次元数据和输出格式指令不标注。构建器在模板展开时直接累计每个 marker/JSON 片段的绝对位置，因此即使不同区块含有重复正文，调试与审批仍能精确显示各自来源。
 
+当前共有七个日志区块：聊天的 `memory_overview`、`long_term_memories`、`recent_records`，整理的 `batch_records`、`existing_memories`、`current_overview`，以及当前轮 `tool_history`。工具调用批次以成功响应被网关接受的时刻为 EVENT，工具结果以校验、大小/安全检查和事务处理完成后的可发送时刻为 EVENT；这些进程内时间不写入 DTO JSON。每次续接从整轮未标注事件重建同一个 block，仍保持相邻 assistant(tool_calls)→tool、原 call id/name/arguments/tool_call_id 和 canonical result body。`memory_source_query` 直接返回完全不变，只有作为普通 tool message 回放时可在外层正文前出现 marker。
+
+未来日志消费者只需提供有序原始 body、稳定 identity、真实来源与 EVENT/SOURCE_RANGE，再复用同一策略并把 fragments 映射为无重叠 spans；不得自行复制时间规则。调试开关只增加审批门禁，固定时钟下最终物化载荷逐字相同，界面看到的 marker 就是实际发送且已计入估算的 marker。
+
 标记与对应历史正文都保持 `UNTRUSTED_DATA`，并分别记录时间配置、长期实体及原始记录来源；overview、长期选择和 recent 预算都按最终含标记文本计算。来源缺失、摘要不符、coverage 不连续或时间无效会在 provider 前失败，不使用记忆 `created_at` 降级。通用合同保留 `[记录时间：…]` 供未来明确 schema/version 的适配器复用，但当前没有持久化 `RECORDED` 入口。标记仅在提示构建期生成，不写回 `data/memory/raw/*.jsonl` 或长期记忆文件，既有文件无需迁移。
 
 ## 记忆与安全

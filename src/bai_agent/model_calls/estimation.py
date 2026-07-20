@@ -82,8 +82,10 @@ class DeepSeekCharacterEstimator:
             rendered,
             safety_margin_percent=self.safety_margin_percent,
         )
-        total = max(whole, part_total)
-        overhead = total - part_total
+        # [2026-07-20] provenance 已保证正文片段不重叠；每个 marker 只在 part_total 出现一次。
+        # 协议开销只补足最终物化 JSON 与已归因片段之差，保持 input = parts + overhead。
+        overhead = max(0, whole - part_total)
+        total = part_total + overhead
         peak = total + request.max_output_tokens
         percent = None
         remaining = None

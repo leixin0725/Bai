@@ -8,12 +8,22 @@ from bai_agent.model_calls.provenance import resolve_json_pointer, validate_prov
 from tests.prompt_debug_fakes import make_draft
 
 
+def source() -> SourceRef:
+    return SourceRef(
+        source_kind=SourceKind.RUNTIME,
+        source_id="test-source",
+        entity_ids=("test-source",),
+        producer="test",
+    )
+
+
 def test_pointer_span_and_large_ordered_aggregate() -> None:
     payload = {"messages": [{"content": "重复重复"}]}
     refs = tuple(SourceRef(source_kind=SourceKind.RUNTIME, source_id=f"r-{i}", entity_ids=(f"rec-{i}",), producer="selector") for i in range(300))
     part = RequestPart(part_id="p", order=0, participation=Participation.INCLUDED, trust="untrusted_data", payload_pointer="/messages/0/content", text_span=(0, 2), content="重复", sources=refs)
+    remainder = RequestPart(part_id="p2", order=1, participation=Participation.INCLUDED, trust="untrusted_data", payload_pointer="/messages/0/content", text_span=(2, 4), content="重复", sources=refs)
     assert resolve_json_pointer(payload, "/messages/0/content") == "重复重复"
-    validate_provenance(payload, (part,))
+    validate_provenance(payload, (part, remainder))
     assert part.sources[0].source_id == "r-0" and part.sources[-1].source_id == "r-299"
 
 
@@ -22,3 +32,18 @@ def test_unknown_source_and_bad_span_block_send() -> None:
     bad = draft.parts[0].model_copy(update={"text_span": (1, 3)})
     with pytest.raises(TraceIntegrityError):
         validate_provenance({"messages": [{"content": "正文"}]}, (bad,))
+
+
+@pytest.mark.parametrize("spans", [((0, 2), (1, 4)), ((0, 1), (2, 4))])
+def test_overlapping_or_uncovered_spans_block_send(spans) -> None:
+    payload = {"messages": [{"content": "重复重复"}]}
+    parts = tuple(
+        RequestPart(
+            part_id=f"p{index}", order=index, participation=Participation.INCLUDED,
+            trust="untrusted_data", payload_pointer="/messages/0/content", text_span=span,
+            content=payload["messages"][0]["content"][span[0] : span[1]], sources=(source(),),
+        )
+        for index, span in enumerate(spans)
+    )
+    with pytest.raises(TraceIntegrityError):
+        validate_provenance(payload, parts)

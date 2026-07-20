@@ -115,6 +115,15 @@ class ModelCallGateway(Protocol):
 4. 修改嵌套 payload 后旧 approval token 必须失效。
 5. unknown source、坏 pointer/span、凭据命中和 TUI failure 均 fail closed。
 6. debug-on/off prepared payload 相等；批准本身不改变 draft 或 payload。
+
+## 时间标注片段与工具 origin（2026-07-20）
+
+- 时间 marker 与 body 在同一 `/messages/{i}/content` 下使用连续、无重叠、完整覆盖的 `[start,end)` spans；禁止同时加入覆盖整段的 fallback part。
+- marker 来源包含实际 `config:history_timestamps` 资产与触发事件来源。assistant tool_calls 的来源绑定产生它们的原始成功 model call identity，不得改绑到后续 continuation draft。
+- `accepted_at` 仅在成功响应被接受后采样，`completed_at` 仅在工具结果可发送后采样；retry、审批与重新物化不重采样，二者不进入 DTO dump 或 SDK payload。
+- DeepSeek adapter 仅在上游没有 content fragments 时创建 whole-content fallback；有 fragments 时原样保留并只补结构化 tool_calls part。
+- provenance 校验拒绝同 pointer 的 overlap、gap、越界和 whole/fragment 混用。估算满足 `input = sum(parts) + protocol_overhead`，最终 marker 恰好计费一次。
+- 固定 clock 下 debug on/off 的 materialized payload 必须逐字相同；调试界面显示的时间文本就是 `send_once()` 接收的时间文本。
 7. 新 provider fake 只实现 `prepare()`、`materialize_sdk_kwargs()`、`send_once()` 三个 adapter 方法即可复用完整网关语义。
 8. provider/网络普通失败只形成一条可恢复 USER pending；明确 reject 不形成 pending。
 9. approve 后 presenter 立即释放正文/来源，`send_once` 成功和失败路径均释放 sender payload，actual usage 不恢复原文。

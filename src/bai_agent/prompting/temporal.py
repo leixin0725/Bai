@@ -20,6 +20,17 @@ from bai_agent.domain.models import (
 )
 
 
+CURRENT_HISTORY_BLOCKS = (
+    "memory_overview",
+    "long_term_memories",
+    "recent_records",
+    "batch_records",
+    "existing_memories",
+    "current_overview",
+    "tool_history",
+)
+
+
 def _utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
@@ -161,14 +172,15 @@ def annotate_history(
                 sources=marker.sources,
                 trust=marker.trust,
             )
-            append_fragment(
-                fragment_id=f"{entry.entry_id}:marker-separator",
-                kind=AnnotatedFragmentKind.SEPARATOR,
-                entry=entry,
-                content="\n",
-                sources=marker.sources,
-                trust=TrustLevel.UNTRUSTED_DATA,
-            )
+            if entry.body:
+                append_fragment(
+                    fragment_id=f"{entry.entry_id}:marker-separator",
+                    kind=AnnotatedFragmentKind.SEPARATOR,
+                    entry=entry,
+                    content="\n",
+                    sources=marker.sources,
+                    trust=TrustLevel.UNTRUSTED_DATA,
+                )
             last_marker_entry = entry
 
         append_fragment(

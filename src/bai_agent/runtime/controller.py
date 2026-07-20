@@ -20,13 +20,99 @@ from bai_agent.domain.models import (
     TrustLevel,
     SourceKind,
     SourceRef,
+    TemporalLogEntry,
+    TemporalSpan,
+    TemporalTimeKind,
+    ToolHistoryEvent,
+    ToolHistoryEventKind,
     canonical_json,
+    content_hash,
     new_id,
-    utc_now,
 )
 from bai_agent.memory.transaction import PreTurnCheckpoint, TurnUnitOfWork
 from bai_agent.memory.selection import select_long_term
 from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.temporal import annotate_history
+from bai_agent.domain.ports import SystemClock
+
+
+def render_tool_history(
+    events: tuple[ToolHistoryEvent, ...],
+    temporal_policy,
+    *,
+    message_offset: int,
+    part_order: int,
+) -> tuple[tuple[Message, ...], tuple[RequestPart, ...]]:
+    """从整轮未标注事件重建一个工具 block，并把全局 fragment 平移回各消息。"""
+    entries = tuple(
+        TemporalLogEntry(
+            entry_id=event.event_id,
+            body=event.original_body,
+            span=TemporalSpan(
+                start=event.occurred_at,
+                end=event.occurred_at,
+                kind=TemporalTimeKind.EVENT,
+            ),
+            sources=event.sources,
+            trust=TrustLevel.UNTRUSTED_DATA,
+            metadata={"kind": event.kind.value},
+        )
+        for event in events
+    )
+    annotated = annotate_history(entries, temporal_policy, separator="")
+    fragments_by_entry = {
+        event.event_id: tuple(
+            fragment for fragment in annotated.fragments if fragment.entry_id == event.event_id
+        )
+        for event in events
+    }
+    messages: list[Message] = []
+    parts: list[RequestPart] = []
+    for event_index, event in enumerate(events):
+        fragments = fragments_by_entry[event.event_id]
+        content = "".join(fragment.content for fragment in fragments)
+        tool_calls = tuple(call.model_dump(mode="python") for call in event.tool_calls)
+        messages.append(
+            Message(
+                role=event.role,
+                content=content,
+                trust=TrustLevel.UNTRUSTED_DATA,
+                tool_calls=tool_calls,
+                tool_call_id=event.tool_call_id,
+            )
+        )
+        pointer = f"/messages/{message_offset + event_index}/content"
+        local_cursor = 0
+        if fragments:
+            for fragment in fragments:
+                end = local_cursor + len(fragment.content)
+                parts.append(
+                    RequestPart(
+                        part_id=f"tool-history:{event.event_id}:{fragment.fragment_id}",
+                        order=part_order + len(parts),
+                        participation=Participation.INCLUDED,
+                        trust=fragment.trust,
+                        payload_pointer=pointer,
+                        text_span=(local_cursor, end),
+                        content=fragment.content,
+                        sources=fragment.sources,
+                    )
+                )
+                local_cursor = end
+        else:
+            parts.append(
+                RequestPart(
+                    part_id=f"tool-history:{event.event_id}:empty-body",
+                    order=part_order + len(parts),
+                    participation=Participation.INCLUDED,
+                    trust=TrustLevel.UNTRUSTED_DATA,
+                    payload_pointer=pointer,
+                    text_span=(0, 0),
+                    content="",
+                    sources=event.sources,
+                )
+            )
+    return tuple(messages), tuple(parts)
 
 
 class SingleTurnController:
@@ -46,6 +132,8 @@ class SingleTurnController:
         memory_budgets: dict[str, int] | None = None,
         tool_definitions: tuple[dict, ...] = (),
         transaction_root=None,
+        temporal_policy=None,
+        clock=None,
     ) -> None:
         self.repository = repository
         self.provider = provider
@@ -60,6 +148,8 @@ class SingleTurnController:
         self.memory_budgets = memory_budgets or {}
         self.tool_definitions = tool_definitions
         self.transaction_root = transaction_root
+        self.temporal_policy = temporal_policy or getattr(prompt_assembler, "temporal_policy", None)
+        self.clock = clock or SystemClock()
 
     def discard_pending(self, *, expected_turn_id: str | None = None) -> str | None:
         """[2026-07-20] 在长期引用门禁通过后委托归档层原子放弃唯一尾部 pending。"""
@@ -122,7 +212,7 @@ class SingleTurnController:
                     turn_id=resolved_turn_id,
                     role=Role.USER,
                     content=content,
-                    created_at=utc_now(),
+                    created_at=self.clock.now(),
                     state_id=resolution.state_id,
                     config_revision=config_revision,
                 )
@@ -141,6 +231,7 @@ class SingleTurnController:
                     turn_id=resolved_turn_id,
                     state_id=resolution.state_id,
                     config_revision=config_revision,
+                    created_at=self.clock.now(),
                 )
             if self.tracer:
                 self.tracer.emit(
@@ -239,6 +330,9 @@ class SingleTurnController:
             model_profile_id="chat",
         )
         parts = self.prompt_assembler.request_parts(context)
+        base_request = request
+        base_parts = parts
+        tool_events: list[ToolHistoryEvent] = []
         try:
             result = await self._complete(
                 request, parts, purpose="chat",
@@ -250,9 +344,35 @@ class SingleTurnController:
                     break
                 if self.tool_executor is None:
                     raise BaiError("TOOL_DISABLED", "模型请求了未启用的工具。")
-                tool_messages = []
-                for raw_call in result.tool_calls:
-                    call = ToolCall.model_validate(raw_call)
+                if result.accepted_at is None or result.origin_call_id is None:
+                    raise BaiError("TOOL_EVENT_TIME_MISSING", "工具调用缺少已接受事件时间。")
+                calls = tuple(ToolCall.model_validate(raw_call) for raw_call in result.tool_calls)
+                call_source = SourceRef(
+                    source_kind=SourceKind.RUNTIME,
+                    source_id=f"model-response:{result.origin_call_id}",
+                    content_sha256=content_hash(
+                        canonical_json(
+                            {
+                                "text": result.text,
+                                "tool_calls": [call.model_dump(mode="json") for call in calls],
+                            }
+                        )
+                    ),
+                    entity_ids=(result.origin_call_id, *(call.call_id for call in calls)),
+                    producer="model_call_gateway",
+                )
+                tool_events.append(
+                    ToolHistoryEvent(
+                        event_id=f"tool-call-batch:{result.origin_call_id}",
+                        kind=ToolHistoryEventKind.TOOL_CALL_BATCH,
+                        occurred_at=result.accepted_at,
+                        original_body=result.text,
+                        role="assistant",
+                        tool_calls=calls,
+                        sources=(call_source,),
+                    )
+                )
+                for call in calls:
                     if call.call_id in seen_call_ids:
                         raise BaiError("TOOL_CALL_DUPLICATE", "模型返回了重复工具调用 ID。")
                     seen_call_ids.add(call.call_id)
@@ -267,46 +387,40 @@ class SingleTurnController:
                             trigger_record_id=user_record.record_id,
                         ),
                     )
-                    tool_messages.append(
-                        Message(
+                    if tool_result.completed_at is None or tool_result.origin_id is None:
+                        raise BaiError("TOOL_EVENT_TIME_MISSING", "工具结果缺少可发送完成时间。")
+                    result_body = canonical_json(tool_result.model_dump(mode="json"))
+                    tool_events.append(
+                        ToolHistoryEvent(
+                            event_id=tool_result.origin_id,
+                            kind=ToolHistoryEventKind.TOOL_RESULT,
+                            occurred_at=tool_result.completed_at,
+                            original_body=result_body,
                             role="tool",
-                            content=canonical_json(tool_result.model_dump(mode="json")),
-                            trust=TrustLevel.UNTRUSTED_DATA,
                             tool_call_id=call.call_id,
-                        )
-                    )
-                # [2026-07-20] 工具结果前必须回放发起调用的 assistant/tool_calls；否则 provider 会拒绝续接协议。
-                assistant_tool_message = Message(
-                    role="assistant",
-                    content=result.text,
-                    trust=TrustLevel.UNTRUSTED_DATA,
-                    tool_calls=result.tool_calls,
-                )
-                request = request.model_copy(
-                    update={"messages": (*request.messages, assistant_tool_message, *tool_messages)}
-                )
-                for offset, message in enumerate(tool_messages):
-                    index = len(request.messages) - len(tool_messages) + offset
-                    parts = (
-                        *parts,
-                        RequestPart(
-                            part_id=f"tool-result:{message.tool_call_id}",
-                            order=len(parts),
-                            participation=Participation.INCLUDED,
-                            trust=message.trust,
-                            payload_pointer=f"/messages/{index}/content",
-                            text_span=(0, len(message.content)),
-                            content=message.content,
                             sources=(
                                 SourceRef(
                                     source_kind=SourceKind.RUNTIME,
-                                    source_id=f"tool-result:{message.tool_call_id}",
-                                    entity_ids=(message.tool_call_id or "unknown",),
+                                    source_id=tool_result.origin_id,
+                                    content_sha256=content_hash(result_body),
+                                    entity_ids=(call.call_id, tool_result.origin_id),
                                     producer="tool_executor",
                                 ),
                             ),
-                        ),
+                        )
                     )
+                if self.temporal_policy is None:
+                    raise BaiError("TEMPORAL_POLICY_MISSING", "工具历史缺少统一时间策略。")
+                tool_messages, tool_parts = render_tool_history(
+                    tuple(tool_events),
+                    self.temporal_policy,
+                    message_offset=len(base_request.messages),
+                    part_order=len(base_parts),
+                )
+                request = base_request.model_copy(
+                    update={"messages": (*base_request.messages, *tool_messages)}
+                )
+                parts = (*base_parts, *tool_parts)
                 result = await self._complete(
                     request, parts, purpose="tool_continuation",
                     state_id=resolution.state_id, config_revision=config_revision,
@@ -332,7 +446,7 @@ class SingleTurnController:
                 turn_id=resolved_turn_id,
                 role=Role.ASSISTANT,
                 content=result.text,
-                created_at=utc_now(),
+                created_at=self.clock.now(),
                 state_id=resolution.state_id,
                 config_revision=config_revision,
             )
@@ -351,6 +465,7 @@ class SingleTurnController:
                 turn_id=resolved_turn_id,
                 state_id=resolution.state_id,
                 config_revision=config_revision,
+                created_at=self.clock.now(),
             )
         if self.tracer:
             self.tracer.emit(

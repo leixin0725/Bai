@@ -15,6 +15,7 @@ from bai_agent.domain.models import (
     TrustLevel,
 )
 from bai_agent.prompting.assembler import PromptAssembler
+from bai_agent.prompting.temporal import CURRENT_HISTORY_BLOCKS
 
 
 REVISION = "sha256:" + "1" * 64
@@ -114,3 +115,11 @@ def test_empty_recent_block_stays_empty_representation_without_marker() -> None:
     recent = next(item for item in context.segments if item.segment_id == "recent_records")
     assert recent.content == "[]"
     assert recent.fragments == ()
+
+
+def test_all_current_history_consumers_are_declared_and_non_logs_are_excluded() -> None:
+    assert CURRENT_HISTORY_BLOCKS == (
+        "memory_overview", "long_term_memories", "recent_records",
+        "batch_records", "existing_memories", "current_overview", "tool_history",
+    )
+    assert not ({"current_input", "persona", "state_rules", "batch_metadata", "output_schema"} & set(CURRENT_HISTORY_BLOCKS))

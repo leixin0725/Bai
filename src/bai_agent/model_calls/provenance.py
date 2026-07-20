@@ -40,6 +40,7 @@ def validate_provenance(payload: Any, parts: tuple[RequestPart, ...]) -> None:
     orders = [item.order for item in included]
     if orders != sorted(orders) or len(orders) != len(set(orders)):
         raise TraceIntegrityError("提示片段顺序重复或乱序，调用已阻止。")
+    by_pointer: dict[str, list[RequestPart]] = {}
     for part in included:
         if not part.sources or part.payload_pointer is None:
             raise TraceIntegrityError()
@@ -54,5 +55,24 @@ def validate_provenance(payload: Any, parts: tuple[RequestPart, ...]) -> None:
         start, end = part.text_span
         if start < 0 or end < start or end > len(target) or target[start:end] != part.content:
             raise TraceIntegrityError("提示正文区间与最终载荷不一致，调用已阻止。")
+        by_pointer.setdefault(part.payload_pointer, []).append(part)
+    for pointer, pointer_parts in by_pointer.items():
+        target = resolve_json_pointer(payload, pointer)
+        if not isinstance(target, str):
+            continue
+        all_for_pointer = [item for item in included if item.payload_pointer == pointer]
+        if any(item.text_span is None for item in all_for_pointer):
+            if len(all_for_pointer) != 1:
+                raise TraceIntegrityError("同一提示字段存在 whole-content 与片段重叠归因。")
+            continue
+        cursor = 0
+        for part in sorted(pointer_parts, key=lambda item: item.text_span):
+            assert part.text_span is not None
+            start, end = part.text_span
+            if start != cursor:
+                raise TraceIntegrityError("同一提示字段的来源片段重叠或未完整覆盖。")
+            cursor = end
+        if cursor != len(target):
+            raise TraceIntegrityError("同一提示字段的来源片段未覆盖最终正文。")
     if any(item.participation == Participation.UNKNOWN_SOURCE for item in parts):
         raise TraceIntegrityError()

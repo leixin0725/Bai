@@ -173,6 +173,15 @@ pytest tests/integration -k "actual_usage" -q
 - `peak == input + max_output_tokens`；
 - 容量未知时占比/剩余显示未知；
 - 不支持的载荷显示不可估算及原因，不显示字符数/4 等伪精确值；
+
+时间 marker 已在 estimator 前成为普通 prompt fragment，因此 marker token 只应在 part 明细中出现一次。工具续接还应检查 assistant content 的 marker/body parts 与独立 `/tool_calls` part：同一 content pointer 的 spans 从 0 连续覆盖到正文结尾，不能存在 whole-content 重叠 fallback。
+
+```powershell
+pytest tests/integration/test_prompt_debug_equivalence.py tests/unit/test_prompt_provenance.py -q
+pytest tests/contract/test_temporal_tool_protocol.py tests/integration/test_temporal_tool_continuation.py -q
+```
+
+用相同 deterministic clock 分别运行 debug off/on，两个最终 SDK payload 必须逐字相同。provider retry 只在成功响应接受后生成一次 tool-call origin；后续 continuation 的 tool_calls part 必须继续指向该 origin，而不是当前 draft call id。
 - 实际 usage 缺失/无效时不冒充实际值。
 
 ## 9. Linux 性能与全量验证

@@ -259,6 +259,10 @@ marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `
 
 记忆整理提示中的 `batch_records`、`existing_memories`、`current_overview` 也分别从空状态调用同一分段器。三个变量都采用“marker 行 + 单项 canonical JSON 行”，原有字段、JSON 排序/转义与 `CurationProposal` parser 不变；marker 不属于 JSON 或 `memory_curation_v1` 输出 schema，batch metadata 也不标注。模板替换在写入最终字符串时同步平移 fragment span，禁止用正文搜索来推断重复 JSON 的来源。
 
+工具历史是第七个独立 block。网关仅在成功 provider attempt 已解析并接受后为整个 tool-call batch 记录一次 `accepted_at`；executor 仅在结果校验、权限/大小/安全与可恢复事务处理结束、已形成可发送 `ToolResult` 后记录一次 `completed_at`。两者均为进程内 metadata，`CompletionResult.model_dump()`、`ToolResult.model_dump()`、canonical result JSON 与 DeepSeek wire 不含这些字段。
+
+每次 tool continuation 都从当前轮全部未标注 `ToolHistoryEvent` 重建 assistant/tool 消息：marker 只进入对应 message content，assistant 的 tool_calls 与 tool 的 `tool_call_id`、canonical body 保持原值和原顺序。DeepSeek content 的 marker/body 使用同一 pointer 下完整、无重叠 spans；已有上游 fragments 时 adapter 不再创建 whole-content fallback，tool_calls 来源保持最初 provider response origin。`memory_source_query` 直接输入、分页、权限、错误和 JSON 返回合同不变。
+
 # 002 模型与工具安全边界同步（2026-07-20）
 
 所有 provider 调用统一采用 `prepare()`、唯一 `materialize_sdk_kwargs()` 与 `send_once()`；认证仍由 transport 单独注入，不属于可展示提示载荷。载荷在显示前和发送前复用凭据门禁，命中时只返回脱敏错误并沿用安全事件阻断。当前注册工具必须声明 `read_only=true`；未来写工具必须具备可恢复 `prepare/commit/rollback` 或明确补偿契约，否则在任何副作用前拒绝。
