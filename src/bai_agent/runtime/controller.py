@@ -110,7 +110,10 @@ class SingleTurnController:
                     state_id=resolution.state_id,
                     config_revision=config_revision,
                 )
-                uow = TurnUnitOfWork(self.transaction_root, self.repository, self.long_term_store)
+                uow = TurnUnitOfWork(
+                    self.transaction_root, self.repository, self.long_term_store,
+                    tracer=self.tracer,
+                )
                 uow.begin(
                     PreTurnCheckpoint.capture(self.repository, self.long_term_store, resolution.state_id),
                     user_record,
@@ -251,8 +254,8 @@ class SingleTurnController:
                         )
                     )
                 request = request.model_copy(update={"messages": (*request.messages, *tool_messages)})
-                for message in tool_messages:
-                    index = len(request.messages) - len(tool_messages) + tool_messages.index(message)
+                for offset, message in enumerate(tool_messages):
+                    index = len(request.messages) - len(tool_messages) + offset
                     parts = (
                         *parts,
                         RequestPart(

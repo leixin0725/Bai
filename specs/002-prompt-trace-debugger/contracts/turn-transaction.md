@@ -25,18 +25,24 @@
   "transaction_id": "tx-...",
   "turn_id": "turn-...",
   "checkpoint": {
-    "raw_tail_id": "record-or-empty",
-    "raw_manifest_sha256": "...",
+    "raw_count": 0,
+    "raw_tail_id": null,
+    "raw_sha256": "sha256:...",
     "long_term_revision": 12,
-    "long_term_sha256": "...",
+    "long_term_sha256": "sha256:...",
     "agent_state": "default"
   },
   "provisional_user_record": {
-    "record_id": "...",
-    "turn_id": "...",
-    "role": "USER",
+    "schema_version": 1,
+    "record_id": "rec-00000000-0000-4000-8000-000000000001",
+    "global_sequence": 1,
+    "turn_id": "turn-00000000-0000-4000-8000-000000000001",
+    "role": "user",
     "content": "...",
-    "created_at": "..."
+    "created_at": "2026-07-20T00:00:00Z",
+    "state_id": "default",
+    "config_revision": "sha256:...",
+    "content_sha256": "sha256:..."
   }
 }
 ```
@@ -105,6 +111,8 @@ raw 与 long-term 的发布顺序必须固定，并由恢复器使用相同顺�
 5. READY_PENDING：核对 checkpoint 和已发布记录，幂等完成单条 USER pending，验证后删除 journal；随后由既有 `--resume-pending` 处理。
 6. READY_TO_COMMIT：核对 checkpoint 和已发布记录，幂等完成完整 raw turn 与 long-term，验证后删除 journal。
 7. 恢复完成后才允许读取 pending、接受新输入、构建配置调用或访问 provider。
+
+恢复器的安全 trace 只记录 turn id 与 `recovery_absent/recovery_discarded/committed` 等枚举状态；不得记录 journal 正文、prompt、来源或凭据。实际用量同样只允许数值元数据。
 
 ## 冲突和损坏
 

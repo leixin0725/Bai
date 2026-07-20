@@ -143,6 +143,8 @@ ToolResult:
 
 工具按模型返回顺序串行执行，保持首版确定性。Controller 强制配置的最大工具轮数、单工具超时、总 deadline 和结果字节上限；达到任一上限即停止，不允许模型扩大。
 
+当前注册工具必须声明 `read_only=true`。未来写工具注册前必须具备可恢复的 `prepare/commit/rollback`，或同时声明补偿契约并实现 `compensate`；缺少能力时在调用 `execute` 前拒绝。事务型写工具只在结果 Schema/凭据/大小校验成功后 `commit`；execute、超时、非成功结果、结果校验或 commit 失败均调用 `rollback`。补偿型工具在相同失败边界调用 `compensate`，恢复失败只报告稳定 `TOOL_ROLLBACK_FAILED`，不回显参数或结果正文。
+
 ## 7. `memory_source_query`
 
 首版唯一内置工具，所有人格获得完全相同的定义、权限路径、排序和错误语义。

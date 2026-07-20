@@ -17,14 +17,16 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 - stdin `isatty()` 为真；
 - stdout `isatty()` 为真；
-- Textual 能进入 application mode。
+- Textual 能进入 application mode；CLI 使用不含正文的短生命周期 probe 在应用构建、输入读取和 journal 写入前验证。
 
-任一不满足时：
+任一预检不满足时：
 
 - 输出不含提示正文的 `DEBUG_TTY_REQUIRED` 可操作错误；
 - 退出码为 `2`；
 - provider 调用、raw 归档、长期记忆和事务日志变更均为 0；
 - 不退化为普通打印、不自动批准。
+
+请求级 TUI 在 PREPARED 写入后若发生运行期渲染/终端丢失，则仍保持零发送并退出；未决定 journal 在下次持有 WriterLease 的启动恢复中丢弃。该路径不同于启动预检，不把失败伪装成明确 reject 或普通 provider pending。
 
 该门禁不做平台替代：原生 Ubuntu 24.04 是主要支持环境，Windows 11/PowerShell 是次要功能兼容环境，macOS 不在范围内。
 
@@ -77,7 +79,7 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 |---|---|
 | `A` 或点击“批准并发送” | 仅在完整渲染/校验后 approve 当前 attempt |
 | `R`、`Esc` 或点击“拒绝并撤销整轮” | reject 当前 attempt，provider 不发送，整轮回滚并返回聊天输入 |
-| `Ctrl+C` | 等同 reject 当前 attempt；完成/安排可恢复回滚后退出进程，退出码 130 |
+| `Ctrl+C` | 等同 reject 当前 attempt；完成 PREPARED 回滚后退出进程，退出码 130 |
 | EOF/终端丢失 | 不 approve；按 presentation failure 安全阻断并使事务恢复可收敛 |
 
 `Enter` 不作为默认批准键，避免滚动或焦点操作造成误发。界面不得设置倒计时或默认选择 approve。

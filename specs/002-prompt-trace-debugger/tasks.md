@@ -173,22 +173,22 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ### Tests for User Story 4（先写并确认失败）
 
-- [ ] T075 [P] [US4] 在 `tests/contract/test_cli_prompt_debug.py` 增加 `chat --debug-prompts`、默认/重启关闭、运行中不可切换、stdin/stdout 非 TTY、重定向、Textual 初始化失败、exit 2、Ctrl+C 130 和任何新写入/发送前失败测试
-- [ ] T076 [P] [US4] 为 BR-006 在 `tests/integration/test_prompt_debug_equivalence.py` 增加 debug on/off materialized/HTTP 请求、记忆变化、工具行为和调用顺序深度相等，以及展示失败不改写/不自动批准测试
-- [ ] T077 [P] [US4] 在 `tests/integration/test_turn_transaction_security.py` 增加 journal 私有权限、schema 损坏、未知字段、prompt/provenance/credential 禁区、人工编辑冲突和脱敏恢复错误测试
-- [ ] T078 [P] [US4] 为 BR-007 在 `tests/performance/test_prompt_trace_release.py` 增加连续批准发送 1,000 次后 presenter 正文/来源/debug object 遗留为 0，send_once 成功/失败后 sender materialized payload 遗留为 0，ActualUsageSummary 不持有或恢复原文的测试
-- [ ] T079 [P] [US4] 在 `tests/integration/test_prompt_debug_runtime_lifecycle.py` 增加 WriterLease 后优先恢复、READY_PENDING/READY_TO_COMMIT 启动收敛、恢复前阻止新输入/provider 和退出后 debug flag 不持久化测试
+- [X] T075 [P] [US4] 在 `tests/contract/test_cli_prompt_debug.py` 增加 `chat --debug-prompts`、默认/重启关闭、运行中不可切换、stdin/stdout 非 TTY、重定向、Textual 初始化失败、exit 2、Ctrl+C 130 和任何新写入/发送前失败测试
+- [X] T076 [P] [US4] 为 BR-006 在 `tests/integration/test_prompt_debug_equivalence.py` 增加 debug on/off materialized/HTTP 请求、记忆变化、工具行为和调用顺序深度相等，以及展示失败不改写/不自动批准测试
+- [X] T077 [P] [US4] 在 `tests/integration/test_turn_transaction_security.py` 增加 journal 私有权限、schema 损坏、未知字段、prompt/provenance/credential 禁区、人工编辑冲突和脱敏恢复错误测试
+- [X] T078 [P] [US4] 为 BR-007 在 `tests/performance/test_prompt_trace_release.py` 增加连续批准发送 1,000 次后 presenter 正文/来源/debug object 遗留为 0，send_once 成功/失败后 sender materialized payload 遗留为 0，ActualUsageSummary 不持有或恢复原文的测试
+- [X] T079 [P] [US4] 在 `tests/integration/test_prompt_debug_runtime_lifecycle.py` 增加 WriterLease 后优先恢复、READY_PENDING/READY_TO_COMMIT 启动收敛、恢复前阻止新输入/provider 和退出后 debug flag 不持久化测试
 
 ### Implementation for User Story 4
 
-- [ ] T080 [US4] 在 `src/bai_agent/cli.py` 完成 debug flag 生命周期、stdin/stdout TTY 预检、重定向失败、脱敏错误/退出码和 Ctrl+C/EOF 语义，并在 `start.ps1` 保持安全透传与凭据 finally 清除
-- [ ] T081 [US4] 在 `src/bai_agent/application.py` 将事务恢复放在 WriterLease 后、pending/config/provider/新输入之前，未收敛或冲突时阻止全部新轮与模型调用
-- [ ] T082 [P] [US4] 在 `src/bai_agent/debug/tui.py` 完成 R/Esc/Ctrl+C/EOF、控制字符安全文本、交互式颜色探测、app 退出清屏和所有成功/失败路径引用释放
-- [ ] T083 [P] [US4] 在 `src/bai_agent/security/incidents.py` 与 `src/bai_agent/runtime/tracing.py` 确保调试错误、恢复状态和 actual usage 只记录安全元数据，不记录 prompt/source/credential
-- [ ] T084 [P] [US4] 为 DR-001/DR-004 更新 `README.md` 的默认关闭、TTY/重定向、私人记忆暴露、凭据边界、拒绝与普通失败区别、批准后 TUI 清除与 send_once finally 释放、重启恢复和故障排查
-- [ ] T085 [P] [US4] 更新 `specs/001-persistent-memory-agent/contracts/storage.md`、`specs/001-persistent-memory-agent/contracts/cli.md`、`specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步三态 journal、恢复顺序、pending、TTY 和工具副作用限制
-- [ ] T086 [P] [US4] 根据最终实现校准 `specs/002-prompt-trace-debugger/contracts/cli-tui.md`、`specs/002-prompt-trace-debugger/contracts/turn-transaction.md` 与 `specs/002-prompt-trace-debugger/quickstart.md` 的退出码、键位、清除/释放时点、journal schema 和恢复命令
-- [ ] T087 [US4] 运行 `tests/contract/test_cli_prompt_debug.py tests/integration/test_prompt_debug_equivalence.py tests/integration/test_turn_transaction_security.py tests/performance/test_prompt_trace_release.py tests/integration/test_prompt_debug_runtime_lifecycle.py -q`、现有 persistence/restart/pending/security 回归、文档命令/链接和 `git diff --check`，随后通过 Git 扩展原子提交 US4 的 CLI/application/TUI/security/tests 与 README/001/002 文档
+- [X] T080 [US4] 在 `src/bai_agent/cli.py` 完成 debug flag 生命周期、stdin/stdout TTY 预检、重定向失败、脱敏错误/退出码和 Ctrl+C/EOF 语义，并在 `start.ps1` 保持安全透传与凭据 finally 清除
+- [X] T081 [US4] 在 `src/bai_agent/application.py` 将事务恢复放在 WriterLease 后、pending/config/provider/新输入之前，未收敛或冲突时阻止全部新轮与模型调用
+- [X] T082 [P] [US4] 在 `src/bai_agent/debug/tui.py` 完成 R/Esc/Ctrl+C/EOF、控制字符安全文本、交互式颜色探测、app 退出清屏和所有成功/失败路径引用释放
+- [X] T083 [P] [US4] 在 `src/bai_agent/security/incidents.py` 与 `src/bai_agent/runtime/tracing.py` 确保调试错误、恢复状态和 actual usage 只记录安全元数据，不记录 prompt/source/credential
+- [X] T084 [P] [US4] 为 DR-001/DR-004 更新 `README.md` 的默认关闭、TTY/重定向、私人记忆暴露、凭据边界、拒绝与普通失败区别、批准后 TUI 清除与 send_once finally 释放、重启恢复和故障排查
+- [X] T085 [P] [US4] 更新 `specs/001-persistent-memory-agent/contracts/storage.md`、`specs/001-persistent-memory-agent/contracts/cli.md`、`specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步三态 journal、恢复顺序、pending、TTY 和工具副作用限制
+- [X] T086 [P] [US4] 根据最终实现校准 `specs/002-prompt-trace-debugger/contracts/cli-tui.md`、`specs/002-prompt-trace-debugger/contracts/turn-transaction.md` 与 `specs/002-prompt-trace-debugger/quickstart.md` 的退出码、键位、清除/释放时点、journal schema 和恢复命令
+- [X] T087 [US4] 运行 `tests/contract/test_cli_prompt_debug.py tests/integration/test_prompt_debug_equivalence.py tests/integration/test_turn_transaction_security.py tests/performance/test_prompt_trace_release.py tests/integration/test_prompt_debug_runtime_lifecycle.py -q`、现有 persistence/restart/pending/security 回归、文档命令/链接和 `git diff --check`，随后通过 Git 扩展原子提交 US4 的 CLI/application/TUI/security/tests 与 README/001/002 文档
 
 **Checkpoint**: 四个故事全部可验收；公开调试运行在交互、拒绝、普通失败、崩溃和凭据风险下均安全收敛。
 

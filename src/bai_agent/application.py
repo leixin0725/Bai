@@ -90,6 +90,7 @@ class AgentApplication:
                 max_attempts=int(chat_config.get("retry", {}).get("max_attempts", 1)),
                 identity_allocator=identity_allocator,
                 estimator=chat_estimator,
+                tracer=getattr(self.controller.provider, "tracer", None),
             )
             curator_profile = providers["model_profiles"]["memory_curator"]
             curator_config = next(
@@ -104,6 +105,7 @@ class AgentApplication:
                 max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
                 identity_allocator=identity_allocator,
                 estimator=curator_estimator,
+                tracer=getattr(self.controller.curation_service.provider, "tracer", None),
             )
         # [2026-07-19] 所有新对象先完整校验构造，再一次替换轮次边界快照。
         self.controller.state_resolver = resolver
@@ -168,7 +170,7 @@ def build_application(
 
             raise BaiError(permission.error_code or "MEMORY_PERMISSION_INVALID", permission.warning or "长期记忆权限无效。")
         # [2026-07-20] 启动恢复必须先于 pending 读取、新输入、配置调用和 provider 访问。
-        TurnUnitOfWork(memory_root, archive, long_term_store).recover()
+        TurnUnitOfWork(memory_root, archive, long_term_store, tracer=tracer).recover()
         states_doc = settings["states.toml"]
         states = {str(item["id"]): tuple(item["ordered_persona_ids"]) for item in states_doc["states"] if item.get("enabled", False)}
         resolver = StaticStateResolver(snapshot.default_state_id, states)
@@ -218,6 +220,7 @@ def build_application(
             max_attempts=int(provider_config.get("retry", {}).get("max_attempts", 1)),
             identity_allocator=identity_allocator,
             estimator=chat_estimator,
+            tracer=tracer,
         )
         curator_provider = ModelCallGateway(
             curator_adapter,
@@ -226,6 +229,7 @@ def build_application(
             max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
             identity_allocator=identity_allocator,
             estimator=curator_estimator,
+            tracer=tracer,
         )
         short = settings["agent.toml"]["short_term"]
         curation_service = CurationService(

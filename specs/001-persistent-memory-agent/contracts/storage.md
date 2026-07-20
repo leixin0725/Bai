@@ -11,12 +11,14 @@ data/memory/
 ├── long_term.yaml
 └── .state/
     ├── writer.lock
+    ├── turn-transaction.json
     └── long_term.last-valid.yaml
 ```
 
 - `raw/*.jsonl`：全部已确认用户/Agent 原文，永久权威归档。
 - `long_term.yaml`：长期记忆、来源关系、`MemoryCoverageOverview` 和直接注入修剪前沿的联合权威文档；四者共享同一 revision。
 - `long_term.last-valid.yaml`：只用于人工编辑损坏后的只读回退，不接受人工直接维护。
+- `turn-transaction.json`：短生命周期私有三态 journal；只保存轮次恢复必需数据，不保存最终 provider payload、来源追踪、凭据、工具正文或拒绝墓碑。
 - 运行时 record/source 索引均可重建，不持久化为第二份权威状态。
 
 ## 2. 原始记录格式
@@ -115,11 +117,12 @@ memories:
 ## 7. 启动与恢复
 
 1. 获取单写者锁。
-2. 只扫描严格命名的正式 JSONL 段；临时/未知文件不参与状态。
-3. 校验段号、每行、全局顺序和校验和，建立内存 offset 索引。
-4. 加载并校验 `long_term.yaml`；校验所有来源和前沿不超过最大序号。
-5. 计算最近未整理/直接注入范围，无需任何 Provider 网络调用。
-6. 加载配置和人格后才进入首轮输入。
+2. 检查私有 `turn-transaction.json` 的 schema、权限与内容禁区：`PREPARED` 丢弃，`READY_PENDING` 幂等发布一条 USER pending，`READY_TO_COMMIT` 依次发布完整 raw turn 与可选长期记忆。
+3. 任一 READY 与 raw/long-term 基线或目标冲突时保留 journal、停止启动，禁止新输入和 Provider，不覆盖人工编辑。
+4. 只扫描严格命名的正式 JSONL 段；临时/未知文件不参与状态。
+5. 校验段号、每行、全局顺序和校验和，建立内存 offset 索引。
+6. 加载并校验 `long_term.yaml`；校验所有来源和前沿不超过最大序号。
+7. 计算最近未整理/直接注入范围，无需任何 Provider 网络调用；恢复完成后才读取 pending、创建 Provider 或进入首轮输入。
 
 恢复规则：
 
@@ -128,6 +131,7 @@ memories:
 - 临时文件残留：报告并保留为恢复材料；不当成提交，不自动删除。
 - 原始段损坏：隔离内容、保留原字节并禁止继续写入，不能跨序号缺口扩展历史。
 - 长期 YAML 损坏：按人工维护回退规则进入只读/禁止整理状态。
+- journal schema 未知、权限不可证明为私有或包含 prompt/provenance/credential 禁区字段：保留文件并以不含原值的恢复错误停止。
 
 首版仅支持本地文件系统。备份必须在 Agent 停止或持有同一锁时复制整个 `data/memory/`；不能单独复制长期记忆而遗漏来源原文。
 

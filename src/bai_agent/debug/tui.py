@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any
 
 from rich.text import Text
@@ -12,7 +13,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer
 from textual.widgets import Button, Footer, Static
 
-from bai_agent.domain.errors import DebugPresentationError
+from bai_agent.domain.errors import DebugPresentationError, TurnInterrupted
 from bai_agent.domain.models import (
     ApprovalDecision,
     ContextUsageEstimate,
@@ -29,6 +30,33 @@ SOURCE_PALETTE = {
     "runtime": "yellow",
     "generated": "magenta",
 }
+
+
+def preflight_debug_terminal(stdin=None, stdout=None) -> None:
+    """[2026-07-20] 在构建应用和写 journal 前验证调试终端及 Textual 入口可用。"""
+    input_stream = sys.stdin if stdin is None else stdin
+    output_stream = sys.stdout if stdout is None else stdout
+    if not (
+        callable(getattr(input_stream, "isatty", None))
+        and callable(getattr(output_stream, "isatty", None))
+        and input_stream.isatty()
+        and output_stream.isatty()
+    ):
+        from bai_agent.domain.errors import BaiError
+
+        raise BaiError(
+            "DEBUG_TTY_REQUIRED",
+            "提示调试要求 stdin/stdout 均为交互式 TTY；请移除重定向后重试。",
+        )
+
+    class TerminalProbeApp(App[None]):
+        def on_mount(self) -> None:
+            self.exit()
+
+    try:
+        TerminalProbeApp().run()
+    except Exception as exc:
+        raise DebugPresentationError() from exc
 
 
 def resolve_color_enabled(
@@ -72,6 +100,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         Binding("a", "approve", "批准并发送", priority=True),
         Binding("r", "reject", "拒绝并撤销整轮", priority=True),
         Binding("escape", "reject", "拒绝", priority=True),
+        Binding("ctrl+c", "interrupt", "拒绝并退出", priority=True),
     ]
 
     def __init__(
@@ -91,6 +120,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.color_policy = color_policy
         self.decision: ApprovalDecision | None = None
         self.display_ready = False
+        self.interrupted = False
 
     def compose(self) -> ComposeResult:
         assert self.request is not None and self.payload is not None and self.estimate is not None
@@ -186,6 +216,10 @@ class PromptApprovalApp(App[ApprovalDecision]):
     def action_reject(self) -> None:
         self._finish(False)
 
+    def action_interrupt(self) -> None:
+        self.interrupted = True
+        self._finish(False)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self._finish(event.button.id == "approve")
 
@@ -204,6 +238,8 @@ class TextualApprovalPresenter:
             request, payload, estimate, warning=warning, color_policy=self.color_policy
         )
         decision = await self.app.run_async()
+        if self.app.interrupted:
+            raise TurnInterrupted()
         if decision is None:
             raise DebugPresentationError()
         return decision

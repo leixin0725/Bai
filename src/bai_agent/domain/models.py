@@ -785,16 +785,45 @@ class TurnTransactionJournal(FrozenModel):
 
     @model_validator(mode="after")
     def validate_state_fields(self) -> "TurnTransactionJournal":
+        if self.schema_version != 1:
+            raise ValueError("轮次事务 Schema 版本不受支持")
+        if self.provisional_user_record.role != Role.USER:
+            raise ValueError("轮次事务暂存记录必须是 USER")
+        if self.provisional_user_record.turn_id != self.turn_id:
+            raise ValueError("轮次事务 turn 身份不一致")
+        target_values = (self.target_long_term_document, self.target_long_term_sha256)
+        if (target_values[0] is None) != (target_values[1] is None):
+            raise ValueError("长期记忆目标与摘要必须同时存在")
         if self.state == TransactionState.PREPARED and any(
             value is not None
-            for value in (self.pending_failure_code, self.assistant_record, self.target_long_term_document)
+            for value in (
+                self.pending_failure_code,
+                self.assistant_record,
+                self.target_long_term_document,
+                self.target_long_term_sha256,
+            )
         ):
             raise ValueError("PREPARED 不得包含待发布结果")
         if self.state == TransactionState.READY_PENDING:
-            if not self.pending_failure_code or self.assistant_record is not None:
+            if not self.pending_failure_code or any(
+                value is not None
+                for value in (
+                    self.assistant_record,
+                    self.target_long_term_document,
+                    self.target_long_term_sha256,
+                )
+            ):
                 raise ValueError("READY_PENDING 只能发布一条 USER pending")
-        if self.state == TransactionState.READY_TO_COMMIT and self.assistant_record is None:
-            raise ValueError("READY_TO_COMMIT 必须包含 assistant 记录")
+        if self.state == TransactionState.READY_TO_COMMIT:
+            if self.assistant_record is None:
+                raise ValueError("READY_TO_COMMIT 必须包含 assistant 记录")
+            if (
+                self.assistant_record.role != Role.ASSISTANT
+                or self.assistant_record.turn_id != self.turn_id
+                or self.assistant_record.global_sequence
+                != self.provisional_user_record.global_sequence + 1
+            ):
+                raise ValueError("READY_TO_COMMIT 的 assistant 身份或顺序无效")
         return self
 
 

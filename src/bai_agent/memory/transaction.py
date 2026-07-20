@@ -20,13 +20,16 @@ from bai_agent.domain.models import (
 )
 from bai_agent.memory.recovery import atomic_write
 from bai_agent.security.credentials import CredentialGuard
-from bai_agent.security.permissions import ensure_private_path
+from bai_agent.security.permissions import PermissionStatus, ensure_private_path
 
 
 class TurnUnitOfWork:
     """[2026-07-20] PREPARED 可丢弃；两个 READY 已决定，只允许幂等前滚。"""
 
-    def __init__(self, memory_root: Path, archive: Any, long_term_store: Any | None = None, *, failure_hook=None) -> None:
+    def __init__(
+        self, memory_root: Path, archive: Any, long_term_store: Any | None = None,
+        *, failure_hook=None, tracer=None,
+    ) -> None:
         self.memory_root = memory_root
         self.archive = archive
         self.long_term_store = long_term_store
@@ -34,6 +37,15 @@ class TurnUnitOfWork:
         self.path = self.state_dir / "turn-transaction.json"
         self.failure_hook = failure_hook
         self.guard = CredentialGuard()
+        self.tracer = tracer
+
+    def _trace(self, status: str, *, turn_id: str | None = None) -> None:
+        if self.tracer:
+            self.tracer.emit(
+                "turn_transaction.state",
+                status=status,
+                **({"turn_id": turn_id} if turn_id else {}),
+            )
 
     @property
     def state(self) -> str | None:
@@ -46,6 +58,13 @@ class TurnUnitOfWork:
                 raise BaiError("TURN_TRANSACTION_MISSING", "当前轮次事务不存在。")
             return None
         try:
+            directory_permission = ensure_private_path(self.state_dir, is_directory=True)
+            file_permission = ensure_private_path(self.path, is_directory=False)
+            if any(
+                item.status != PermissionStatus.PRIVATE
+                for item in (directory_permission, file_permission)
+            ):
+                raise BaiError("TURN_TRANSACTION_PERMISSION_INVALID", "轮次事务权限无法确认为私有。")
             payload = self.path.read_text(encoding="utf-8")
             self.guard.ensure_safe(payload)
             journal = TurnTransactionJournal.model_validate_json(payload)
@@ -57,8 +76,12 @@ class TurnUnitOfWork:
         payload = (canonical_json(journal.model_dump(mode="json", exclude_none=True)) + "\n").encode("utf-8")
         self.guard.ensure_safe(payload.decode("utf-8"))
         atomic_write(self.path, payload, self.failure_hook)
-        ensure_private_path(self.state_dir, is_directory=True)
-        ensure_private_path(self.path, is_directory=False)
+        permissions = (
+            ensure_private_path(self.state_dir, is_directory=True),
+            ensure_private_path(self.path, is_directory=False),
+        )
+        if any(item.status != PermissionStatus.PRIVATE for item in permissions):
+            raise BaiError("TURN_TRANSACTION_PERMISSION_INVALID", "轮次事务权限无法确认为私有。")
 
     def begin(self, checkpoint: PreTurnCheckpoint, provisional_user_record: RawRecord) -> None:
         if self._load(required=False) is not None:
@@ -74,12 +97,14 @@ class TurnUnitOfWork:
                 provisional_user_record=provisional_user_record,
             )
         )
+        self._trace("prepared", turn_id=provisional_user_record.turn_id)
 
     def discard(self) -> None:
         journal = self._load(required=True)
         if journal.state != TransactionState.PREPARED:
             raise BaiError("TURN_TRANSACTION_STATE", "已决定的 READY 事务不能回滚。")
         self.path.unlink()
+        self._trace("discarded", turn_id=journal.turn_id)
 
     def pending(self, failure_code: str) -> None:
         journal = self._load(required=True)
@@ -92,6 +117,7 @@ class TurnUnitOfWork:
                 update={"state": TransactionState.READY_PENDING, "pending_failure_code": failure_code}
             )
         )
+        self._trace("ready_pending", turn_id=journal.turn_id)
 
     def ready(self, assistant_record: RawRecord, target_long_term_document: LongTermMemoryDocument | None = None) -> None:
         journal = self._load(required=True)
@@ -108,6 +134,7 @@ class TurnUnitOfWork:
                 }
             )
         )
+        self._trace("ready_to_commit", turn_id=journal.turn_id)
 
     def commit(self) -> None:
         journal = self._load(required=False)
@@ -135,13 +162,16 @@ class TurnUnitOfWork:
                     target_sha256=journal.target_long_term_sha256,
                 )
         self.path.unlink()
+        self._trace("committed", turn_id=journal.turn_id)
 
     def recover(self) -> None:
         journal = self._load(required=False)
         if journal is None:
+            self._trace("recovery_absent")
             return
         if journal.state == TransactionState.PREPARED:
             self.path.unlink()
+            self._trace("recovery_discarded", turn_id=journal.turn_id)
             return
         self.commit()
 

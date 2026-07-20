@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from bai_agent.domain.errors import BaiError
 from bai_agent.security.incidents import IncidentStore
 from tests.security_scanner import scan_tree
 
@@ -36,3 +39,18 @@ def test_incident_check_requires_all_disposition_evidence(tmp_path: Path) -> Non
     report = store.check()
     assert report.cleared
     assert CONTROLLED_SECRET not in report.model_dump_json()
+
+
+def test_incident_state_never_reemits_manually_injected_body(tmp_path: Path) -> None:
+    store = IncidentStore(tmp_path)
+    store.path.parent.mkdir(parents=True)
+    injected = "private prompt body with spaces"
+    store.path.write_text(
+        '{"open":true,"fingerprint":"sha256:controlled","artifacts":["' + injected + '"]}',
+        encoding="utf-8",
+    )
+    report = store.check()
+    assert report.artifacts == ("incident-state",)
+    assert injected not in report.model_dump_json()
+    with pytest.raises(BaiError):
+        store.acknowledge(rotation_reference=injected)

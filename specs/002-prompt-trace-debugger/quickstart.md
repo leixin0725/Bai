@@ -50,6 +50,8 @@ Windows 次要环境推荐沿用项目启动脚本的隐藏输入能力：
 
 预期：每次新运行都显示“本地界面可能展示私人记忆”的提醒；退出再普通启动时调试默认关闭。
 
+CLI 会先运行不含正文的 TTY/Textual application-mode probe；stdin/stdout 重定向或 probe 失败均在应用构建和 journal 写入前以 exit 2 失败。请求级 TUI 的 `Ctrl+C` 先回滚 PREPARED 再返回 130，EOF/终端丢失不批准且由下次持锁恢复安全收敛。
+
 ## 3. 验收单次聊天与来源
 
 > 实现验收说明（2026-07-20）：默认自动化使用三方法 fake adapter 经过唯一 `ModelCallGateway`，不会读取 `DEEPSEEK_API_KEY` 或访问真实 DeepSeek；`tests/contract/test_prompt_trace_provider.py` 单独捕获 SDK kwargs 证明物化与发送字段一致。
@@ -188,6 +190,13 @@ python -m pytest tests/integration/test_repository_secret_safety.py -q
 - 1,000 次连续批准后已发送 prompt/source 调试引用为 0；
 - 每个事务持久化步骤的崩溃恢复；
 - README、001 quickstart/contracts 与本页命令同步。
+
+US4 可执行回归：
+
+```bash
+pytest tests/contract/test_cli_prompt_debug.py tests/integration/test_prompt_debug_equivalence.py tests/integration/test_turn_transaction_security.py tests/performance/test_prompt_trace_release.py tests/integration/test_prompt_debug_runtime_lifecycle.py -q
+pytest tests/contract/test_tool_transaction_capabilities.py tests/unit/test_logging.py -q
+```
 
 ## 10. 故障判断
 

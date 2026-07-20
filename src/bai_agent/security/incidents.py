@@ -5,9 +5,33 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import os
+import re
 import tempfile
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from bai_agent.domain.errors import BaiError
+from bai_agent.security.permissions import PermissionStatus, ensure_private_path
+
+
+_SAFE_METADATA = re.compile(r"^[A-Za-z0-9_.:/-]{1,200}$")
+_PERSISTED_FIELDS = frozenset(
+    {
+        "open",
+        "fingerprint",
+        "artifacts",
+        "rotation_reference",
+        "repository_scan_revision",
+        "runtime_scan_revision",
+        "disposition_record",
+    }
+)
+
+
+def _require_safe_metadata(value: str, field: str) -> str:
+    if not _SAFE_METADATA.fullmatch(value):
+        raise BaiError("SECURITY_METADATA_INVALID", f"安全事件字段 {field} 不是脱敏逻辑标识。")
+    return value
 
 
 class IncidentReport(BaseModel):
@@ -31,8 +55,23 @@ class IncidentStore:
         if not self.path.exists():
             return {"open": False}
         try:
-            return json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or set(payload) - _PERSISTED_FIELDS:
+                raise ValueError
+            if not isinstance(payload.get("open"), bool):
+                raise ValueError
+            for name, value in payload.items():
+                if name in {"open", "artifacts"} or value is None:
+                    continue
+                _require_safe_metadata(value, name)
+            artifacts = payload.get("artifacts", [])
+            if not isinstance(artifacts, list) or not all(isinstance(item, str) for item in artifacts):
+                raise ValueError
+            payload["artifacts"] = [
+                _require_safe_metadata(item, "artifacts") for item in artifacts
+            ]
+            return payload
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, BaiError):
             return {"open": True, "fingerprint": "sha256:unreadable", "artifacts": ["incident-state"]}
 
     def _write(self, payload: dict) -> None:
@@ -45,18 +84,32 @@ class IncidentStore:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temp_name, self.path)
+            permissions = (
+                ensure_private_path(self.path.parent, is_directory=True),
+                ensure_private_path(self.path, is_directory=False),
+            )
+            if any(item.status != PermissionStatus.PRIVATE for item in permissions):
+                raise BaiError("SECURITY_STATE_PERMISSION_INVALID", "安全事件状态权限无法确认为私有。")
         finally:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)
 
     def open(self, *, fingerprint: str, artifacts: list[str]) -> None:
-        self._write({"open": True, "fingerprint": fingerprint, "artifacts": sorted(set(artifacts))})
+        self._write(
+            {
+                "open": True,
+                "fingerprint": _require_safe_metadata(fingerprint, "fingerprint"),
+                "artifacts": sorted(
+                    {_require_safe_metadata(item, "artifacts") for item in artifacts}
+                ),
+            }
+        )
 
     def acknowledge(self, **evidence: str | None) -> None:
         payload = self._load()
         for name, value in evidence.items():
             if value:
-                payload[name] = value
+                payload[name] = _require_safe_metadata(value, name)
         self._write(payload)
 
     def check(self) -> IncidentReport:

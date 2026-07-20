@@ -13,7 +13,7 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Linux/macOS：
+原生 Linux（主要支持环境；macOS 不在范围）：
 
 ```bash
 python3.13 -m venv .venv
@@ -79,10 +79,14 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 调用标题必须显示 turn/flow/call sequence/purpose/persona/state/provider/model/config revision/attempt/status。Curation、chat、tool continuation 依真实顺序逐项批准；retry 是同一逻辑 call 的新 attempt，不与失败项合并。交互 TTY 可用 `NO_COLOR=1` 验收纯文本等价标签；管道或重定向必须得到 `DEBUG_TTY_REQUIRED`，不能当作无色降级。
 
+`Ctrl+C` 在 TUI 中先按拒绝路径撤销当前 PREPARED，再以 130 退出；EOF/终端丢失不批准。启动时取得 WriterLease 后先收敛三态 journal：PREPARED 丢弃、READY_PENDING 发布唯一 pending、READY_TO_COMMIT 发布完整轮次；冲突时禁止新输入与 provider。调试开关不写配置，普通重启恢复为关闭。
+
 ```bash
 pytest tests/contract/test_model_call_gateway.py tests/integration/test_prompt_trace_single_call.py -q
 pytest tests/integration/test_prompt_trace_multi_call.py tests/contract/test_prompt_tui_presentation.py -q
 pytest tests/unit/test_context_estimation.py tests/integration/test_prompt_trace_actual_usage.py -q
+pytest tests/contract/test_cli_prompt_debug.py tests/integration/test_turn_transaction_security.py -q
+pytest tests/performance/test_prompt_trace_release.py tests/integration/test_prompt_debug_runtime_lifecycle.py -q
 ```
 
 估算字段使用 `≈`：`input = sum(parts) + protocol overhead`，`peak = input + max_output_tokens`。能力取自配置中的 `deepseek-v4-flash` 1M context/384K output cap；两个 profile 仍预留 8192 输出且保持原有生成参数。合法实际 usage 只在 TUI 清除后的普通输出显示；缺失、负数或不守恒 usage 显示不可用。
@@ -174,7 +178,7 @@ python -m bai_agent --data-dir .tmp\validation security incident check
 git diff --check
 ```
 
-`.github/workflows/compatibility.yml` 在 Windows、Ubuntu、macOS 上分别以 Python 3.13 和 3.14 安装项目，验证模块入口、权限结果归一化、本地原子替换、UTF-8 和全部非性能功能。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
+`.github/workflows/compatibility.yml` 在固定 Ubuntu 24.04 上以 Python 3.13/3.14 运行主要功能门禁，并在 Windows runner 上运行次要兼容门禁；macOS 不在范围。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
 
 ## 10. Windows 参考性能复现
 

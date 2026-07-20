@@ -214,12 +214,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "chat":
             from bai_agent.application import build_application
+            from bai_agent.debug.tui import preflight_debug_terminal
 
-            if args.debug_prompts and not (sys.stdin.isatty() and sys.stdout.isatty()):
-                raise BaiError(
-                    "DEBUG_TTY_REQUIRED",
-                    "提示调试需要 stdin/stdout 均为交互式 TTY；请移除重定向后重试。",
-                )
+            if args.debug_prompts:
+                preflight_debug_terminal(sys.stdin, sys.stdout)
             app = build_application(
                 args.config_dir,
                 args.data_dir,
@@ -246,6 +244,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 app.close()
     except BaiError as exc:
         _print({"ok": False, "error": exc.as_dict()})
+        if exc.code == "TURN_INTERRUPTED":
+            return 130
         if exc.code == "WRITER_LOCKED":
             return 4
         if exc.code.startswith("RAW_") or exc.code.startswith("MEMORY_"):

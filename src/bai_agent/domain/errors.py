@@ -27,6 +27,13 @@ class TurnRejected(BaiError):
         super().__init__("TURN_REJECTED", "当前轮次已无痕撤销。")
 
 
+class TurnInterrupted(TurnRejected):
+    """[2026-07-20] TUI Ctrl+C 先复用拒绝回滚，再由 CLI 映射为退出码 130。"""
+
+    def __init__(self) -> None:
+        BaiError.__init__(self, "TURN_INTERRUPTED", "当前轮次已撤销，进程已中断。")
+
+
 class TraceIntegrityError(BaiError):
     def __init__(self, message: str = "提示来源不完整，调用已阻止。") -> None:
         super().__init__("TRACE_INTEGRITY_FAILED", message)

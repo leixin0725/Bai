@@ -104,14 +104,14 @@ python -m bai_agent chat
 
 ### 7.1 `chat --debug-prompts`（2026-07-20）
 
-该开关只对当前 chat 进程有效，要求 stdin/stdout 都是 TTY。每个最终 provider 请求由短生命周期 Textual 界面完整展示来源并等待 `A` 批准或 `R`/`Esc` 拒绝；`Enter` 不默认批准。批准后 TUI 在发送前清除，明确拒绝返回输入界面且不形成 pending，普通 provider/网络失败仍形成一条可由 `--resume-pending` 恢复的 USER pending。非 TTY、界面初始化失败或来源不完整均在任何持久化/发送前安全失败。
+该开关只对当前 chat 进程有效，要求 stdin/stdout 都是 TTY。CLI 在应用构建、输入读取和 journal 写入前执行 TTY 与 Textual application-mode 预检；失败返回脱敏 `DEBUG_TTY_REQUIRED` 或 `DEBUG_PRESENTATION_FAILED`/exit 2。每个最终 provider 请求由短生命周期 Textual 界面完整展示来源并等待 `A` 批准或 `R`/`Esc` 拒绝；`Enter` 不默认批准。批准后 TUI 在发送前清除，明确拒绝返回输入界面且不形成 pending，普通 provider/网络失败仍形成一条可由 `--resume-pending` 恢复的 USER pending。`Ctrl+C` 等同拒绝并在回滚后返回 130；EOF/终端丢失从不批准，运行期 presentation failure 由下次持锁恢复收敛未决定的 PREPARED。
 
 ## 8. 稳定退出码
 
 | Code | Meaning |
 |---:|---|
 | 0 | 成功 |
-| 2 | CLI 参数或配置无效 |
+| 2 | CLI 参数、配置、TTY 或调试界面预检无效 |
 | 3 | 凭据缺失/无效或内容被凭据门禁拒绝 |
 | 4 | 写锁不可用 |
 | 5 | 记忆、来源或恢复状态无效 |
