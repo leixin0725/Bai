@@ -23,6 +23,8 @@
 
 **2026-07-20 defect finding**: OpenAI SDK 自带重试会绕过网关逐物理请求审批，因此生产 client 固定 `max_retries=0`。DeepSeek 官方只把网络失败及配置中的 429/500/503 视为本项目可重试错误；400/401/402/403/422 必须一次失败。错误 body 不进入领域错误、日志或 journal。
 
+**2026-07-20 serialization defect finding**: `MaterializedSendPayload` 为防止批准后突变而把嵌套 dict/list 冻结成 `mappingproxy`/tuple；OpenAI SDK 的 JSON encoder 不接受 `mappingproxy`，真实发送会在网络前抛出 TypeError。保留冻结对象作为唯一审批事实，在 `send_once()` 最后一层以 `thaw_json()` 生成规范值完全相同的原生容器，是同时满足不可变批准与 SDK 编码的最小方案；真实 AsyncOpenAI + MockTransport 合同测试验证 wire JSON。
+
 ## 3. 最终请求真实性与批准绑定
 
 **Decision**: `PreparedProviderRequest` 保留 provider 适配结果和来源，`materialize_sdk_kwargs()` 唯一一次生成深度不可变、可 JSON 序列化且不含认证的 `MaterializedSendPayload`。TUI 展示与 sender 发送引用同一 materialized object，批准令牌绑定 `call_id + attempt + canonical_payload_sha256`，发送前重新计算摘要。

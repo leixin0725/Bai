@@ -260,6 +260,18 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 ---
 
+## Phase 11: 冻结载荷真实 SDK 序列化修复
+
+**Purpose**: 修复审批成功后冻结 `mappingproxy` 被直接交给 OpenAI SDK、导致网络前 JSON 序列化失败并返回 `PROVIDER_FAILED` 的缺陷。
+
+- [X] T118 [P] 为 FR-041/SC-023 在 `tests/contract/test_prompt_trace_provider.py` 增加失败优先的真实 `AsyncOpenAI` + 本地 `httpx.MockTransport` 合同测试，复现 mappingproxy TypeError，并按 `extra_body` 合并语义逐字段比较 wire JSON 与审批载荷
+- [X] T119 在 `src/bai_agent/providers/deepseek.py` 的 `send_once()` SDK 边界使用 `thaw_json()` 将唯一冻结载荷无损还原为 dict/list/scalar；保留发送前 digest 复核、SDK 调用单次性、错误分类和 finally 释放
+- [X] T120 同步 spec/plan/research/data model/model-call contract/README/quickstart/审计清单，运行真实 SDK/provider/tool/approval 等价性测试、完整回归、链接与 `git diff --check`，确认 FR-001—FR-041/SC-001—SC-023 闭环后原子提交
+
+**Checkpoint**: 审批载荷继续不可变，真实 OpenAI SDK 可编码并发送完全等值的 JSON 请求。
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -350,6 +362,7 @@ Setup -> Foundational safety/transaction
 7. **Pending revision**: 合法尾部原子丢弃、显式恢复、resumed reject 和 CLI/PowerShell 非阻塞启动。
 8. **TUI copy**: 复制当前最终请求/来源边框的完整安全文本，不改变批准事务与生命周期。
 9. **DeepSeek retry fix**: 显式非思考、完整工具续接协议和受控错误分类，消除必败请求重复审批。
+10. **SDK serialization fix**: 唯一冻结审批载荷只在 SDK 边界无损解冻，wire JSON 保持值等价。
 
 ## Analyze Remediation Mapping
 

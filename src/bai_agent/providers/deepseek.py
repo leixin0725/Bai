@@ -19,6 +19,7 @@ from bai_agent.domain.models import (
     SourceRef,
     TrustLevel,
     canonical_json,
+    thaw_json,
 )
 
 
@@ -181,7 +182,8 @@ class DeepSeekProvider:
         """[2026-07-20] 每次调用只做一次 I/O，并在成功、失败或取消时释放 sender 引用。"""
         self.active_payload = payload
         try:
-            response = await self.client.chat.completions.create(**payload.sdk_kwargs)
+            # [2026-07-20] 审批载荷保持深度不可变；仅在 SDK 边界无损还原为 JSON 原生容器供编码。
+            response = await self.client.chat.completions.create(**thaw_json(payload.sdk_kwargs))
             if not response.choices:
                 raise BaiError("PROVIDER_PROTOCOL_INVALID", "模型响应不包含候选结果。")
             choice = response.choices[0]

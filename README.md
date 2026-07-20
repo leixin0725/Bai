@@ -62,7 +62,7 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 批准前的上下文栏把输入近似估算、逐段估算、provider 协议开销、最大输出预留、预计峰值、模型容量、占比、剩余和 `normal/high/critical/exceeded` 分开显示；`≈` 表示 `deepseek_character_v1` 的保守离线估算，不是精确 tokenizer。容量未知或载荷不受支持时明确显示未知/不可估算。响应带合法 usage 时，TUI 已关闭，普通聊天输出只显示实际输入/输出/总量、实际占比和输入估算误差，不恢复原文。
 
-模型能力数字来自受版本控制的 `config/providers.toml`，不是运行时探测：chat 与 memory curator 使用 `deepseek-v4-flash`，每个真实请求都显式发送 `thinking.type=disabled`，profile 输出预留仍为 8192；provider 元数据记录 1,000,000 context 和 384,000 output cap。离线 40 项参考集只含无凭据样本，不会在测试中访问真实 API。
+模型能力数字来自受版本控制的 `config/providers.toml`，不是运行时探测：chat 与 memory curator 使用 `deepseek-v4-flash`，每个真实请求都显式发送 `thinking.type=disabled`，profile 输出预留仍为 8192；provider 元数据记录 1,000,000 context 和 384,000 output cap。审批载荷保持深度冻结，发送时只在 SDK 边界无损转换为可 JSON 编码的原生容器；真实 AsyncOpenAI 的本地 MockTransport 回归会比较最终 wire JSON。离线测试只含无凭据样本，不会访问真实 API。
 
 调试界面会完整暴露当前请求中的私人记忆，只应在可信本地终端使用；复制功能会把框内内容写入由终端/操作系统管理的剪贴板，使用后可按需清除。API Key/Authorization 由 transport 单独持有，既不进入可展示载荷，也不进入 journal、日志或实际用量摘要。若 TUI 运行期失败，未决定的 `PREPARED` journal 会在下一次持锁启动时安全丢弃；`READY_PENDING` 先前滚为唯一 USER pending，再由默认丢弃、显式丢弃或显式恢复策略处理；`READY_TO_COMMIT` 按 USER、ASSISTANT、可选长期记忆顺序幂等发布。恢复或尾部校验冲突会阻止新输入和 provider，不覆盖人工修改。
 

@@ -16,7 +16,7 @@
 
 **Storage**: 保留 JSONL 原始记录和 YAML 长期记忆；新增单个私有、原子替换的 `data/memory/.state/turn-transaction.json` 三态轮次事务日志。该日志只保存恢复所需的暂存用户记录（含本轮用户输入）、基线身份、安全失败码和待发布结果；除该暂存输入外，不保存组装后的最终模型请求、其他提示片段、来源追踪、认证信息或已拒绝标记。
 
-**Testing**: `pytest`、`pytest-asyncio`、`hypothesis`、`respx`，加 Textual `App.run_test()`/Pilot 无头交互测试；使用伪 provider、SDK 参数捕获和 HTTP mock 验证显示载荷与实际出站载荷逐字段一致，并覆盖 DeepSeek 非思考物化、assistant/tool_calls 续接及 HTTP/网络重试分类。
+**Testing**: `pytest`、`pytest-asyncio`、`hypothesis`、`respx`，加 Textual `App.run_test()`/Pilot 无头交互测试；使用伪 provider、SDK 参数捕获、真实 `AsyncOpenAI` + `httpx.MockTransport` 验证冻结审批载荷可编码且与 wire JSON 逐字段一致，并覆盖 DeepSeek 非思考物化、assistant/tool_calls 续接及 HTTP/网络重试分类。
 
 **Core Business Logic**: BR-001 由唯一物化载荷摘要、逐字段 SDK/HTTP 对比及 Unicode/空内容/工具定义测试覆盖；BR-002 由来源完整性、聚合来源、运行时来源和未知来源阻断测试覆盖；BR-003 由聊天/整理/工具续接/重试的调用序列与逐次批准测试覆盖；BR-004 由输入总量守恒、容量未知、估算不可用、峰值与阈值测试覆盖；BR-005 由有色、交互式无色和窄终端测试覆盖，非 TTY 单独 fail closed；BR-006 由调试开关请求等价、批准摘要绑定和失败关闭测试覆盖；BR-007 由凭据门禁、无持久追踪、批准后 TUI 清除、sender `finally` 释放及 1,000 次调用残留测试覆盖；BR-008 由各批准点拒绝、轮次事务状态机和逐持久化步骤故障注入恢复测试覆盖；BR-009 由 provider/网络失败发布单条 pending、默认/显式丢弃、显式恢复和 resumed reject 测试覆盖；BR-010 由当前工具只读审计和 fake 写工具事务/补偿能力门禁测试覆盖；BR-011 由完整轮次不可变、合法尾部 USER 原子截尾、长期引用门禁和故障收敛测试覆盖。每条规则均包含正常、边界和关键失败路径。
 
@@ -34,7 +34,7 @@
 
 **Performance Goals**: 在原生 Ubuntu 24.04、Python 3.13、80×24 `xterm-256color` 中，从 frozen request、来源和估算就绪到标题/身份/上下文摘要 mounted 的 30 次同进程启动 p95 不超过 500 ms，首次冷启动单独记录但不作为门禁；代表性请求集的输入估算至少 95% 落在实际值的 `max(15%, 128 tokens)` 误差范围；连续批准 1,000 次后 presenter 正文/来源和 sender 发送载荷残留均为 0。
 
-**Constraints**: 调试关闭与开启时形成相同最终请求；provider 端口只含 `prepare()`、唯一 `materialize_sdk_kwargs()` 和 `send_once()`，SDK 内部重试关闭，每次物理发送必须经过同一网关且仅网络/超时/429/500/503 重试重新批准；DeepSeek V4 每个请求显式物化非思考模式，工具续接按 assistant/tool_calls→tool result 构造；批准绑定 call、attempt 与 materialized digest，发送前重新校验；批准后正文 TUI 立即关闭，sender 仅保留不可变发送载荷并在 `finally` 释放；`ActualUsageSummary` 不持有 prompt、part 或 `SourceRef`；可信估算不可用时明确显示不可估算；正文/来源不落盘；TUI 或来源校验失败时安全阻断；普通 provider/网络失败发布单条 USER pending，但该 pending 不默认阻塞新对话；完整 raw turn 永久不可变，只有经全量结构/hash/长期引用校验的尾部未配对 USER 可在 WriterLease 下以原子替换放弃；写工具没有可恢复事务或补偿契约时在副作用前拒绝。
+**Constraints**: 调试关闭与开启时形成相同最终请求；provider 端口只含 `prepare()`、唯一 `materialize_sdk_kwargs()` 和 `send_once()`，SDK 内部重试关闭，每次物理发送必须经过同一网关且仅网络/超时/429/500/503 重试重新批准；DeepSeek V4 每个请求显式物化非思考模式，工具续接按 assistant/tool_calls→tool result 构造；批准绑定 call、attempt 与 materialized digest，发送前重新校验；批准后正文 TUI 立即关闭，sender 仅保留不可变发送载荷，在 SDK 边界将冻结容器无损还原为原生 JSON 值并于 `finally` 释放；`ActualUsageSummary` 不持有 prompt、part 或 `SourceRef`；可信估算不可用时明确显示不可估算；正文/来源不落盘；TUI 或来源校验失败时安全阻断；普通 provider/网络失败发布单条 USER pending，但该 pending 不默认阻塞新对话；完整 raw turn 永久不可变，只有经全量结构/hash/长期引用校验的尾部未配对 USER 可在 WriterLease 下以原子替换放弃；写工具没有可恢复事务或补偿契约时在副作用前拒绝。
 
 **Scale/Scope**: 单用户、单写者、本地进程；一轮最多包含整理、聊天、最多 4 次只读工具续接和 provider 重试；单段可关联数百来源；`deepseek-v4-flash` provider 能力元数据为 1M context/384K output，两个 profile 的请求输出限制保持 8192；验收覆盖 200 次混合调用和 1,000 次连续清理。
 

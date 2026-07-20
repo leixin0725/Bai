@@ -111,6 +111,7 @@ provider-neutral 的模型调用及完整来源上下文。
 **Validation**:
 
 - `materialize_sdk_kwargs()` 每个 attempt 恰好调用一次；`prepare()`、TUI、摘要器和 `send_once()` 均不得另行生成 SDK kwargs。
+- `sdk_kwargs` 的 mapping/sequence 在内存中深度冻结；sender 只允许在实际 SDK 调用参数边界通过 `thaw_json()` 恢复为等值 dict/list/scalar。恢复前后 canonical JSON 与 digest 必须一致，不得把内部 `mappingproxy` 交给 JSON encoder。
 - materializer 递归冻结所有 dict/list，拒绝非 JSON 类型。
 - 规范 JSON 使用 UTF-8、稳定 key 排序和无非语义空白；数组顺序原样保留。
 - provenance validator 以 `sdk_kwargs` 回读所有 included pointer/span，且 credential guard 通过后才能展示。

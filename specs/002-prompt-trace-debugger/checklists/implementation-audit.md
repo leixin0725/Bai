@@ -2,7 +2,7 @@
 
 **Purpose**: 在最终提交前逐项证明 spec、任务、测试、实现与文档的名义覆盖。
 **Audited**: 2026-07-20
-**Scope**: FR-001—FR-040、BR-001—BR-011、CR-001—CR-004、DR-001—DR-004、SC-001—SC-022。
+**Scope**: FR-001—FR-041、BR-001—BR-011、CR-001—CR-004、DR-001—DR-004、SC-001—SC-023。
 
 ## Functional Requirements
 
@@ -48,6 +48,7 @@
 | FR-038 | T110/T111 · full trace-box clipboard copy | ✓ |
 | FR-039 | T113/T115 · controlled provider retry classification | ✓ |
 | FR-040 | T114/T116 · assistant tool-call continuation protocol | ✓ |
+| FR-041 | T118/T119 · frozen payload thawed only at SDK boundary | ✓ |
 
 ## Business, Credential, and Documentation Requirements
 
@@ -99,6 +100,7 @@
 | SC-020 | T110 · shortcut/button exact clipboard text and zero decision/send | ✓ |
 | SC-021 | T113/T115 · non-retry once, transient new approval, SDK retry zero | ✓ |
 | SC-022 | T114/T116 · two-call DeepSeek tool continuation succeeds | ✓ |
+| SC-023 | T118 · real AsyncOpenAI MockTransport serialization/wire equality | ✓ |
 
 ## Conflict Audit
 
@@ -106,9 +108,10 @@
 - [x] transaction vocabulary is exactly PREPARED, READY_PENDING, READY_TO_COMMIT.
 - [x] approve closes/clears TUI before send; sender releases in `finally`; actual usage stays numeric and does not reopen TUI.
 - [x] `deepseek-chat` appears only as migration history; active profiles use `deepseek-v4-flash`.
-- [x] all 81 named FR/BR/CR/DR/SC identifiers have evidence above: nominal coverage 81/81 (100%).
+- [x] all 83 named FR/BR/CR/DR/SC identifiers have evidence above: nominal coverage 83/83 (100%).
 - [x] DeepSeek V4 non-thinking is present in the materialized SDK payload, not only declared in TOML.
 - [x] non-retryable HTTP/provider errors cannot reopen approval; SDK internal retries are disabled.
 - [x] tool continuation replays assistant/tool_calls before matching tool results.
+- [x] frozen SDK kwargs are thawed only at the SDK boundary and real wire JSON remains value-equivalent.
 - [x] no artifact requires default resume before new input; only explicit resume may resend old pending content.
 - [x] complete USER/ASSISTANT turns remain immutable; only a validated unreferenced tail USER may be atomically abandoned.

@@ -224,6 +224,7 @@ pytest tests/contract/test_tool_transaction_capabilities.py tests/unit/test_logg
 | TUI 初始化/渲染失败 | 发送次数为 0；修复终端能力后重试 |
 | 批准后同一 call/attempt 反复出现 | 仅网络/超时或 HTTP 429/500/503 应产生新 attempt；400/401/402/403/422 必须只审批一次。运行 provider 合同测试并核对最终载荷含 `thinking.type=disabled` |
 | 工具续接返回 HTTP 400 | 核对续接消息按 assistant/tool_calls → tool result 排列，且 tool_call_id 完全匹配；非思考模式不保存或回传 reasoning_content |
+| 批准后立即返回 `PROVIDER_FAILED` 且没有 HTTP 状态 | 运行 `pytest tests/contract/test_prompt_trace_provider.py -q`；真实 AsyncOpenAI MockTransport 必须能编码冻结载荷。sender 只在 SDK 边界用 `thaw_json()` 恢复原生 JSON 容器 |
 | PREPARED journal 残留 | 重启后自动丢弃，且不形成 pending/history |
 | READY_PENDING journal 残留 | 重启后先幂等发布唯一 USER pending；默认/`--discard-pending` 随后截尾，`--resume-pending` 保留并恢复；不得发布 assistant/long-term |
 | READY_TO_COMMIT journal 残留 | 重启后幂等发布完整轮次；冲突时停止新轮并按脱敏错误指引处理 |

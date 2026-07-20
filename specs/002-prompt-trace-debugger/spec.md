@@ -183,6 +183,7 @@
 - **FR-038**: 等待批准的 TUI MUST 提供“复制框内全部内容”按钮和 `C` 快捷键，把最终 provider 载荷、全部提示片段及来源按当前安全可见文本完整复制到终端剪贴板；复制 MUST NOT 批准、拒绝、发送、关闭界面、改变请求或在应用内创建持久 trace，完成通知 MUST NOT 回显正文。
 - **FR-039**: provider 适配器 MUST 按受控状态分类错误并关闭 SDK 内部隐藏重试；只有网络连接/超时及配置列出的 HTTP 429、500、503 可进入网关新 attempt 并重新审批，HTTP 400、401、402、403、422 与未知本地异常 MUST 在一次审批/发送后立即脱敏失败，不得重复弹出同一必败审批。
 - **FR-040**: 工具调用续接 MUST 在所有 tool result 之前按原顺序回放产生调用的 assistant 消息及完整 `tool_calls` 身份、函数名和参数；非思考模式不得要求或持久化 `reasoning_content`，续接的 assistant/tool_calls 与 tool result 均 MUST 进入唯一物化、来源校验和独立审批。
+- **FR-041**: 深度不可变的 `MaterializedSendPayload.sdk_kwargs` 在审批、摘要和 digest 校验期间 MUST 保持冻结；`send_once()` MUST 仅在真实 SDK 调用边界把同一 JSON 值无损还原为原生 dict/list/scalar 后编码，不得把 `mappingproxy`、tuple 等内部冻结容器直接交给 SDK，也不得在还原时改变字段、顺序语义或值。
 
 ### Core Business Rules *(mandatory)*
 
@@ -251,6 +252,7 @@
 - **SC-020**: Textual Pilot 中通过 `C` 和复制按钮得到的剪贴板文本 MUST 与边框内完整纯文本逐字符一致，且两条路径的批准、拒绝、provider 发送、界面关闭和持久 trace 数量均为 0。
 - **SC-021**: 在 400/401/402/403/422、429/500/503、网络失败和未知 SDK 异常合同测试中，不可重试错误的发送与批准次数均为 1；每个可重试物理 attempt 恰有一次新批准；SDK 内部重试次数为 0，错误正文、请求正文和凭据泄漏数量为 0。
 - **SC-022**: 在 DeepSeek fake transport 的工具调用端到端测试中，首个 chat 与后续 tool continuation 各发送且批准一次；续接消息严格包含 assistant/tool_calls 后紧邻匹配 tool_call_id 的 tool result，两个请求均显式非思考并最终返回 assistant 正文。
+- **SC-023**: 使用真实 `AsyncOpenAI` 与本地 `httpx.MockTransport` 发送深度冻结载荷时，SDK 序列化异常数量为 0；捕获的 HTTP JSON 与审批载荷按 SDK `extra_body` 合并语义逐字段一致，网络访问和真实凭据使用数量均为 0。
 
 ## Assumptions
 

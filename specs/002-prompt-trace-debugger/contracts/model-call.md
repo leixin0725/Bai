@@ -53,6 +53,7 @@ class ModelCallGateway(Protocol):
 10. `send_once()` 使用 payload 内的同一 `sdk_kwargs` 发出一次物理请求；认证只在 client 层单独注入，且无论成功或失败都在 `finally` 释放 sender 对 payload 的引用。
 11. 成功返回 response 和可选实际 usage；适配器关闭 SDK 内部重试并按配置分类失败。只有网络连接/超时与 HTTP 429/500/503 可重试；400/401/402/403/422 及未知本地异常立即失败。可重试时 attempt + 1 并从步骤 1 开始，不能复用批准或恢复上一 TUI；重试结束的普通 provider/网络失败由 controller 将轮次转为 READY_PENDING 并只发布一条 USER pending。
 12. DeepSeek V4 的每个物理请求显式物化 `extra_body.thinking.type=disabled`；工具续接在 tool result 前回放 assistant/tool_calls，不保存或要求 `reasoning_content`。
+13. sender 接管的 `MaterializedSendPayload` 仍是审批过的深度冻结对象；`send_once()` 在调用 SDK 的最后边界使用 `thaw_json()` 生成值等价的 JSON 原生容器，SDK 返回或抛错后在 `finally` 同样释放 sender 引用。该还原不是第二次 materialization，不得重新解释或修改字段。
 
 ## 最终请求边界
 
