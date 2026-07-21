@@ -8,6 +8,8 @@ from bai_agent.domain.models import (
     Message,
     Participation,
     RequestPart,
+    SourceKind,
+    SourceRef,
     TrustLevel,
 )
 from tests.prompt_debug_fakes import FakeAdapter, make_draft
@@ -70,12 +72,22 @@ async def test_many_usage_parts_stay_inside_scroll_box_at_80x24() -> None:
 
 
 @pytest.mark.asyncio
-async def test_whitespace_parts_are_compact_by_default_expandable_and_copy_losslessly_at_80x24() -> None:
+async def test_whitespace_parts_are_hidden_by_default_expandable_and_copy_losslessly_at_80x24() -> None:
     adapter = FakeAdapter()
     draft = make_draft("A\nB")
     source = draft.parts[0].sources
     first = "rec-00000000-0000-4000-8000-000000000001"
     second = "rec-00000000-0000-4000-8000-000000000002"
+    separator_source_id = "runtime:separator-only"
+    separator_source = (
+        SourceRef(
+            source_kind=SourceKind.RUNTIME,
+            source_id=separator_source_id,
+            entity_ids=(second,),
+            producer="separator_test",
+        ),
+    )
+    separator_part_id = f"message:0:{second}:entry-separator"
     parts = (
         RequestPart(
             part_id=f"message:0:{first}:body", order=0,
@@ -83,9 +95,10 @@ async def test_whitespace_parts_are_compact_by_default_expandable_and_copy_lossl
             payload_pointer="/messages/0/content", text_span=(0, 1), content="A", sources=source,
         ),
         RequestPart(
-            part_id=f"message:0:{second}:entry-separator", order=1,
+            part_id=separator_part_id, order=1,
             participation=Participation.INCLUDED, trust=TrustLevel.UNTRUSTED_DATA,
-            payload_pointer="/messages/0/content", text_span=(1, 2), content="\n", sources=source,
+            payload_pointer="/messages/0/content", text_span=(1, 2), content="\n",
+            sources=separator_source,
         ),
         RequestPart(
             part_id=f"message:0:{second}:body", order=2,
@@ -103,7 +116,11 @@ async def test_whitespace_parts_are_compact_by_default_expandable_and_copy_lossl
 
     compact = app._trace_renderable()
     audit = app._trace_text()
-    assert "<换行 1>" in compact.plain
+    assert separator_part_id not in compact.plain
+    assert separator_source_id not in compact.plain
+    assert "<换行 1>" not in compact.plain
+    assert separator_part_id in audit
+    assert separator_source_id in audit
     assert "\\n" in audit
     assert "来源数=1" in compact.plain
     assert "类型=runtime" in compact.plain
@@ -120,7 +137,15 @@ async def test_whitespace_parts_are_compact_by_default_expandable_and_copy_lossl
         assert not app.query_one("#approve").disabled
         await pilot.press("w")
         await pilot.pause()
-        assert "\\n" in app.query_one("#trace").render().plain
+        expanded = app.query_one("#trace").render().plain
+        assert separator_part_id in expanded
+        assert separator_source_id in expanded
+        assert "\\n" in expanded
+        await pilot.press("w")
+        await pilot.pause()
+        collapsed_again = app.query_one("#trace").render().plain
+        assert separator_part_id not in collapsed_again
+        assert separator_source_id not in collapsed_again
         await pilot.press("c")
         assert app._clipboard == audit
 

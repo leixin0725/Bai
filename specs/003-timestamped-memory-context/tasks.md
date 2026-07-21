@@ -188,7 +188,7 @@ description: "智能历史时间段标注的依赖有序实现任务"
 - [X] T067 新增共享 `UntrustedBoundaryRenderer`，让 chat/curation system persona 与 `untrusted_memory_boundary.md` 拥有独立精确 snapshot asset/hash/revision span，并验证 reload 原子替换
 - [X] T068 在 assembler 中用同一 `annotate_history` 标注 current input，只包装 marker 元数据、保持正文 `USER_INSTRUCTION`，controller 排除 recent 重复项并复用 provisional record
 - [X] T069 将 history/long-term/overview/curation metadata+history/tool events 接入统一 visible boundary，确保最终字符预算、token 估算、provenance 与 materialized payload 一致且不增加 provider 自定义字段
-- [X] T070 在 TUI 中实现 whitespace-only 默认紧凑/W 展开/复制无损、来源字段与图例澄清、message index 稳定莫兰迪配色及同 message 内 record A/B 交错，保持 `color=never` 无样式和 80×24 可用
+- [X] T070 在 TUI 中实现 whitespace-only 默认整段隐藏/W 展开/复制完整审计块、来源字段与图例澄清、message index 稳定莫兰迪配色及同 message 内 record A/B 交错，保持 `color=never` 无样式和 80×24 可用
 - [X] T071 新增/更新 visible payload、system provenance、current time、retry/resume、no-write、TUI whitespace/color/no-color/80×24 的 unit/contract/integration 测试，并保持 `memory_source_query` direct contract 不变
 - [X] T072 同步 `README.md`、001/002 合同与 quickstart、003 spec/plan/research/data-model/contract/quickstart/tasks 的 current input、八 block、visible boundary、TUI 字段与纯展示语义
 - [X] T073 运行全部非性能、相关性能/故障注入、config validate、wheel、文档链接、秘密扫描、`git diff --check`，记录结果并完成原子提交

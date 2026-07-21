@@ -60,7 +60,7 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 同一轮的 memory curation → chat → tool continuation 按网关分配的严格 call sequence 逐项出现；tool continuation 会先回放 assistant/tool_calls，再追加匹配的 tool result。只有网络/超时和 HTTP 429/500/503 会形成新的 retry attempt 与批准项；400/401/402/403/422 等不可重试错误只审批/发送一次并立即返回脱敏错误，OpenAI SDK 内部重试已关闭。交互 TTY 使用低饱和莫兰迪色：`message:N` 决定稳定基础色，历史 message 内按结构化 `rec-*` 记录顺序使用 A/B 近似色交错，同一记录的 marker、分隔符和正文保持同组；来源类型只作次级强调。`NO_COLOR=1` 或 `debug_prompt.color="never"` 时不产生 ANSI/样式，但仍保留全部文本标签、分组边界与缩进。输出重定向不是无色模式，会按非 TTY 规则失败。
 
-TUI 的来源详情明确分列 `来源数`、`类型`、`路径`、`source_id`、`producer` 与 `entity_ids`；其中 `entity_ids` 是 `rec-*`、`turn-*` 等实体 UUID，不代表聊天顺序。图例同时解释 `included/excluded/empty/unknown_source`、`trusted_instruction/user_instruction/untrusted_data` 与 `message:N`。只含换行/空格的 included part 默认压缩为 `<换行 1>` 等摘要，按 `W` 可展开为转义文本；`C` 复制始终包含可审计的无损转义内容。该折叠与配色只改变 TUI renderable，不改变 provider payload、RequestPart、span 或 token 估算；80×24 终端仍可滚动查看完整 trace 并操作按钮。
+TUI 的来源详情明确分列 `来源数`、`类型`、`路径`、`source_id`、`producer` 与 `entity_ids`；其中 `entity_ids` 是 `rec-*`、`turn-*` 等实体 UUID，不代表聊天顺序。图例同时解释 `included/excluded/empty/unknown_source`、`trusted_instruction/user_instruction/untrusted_data` 与 `message:N`。只含换行/空格的 included part 默认整段隐藏，包括其标题与来源溯源；按 `W` 后以转义文本展开完整审计块，`C` 复制也始终包含这些完整块。该折叠与配色只改变 TUI renderable，不改变 provider payload、RequestPart、span 或 token 估算；80×24 终端仍可滚动查看完整 trace 并操作按钮。
 
 批准前的上下文栏把输入近似估算、逐段估算、provider 协议开销、最大输出预留、预计峰值、模型容量、占比、剩余和 `normal/high/critical/exceeded` 分开显示；`≈` 表示 `deepseek_character_v1` 的保守离线估算，不是精确 tokenizer。容量未知或载荷不受支持时明确显示未知/不可估算。响应带合法 usage 时，TUI 已关闭，普通聊天输出只显示实际输入/输出/总量、实际占比和输入估算误差，不恢复原文。
 

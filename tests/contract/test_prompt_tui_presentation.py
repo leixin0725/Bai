@@ -1,4 +1,4 @@
-"""[2026-07-21] TUI 颜色与空白摘要只增强展示，不改变可复制审计文本。"""
+"""[2026-07-21] TUI 颜色与空白整段折叠只增强展示，不改变可复制审计文本。"""
 
 from bai_agent.debug.tui import (
     MESSAGE_PALETTE,
@@ -9,7 +9,6 @@ from bai_agent.debug.tui import (
     record_ordinals_for_parts,
     resolve_color_enabled,
     safe_terminal_text,
-    whitespace_summary,
 )
 from bai_agent.domain.models import Participation, RequestPart, SourceKind, SourceRef, TrustLevel
 
@@ -72,10 +71,7 @@ def test_record_fragments_alternate_by_first_seen_order_and_keep_one_record_colo
     assert second_colors == {message_colors(4)[1]}
 
 
-def test_whitespace_compact_and_expanded_forms_are_deterministic_and_lossless() -> None:
-    assert whitespace_summary("\n") == "<换行 1>"
-    assert whitespace_summary("  ") == "<空格 2>"
-    assert whitespace_summary("\n\t ") == "<空白 3：换行=1 制表=1 空格=1>"
+def test_expanded_whitespace_form_is_deterministic_and_lossless() -> None:
     assert escaped_whitespace("\n\t \u3000") == "\\n\\t\\x20\\u3000"
 
 

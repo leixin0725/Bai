@@ -97,23 +97,6 @@ def color_for_part(part, record_ordinals: dict[tuple[int, str], int]) -> str | N
     return variants[variant]
 
 
-def whitespace_summary(value: str) -> str:
-    counts = {
-        "换行": value.count("\n"),
-        "回车": value.count("\r"),
-        "制表": value.count("\t"),
-        "空格": value.count(" "),
-    }
-    known = sum(counts.values())
-    if known < len(value):
-        counts["其他空白"] = len(value) - known
-    nonzero = [(name, count) for name, count in counts.items() if count]
-    if len(nonzero) == 1:
-        return f"<{nonzero[0][0]} {nonzero[0][1]}>"
-    details = " ".join(f"{name}={count}" for name, count in nonzero)
-    return f"<空白 {len(value)}：{details}>"
-
-
 def escaped_whitespace(value: str) -> str:
     escaped = {"\n": "\\n", "\r": "\\r", "\t": "\\t", "\v": "\\v", "\f": "\\f", " ": "\\x20"}
     return "".join(
@@ -307,6 +290,10 @@ class PromptApprovalApp(App[ApprovalDecision]):
         )
         record_ordinals = record_ordinals_for_parts(self.request.parts)
         for part in self.request.parts:
+            whitespace_only = bool(part.content) and part.content.isspace()
+            # [2026-07-21] 折叠模式隐藏整个空白 part（含来源）；展开/复制仍保留完整审计块。
+            if whitespace_only and not expanded:
+                continue
             message_index = message_index_for_part(part)
             part_style = color_for_part(part, record_ordinals) if color_enabled else None
             message_label = f"message={message_index}" if message_index is not None else "message=无"
@@ -315,8 +302,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
                 f"信任={part.trust.value} 来源数={len(part.sources)} {message_label}\n",
                 style=part_style,
             )
-            if part.content and part.content.isspace():
-                visible_content = escaped_whitespace(part.content) if expanded else whitespace_summary(part.content)
+            if whitespace_only:
+                visible_content = escaped_whitespace(part.content)
             else:
                 visible_content = safe_terminal_text(part.content)
             rendered.append(visible_content, style=part_style)

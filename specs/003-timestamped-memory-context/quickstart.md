@@ -161,7 +161,7 @@ pytest tests/integration/test_prompt_debug_equivalence.py tests/integration/test
 - 固定 clock/input 下 debug on/off 的最终请求逐字一致，等待批准不会改变 marker。
 - system message 中 persona 文件与 `untrusted_memory_boundary.md` 各有独立、不重叠的 part/span，并使用当前 snapshot 的真实 hash/revision；配置 reload 后切换为新资产。
 - materialized provider payload 的每个不可信逻辑块都真实包含一对 block/id 匹配的可见边界，而不只是内部 trust metadata。
-- whitespace-only part 默认显示 `<换行 1>` 等摘要，按 `W` 展开、`C` 复制仍以转义形式无损；来源字段分列来源数/类型/路径/source_id/producer/entity_ids。
+- whitespace-only part 默认整段隐藏其标题/正文/来源，按 `W` 展开或按 `C` 复制时恢复使用转义正文的完整审计块；来源字段分列来源数/类型/路径/source_id/producer/entity_ids。
 - message index 使用确定性的低饱和基础色，历史 record 按结构化 part id A/B 交错；`color=never` 的 Rich `Text` 无样式 span/ANSI，80×24 下按钮和滚动 trace 可用。
 
 ## 8. 验证来源追溯工具保持不变
