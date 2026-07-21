@@ -282,7 +282,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
             "\n\n[图例]\n"
             "状态：included=进入最终载荷；excluded=明确排除；empty=空片段；"
             "unknown_source=来源无法确认。\n"
-            "信任：trusted_instruction=可信指令；user_instruction=当前用户指令；"
+            "信任：trusted_instruction=可信指令；trusted_metadata=可信元数据；"
+            "user_instruction=当前用户指令；"
             "untrusted_data=不可信数据。\n"
             "message:N=N 为最终 provider messages 的零基索引；"
             "entity_ids=来源关联的实体 UUID/标识，不是聊天顺序编号。",

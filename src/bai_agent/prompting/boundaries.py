@@ -112,7 +112,7 @@ class UntrustedBoundaryRenderer:
     @classmethod
     def boundary_id(cls, block_name: str, content: str) -> str:
         cls._validate_block_name(block_name)
-        return sha256(f"{block_name}\0{content}".encode("utf-8")).hexdigest()[:32]
+        return sha256(f"{block_name}\0{content}".encode("utf-8")).hexdigest()[:8]
 
     def _frame_sources(self, block_name: str, boundary_id: str, frame_text: str) -> tuple[SourceRef, ...]:
         generated = SourceRef(
@@ -129,9 +129,9 @@ class UntrustedBoundaryRenderer:
         inner = tuple(pieces)
         content = "".join(piece.content for piece in inner)
         boundary_id = self.boundary_id(block_name, content)
-        opening = f"<<<UNTRUSTED_DATA_BEGIN block={block_name} id={boundary_id}>>>\n"
+        opening = f"[UNTRUSTED {block_name}#{boundary_id}]\n"
         before_close = "" if content.endswith("\n") else "\n"
-        closing = f"<<<UNTRUSTED_DATA_END block={block_name} id={boundary_id}>>>"
+        closing = f"[/UNTRUSTED {block_name}#{boundary_id}]"
         frame_sources = self._frame_sources(block_name, boundary_id, opening + before_close + closing)
         framed = (
             PromptTextPiece(
@@ -166,9 +166,9 @@ class UntrustedBoundaryRenderer:
         """[2026-07-21] 选择器可在不伪造来源的情况下精确预留边界字符。"""
 
         boundary_id = self.boundary_id(block_name, content)
-        opening = f"<<<UNTRUSTED_DATA_BEGIN block={block_name} id={boundary_id}>>>\n"
+        opening = f"[UNTRUSTED {block_name}#{boundary_id}]\n"
         before_close = "" if content.endswith("\n") else "\n"
-        closing = f"<<<UNTRUSTED_DATA_END block={block_name} id={boundary_id}>>>"
+        closing = f"[/UNTRUSTED {block_name}#{boundary_id}]"
         return len(opening) + len(content) + len(before_close) + len(closing)
 
     def compose_system_instruction(

@@ -186,12 +186,13 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 - [X] T066 扩展 `CURRENT_HISTORY_BLOCKS`、合同/集成测试和 full acceptance 为八个时间化 block，并直接覆盖 current input provisional 时间、retry/resume 稳定性及 raw/YAML no-write
 - [X] T067 新增共享 `UntrustedBoundaryRenderer`，让 chat/curation system persona 与 `untrusted_memory_boundary.md` 拥有独立精确 snapshot asset/hash/revision span，并验证 reload 原子替换
-- [X] T068 在 assembler 中用同一 `annotate_history` 标注 current input，只包装 marker 元数据、保持正文 `USER_INSTRUCTION`，controller 排除 recent 重复项并复用 provisional record
+- [X] T068 在 assembler 中用同一 `annotate_history` 标注 current input 并保持正文 `USER_INSTRUCTION`，controller 排除 recent 重复项并复用 provisional record；T074 调整最终可见信任边界方向
 - [X] T069 将 history/long-term/overview/curation metadata+history/tool events 接入统一 visible boundary，确保最终字符预算、token 估算、provenance 与 materialized payload 一致且不增加 provider 自定义字段
 - [X] T070 在 TUI 中实现 whitespace-only 默认整段隐藏/W 展开/复制完整审计块、来源字段与图例澄清、message index 稳定莫兰迪配色及同 message 内 record A/B 交错，保持 `color=never` 无样式和 80×24 可用
 - [X] T071 新增/更新 visible payload、system provenance、current time、retry/resume、no-write、TUI whitespace/color/no-color/80×24 的 unit/contract/integration 测试，并保持 `memory_source_query` direct contract 不变
 - [X] T072 同步 `README.md`、001/002 合同与 quickstart、003 spec/plan/research/data-model/contract/quickstart/tasks 的 current input、八 block、visible boundary、TUI 字段与纯展示语义
 - [X] T073 运行全部非性能、相关性能/故障注入、config validate、wheel、文档链接、秘密扫描、`git diff --check`，记录结果并完成原子提交
+- [X] T074 将 current input 的可信时间 marker 移到边界外、用户正文移入 `current_input` 块，为该投影新增专用 trusted-time fragment kind；共享边界精简为 block + 8 位内容 ID，并保持历史 marker 现状、预算/provenance/provider 一致
 
 ---
 
@@ -318,6 +319,7 @@ Curation：T031 || T032 -> T033 -> T034
 - **T064 / 2026-07-20**: N/A（无需修改 workflow）：现有 Ubuntu 24.04/Python 3.13+3.14 与 Windows/Python 3.13+3.14 均执行 `pytest -m "not performance"`，已覆盖全部新增非性能测试；1 秒 temporal 性能门禁保持仅在主要平台/显式本地命令执行，未迁移到 Windows 功能矩阵。
 - **T065 / 2026-07-20**: feature quickstart 10 组定向测试共 83 项通过；editable 安装因隔离环境无法联网获取 build dependency 超时后，以已声明并安装的 `hatchling`/`editables` 执行 `--no-build-isolation` 等价复验通过，离线 `config validate` 通过。最终 `pytest -m "not performance" -q` 为 343 passed/4 deselected；全部 performance 为 5 passed/2 platform-gated skipped（其中 temporal scale 2 passed）；fault injection 为 33 passed；模板/配置占位符补充回归 17 passed。16 份文档 0 断链/0 缺失测试路径，秘密与持久 trace 扫描无发现，`git diff --check` 通过。
 - **T066—T073 / 2026-07-21**: visible boundary/current input/TUI 聚焦回归 38 passed；完整 `.venv` 非性能回归 349 passed/4 deselected；performance 5 passed/2 platform-gated skipped，fault injection 33 passed。真实 wheel 默认配置测试、无凭据占位 `config validate`、`compileall`、35 份 Markdown 本地链接（0 断链）、秘密/持久 trace 回归与 `git diff --check` 全部通过；八 block、system 双资产精确 provenance、current retry/resume 时间、raw/YAML no-write、TUI 80×24/无色/空白审计均闭环。`src/bai_agent/tools/memory_source.py` 无改动。
+- **T074 / 2026-07-21**: current input/短边界/domain/provenance 两组聚焦回归 48 passed + 43 passed；完整非性能回归 349 passed/4 deselected，performance 5 passed/2 platform-gated skipped。短 ID 配对、当前时间在边界外且使用 `TRUSTED_TIME_METADATA`/`TRUSTED_METADATA`、用户正文在 `current_input` 块内、历史 marker 仍为 `UNTRUSTED_DATA` 均由 materialized payload 直接断言；无凭据占位 `config validate`、`compileall` 与 `git diff --check` 通过。
 
 ## Requirement Closure（2026-07-20）
 

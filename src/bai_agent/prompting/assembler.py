@@ -409,25 +409,33 @@ class PromptAssembler:
                 source_ids=(record.record_id, record.turn_id),
                 fragments=annotated.fragments,
             )
-        marker_pieces = pieces_from_fragments(
-            fragment for fragment in annotated.fragments if fragment.kind is not AnnotatedFragmentKind.BODY
+        marker_pieces = tuple(
+            PromptTextPiece(
+                piece_id=fragment.fragment_id,
+                content=fragment.content,
+                sources=fragment.sources,
+                trust=TrustLevel.TRUSTED_METADATA,
+                entry_id=fragment.entry_id,
+                kind=(
+                    AnnotatedFragmentKind.TRUSTED_TIME_METADATA
+                    if fragment.kind is AnnotatedFragmentKind.MARKER
+                    else fragment.kind
+                ),
+            )
+            for fragment in annotated.fragments
+            if fragment.kind is not AnnotatedFragmentKind.BODY
         )
         body_fragment = next(
             fragment for fragment in annotated.fragments if fragment.kind is AnnotatedFragmentKind.BODY
         )
-        bounded_marker = self.boundary_renderer.wrap("current_input.timestamp", marker_pieces)
+        bounded_body = self.boundary_renderer.wrap(
+            "current_input",
+            pieces_from_fragments((body_fragment,)),
+        )
         positioned = position_pieces(
             (
-                *pieces_from_fragments(bounded_marker.fragments),
-                PromptTextPiece(
-                    piece_id=f"{record.record_id}:instruction-separator",
-                    content="\n",
-                    sources=(source,),
-                    trust=TrustLevel.USER_INSTRUCTION,
-                    entry_id=record.record_id,
-                    kind=AnnotatedFragmentKind.SEPARATOR,
-                ),
-                *pieces_from_fragments((body_fragment,)),
+                *marker_pieces,
+                *pieces_from_fragments(bounded_body.fragments),
             )
         )
         return PromptSegment(

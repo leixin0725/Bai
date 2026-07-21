@@ -167,8 +167,8 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     draft = gateway.calls[0]
     prompt = draft.request.messages[1].content
     for block_name in ("batch_metadata", "batch_records", "existing_memories", "current_overview"):
-        assert prompt.count(f"<<<UNTRUSTED_DATA_BEGIN block={block_name} id=") == 1
-        assert prompt.count(f"<<<UNTRUSTED_DATA_END block={block_name} id=") == 1
+        assert prompt.count(f"[UNTRUSTED {block_name}#") == 1
+        assert prompt.count(f"[/UNTRUSTED {block_name}#") == 1
     assert renderer.instruction_text in draft.request.messages[0].content
     assert prompt.count("[时间：") >= 1
     assert prompt.count("[时间范围：") >= 2
@@ -205,7 +205,7 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     payload = provider.materialize_sdk_kwargs(prepared)
     materialized = thaw_json(payload.sdk_kwargs)
     validate_provenance(materialized, prepared.parts)
-    assert "<<<UNTRUSTED_DATA_BEGIN block=batch_records id=" in materialized["messages"][1]["content"]
+    assert "[UNTRUSTED batch_records#" in materialized["messages"][1]["content"]
 
 
 @pytest.mark.asyncio

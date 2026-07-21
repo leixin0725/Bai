@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 from bai_agent.application import _temporal_policy
@@ -38,9 +39,19 @@ def test_system_sources_and_materialized_untrusted_boundaries_are_exact() -> Non
         boundary_renderer=renderer,
     )
     turn_id = "turn-00000000-0000-4000-8000-999999999999"
+    recent = RawRecord.create(
+        record_id="rec-00000000-0000-4000-8000-000000000001",
+        global_sequence=1,
+        turn_id="turn-00000000-0000-4000-8000-000000000001",
+        role=Role.ASSISTANT,
+        content="上一轮正文",
+        created_at=datetime(2026, 7, 20, 0, 50, tzinfo=timezone.utc),
+        state_id="default",
+        config_revision=snapshot.revision,
+    )
     current = RawRecord.create(
         record_id="rec-00000000-0000-4000-8000-999999999999",
-        global_sequence=1,
+        global_sequence=2,
         turn_id=turn_id,
         role=Role.USER,
         content="本轮问题",
@@ -61,7 +72,7 @@ def test_system_sources_and_materialized_untrusted_boundaries_are_exact() -> Non
         ),
         memory_overview="[]",
         long_term_memories=(),
-        recent_records=(),
+        recent_records=(recent,),
         current_input_record=current,
     )
     request = CompletionRequest(
@@ -121,20 +132,39 @@ def test_system_sources_and_materialized_untrusted_boundaries_are_exact() -> Non
         "recent_records": sdk["messages"][4]["content"],
     }
     for name, text in blocks.items():
-        assert text.count(f"<<<UNTRUSTED_DATA_BEGIN block={name} id=") == 1
-        assert text.count(f"<<<UNTRUSTED_DATA_END block={name} id=") == 1
+        opening = re.search(rf"\[UNTRUSTED {re.escape(name)}#([0-9a-f]{{8}})\]", text)
+        assert opening is not None
+        assert text.count(f"[/UNTRUSTED {name}#{opening.group(1)}]") == 1
     current_text = sdk["messages"][5]["content"]
-    assert current_text.count("<<<UNTRUSTED_DATA_BEGIN block=current_input.timestamp id=") == 1
-    assert current_text.count("<<<UNTRUSTED_DATA_END block=current_input.timestamp id=") == 1
-    assert current_text.endswith("本轮问题")
+    current_opening = re.search(r"\[UNTRUSTED current_input#([0-9a-f]{8})\]", current_text)
+    assert current_opening is not None
+    current_closing = f"[/UNTRUSTED current_input#{current_opening.group(1)}]"
+    assert current_text.startswith("[时间：2026-07-20 09:02 +08:00]\n")
+    assert current_text.endswith(current_closing)
+    assert f"{current_opening.group(0)}\n本轮问题\n{current_closing}" in current_text
+    assert "current_input.timestamp" not in current_text
     body = next(part for part in prepared.parts if part.content == "本轮问题")
     marker = next(part for part in prepared.parts if part.content.startswith("[时间：2026-07-20 09:02"))
+    current_boundary = next(
+        part
+        for part in prepared.parts
+        if part.content.startswith("[UNTRUSTED current_input#")
+    )
     assert body.trust is TrustLevel.USER_INSTRUCTION
-    assert marker.trust is TrustLevel.UNTRUSTED_DATA
+    assert marker.trust is TrustLevel.TRUSTED_METADATA
+    assert marker.text_span[1] <= current_boundary.text_span[0] < body.text_span[0]
     assert {source.source_id for source in marker.sources} >= {
         "config:history_timestamps",
         f"runtime:current-input:{current.record_id}",
     }
+    historical_marker = next(
+        part for part in prepared.parts if part.content.startswith("[时间：2026-07-20 08:50")
+    )
+    historical_boundary = next(
+        part for part in prepared.parts if part.content.startswith("[UNTRUSTED recent_records#")
+    )
+    assert historical_marker.trust is TrustLevel.UNTRUSTED_DATA
+    assert historical_boundary.text_span[0] < historical_marker.text_span[0]
 
     estimate = DeepSeekCharacterEstimator(context_capacity=1_000_000).estimate(prepared, payload)
     assert estimate.status == "estimated"

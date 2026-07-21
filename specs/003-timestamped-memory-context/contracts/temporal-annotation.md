@@ -79,8 +79,8 @@
 ### Current input contract
 
 - `current_input` 也作为一个独立 EVENT block 调用本合同；时间必须取本轮已建立 provisional `RawRecord.created_at`，不得在 retry、pending resume、批准或 sender 边界读取 wall clock。
-- marker sources 必须同时包含真实 `config:history_timestamps` asset 与 provisional USER record 的 runtime source；正文 fragment trust 保持 `USER_INSTRUCTION`。
-- 只有 marker 及其分隔符置于 visible `untrusted_data` block，当前用户正文在该边界外继续作为本轮指令；不得把整个 current input 降级为历史数据。
+- marker sources 必须同时包含真实 `config:history_timestamps` asset 与 provisional USER record 的 runtime source；仅在 current input 投影时转换为可信时间元数据 fragment 并放在边界外。正文 fragment trust 保持 `USER_INSTRUCTION`，同时位于 `current_input` 可见不可信边界内。
+- 上述提升只适用于当前输入 marker；recent/long-term/overview/curation/tool 等历史 marker 继续保持 `UNTRUSTED_DATA` 并与历史正文一起位于各自边界内。
 - 生成 marker/boundary 只存在于 PromptContext/RequestPart/materialized payload，不进入 raw JSONL 或 long-term YAML；下一轮 recent history 从原始正文和持久化 `created_at` 重新标注。
 
 ### Visible untrusted-data boundary contract
@@ -88,9 +88,9 @@
 所有不可信逻辑块在最终 provider `content` 中使用共享 renderer 包装一次：
 
 ```text
-<<<UNTRUSTED_DATA_BEGIN block=<logical-name> id=<content-bound-32-hex>>>
+[UNTRUSTED <logical-name>#<content-bound-8-hex>]
 <untrusted content>
-<<<UNTRUSTED_DATA_END block=<same-name> id=<same-id>>>
+[/UNTRUSTED <same-name>#<same-id>]
 ```
 
 - opening/closing、inner fragments 与必要 separator 都必须是最终 payload 的 included、无重叠 span；不得只依赖 `Message.trust`/`RequestPart.trust` 或 provider 不支持的扩展字段。

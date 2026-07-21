@@ -102,7 +102,7 @@ split_on_local_date_change = true
 
 ## 11. 模型可见的不可信数据边界
 
-**Decision**: 内部 trust metadata 继续用于校验与 TUI，但不再把它当成模型可见边界。所有历史、长期记忆、覆盖概览、整理输入和工具事件在 provider 支持的 `content` 字段中按逻辑块加入一对 `UNTRUSTED_DATA_BEGIN/END`，block 与由完整正文派生的 id 必须匹配。system 中 persona 与边界说明共同发送，但分别由当前 `ConfigSnapshot` 的真实 asset/hash/revision 和独立 span 归因。
+**Decision**: 内部 trust metadata 继续用于校验与 TUI，但不再把它当成模型可见边界。所有历史、长期记忆、覆盖概览、整理输入和工具事件在 provider 支持的 `content` 字段中按逻辑块加入一对简短的 `[UNTRUSTED block#8位ID]`/`[/UNTRUSTED block#8位ID]`，block 与由完整正文派生的短 id 必须匹配。当前输入例外地把可信时间 marker 放在边界外，只把用户正文放入 `current_input` 块；其他历史 marker 暂不移动。system 中 persona 与边界说明共同发送，但分别由当前 `ConfigSnapshot` 的真实 asset/hash/revision 和独立 span 归因。
 
 **Rationale**: DeepSeek wire 只发送标准 role/content/tool 字段；共享 renderer 使 LLM、预算、estimator、provenance 和 TUI 面对同一结构，同时避免逐记录重复标签。内容绑定 id 让数据正文中的仿冒边界不能与应用生成的外层结构混淆。
 

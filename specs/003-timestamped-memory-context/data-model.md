@@ -98,7 +98,7 @@
 | Field | Type | Rules |
 |---|---|---|
 | `fragment_id` | string | 区块/entry/kind 确定性生成 |
-| `kind` | enum | `MARKER` 或 `BODY` |
+| `kind` | enum | `MARKER`、`BODY`、`SEPARATOR`；仅 current input 投影可把 marker 转为 `TRUSTED_TIME_METADATA` |
 | `entry_id` | string | 关联承载项 |
 | `start` / `end` | non-negative int | 对 `AnnotatedHistory.text` 的 Unicode code-point `[start,end)`；互不重叠且可回读 |
 | `content` | string | 必须等于 `text[start:end]` |
@@ -112,12 +112,12 @@
 共享 `UntrustedBoundaryRenderer` 把一个已经定位来源的逻辑数据块渲染为：
 
 ```text
-<<<UNTRUSTED_DATA_BEGIN block=<name> id=<32 hex>>>
+[UNTRUSTED <name>#<8 hex>]
 <content>
-<<<UNTRUSTED_DATA_END block=<same name> id=<same id>>>
+[/UNTRUSTED <same name>#<same id>]
 ```
 
-- `id` 由 block name 与完整 inner content 确定性派生；同形正文不能跨 block 复用边界身份。
+- `id` 是由 block name 与完整 inner content 确定性派生的 8 位十六进制短标识；同形正文不能跨 block 复用边界身份。
 - opening/closing 由同一个真实 `prompt:untrusted_memory_boundary` `ConfigAsset` 与 generated renderer source 归因，inner fragments 保持自己的 trust 与来源。
 - 一个历史/记忆/整理逻辑块恰有一对边界；工具协议按一条 assistant/tool 事件消息作为逻辑块，不逐字段或逐记录重复包装。
 - provider 只接收已有 role/content/tool_calls 等支持字段；边界作为 content 字符进入字符预算、token 估算和 provenance span。
@@ -147,7 +147,7 @@
 
 ### Current input trust split
 
-当前输入由一个 EVENT entry 经过同一 annotator 产生 marker；renderer 只包围 marker 与 marker separator，随后正文以 `USER_INSTRUCTION` fragment 紧接。重试和 pending resume 必须传入同一个 provisional/persisted USER record。raw archive 仅保存用户原正文和原 `created_at`，下一轮历史重新生成 marker，不能读取或复制上轮的展示字符串。
+当前输入由一个 EVENT entry 经过同一 annotator 产生 marker；投影层把该 marker 转为 `TRUSTED_TIME_METADATA`/`TRUSTED_METADATA` 片段并置于边界外，明确表达“可信但不是指令”，renderer 只包围用户正文。正文 fragment 保持 `USER_INSTRUCTION`，但模型可见结构明确位于 `current_input` 不可信块中。重试和 pending resume 必须传入同一个 provisional/persisted USER record。raw archive 仅保存用户原正文和原 `created_at`，下一轮历史重新生成 marker，不能读取或复制上轮的展示字符串；其他历史 marker 仍保持 `MARKER`/`UNTRUSTED_DATA` 并位于历史块内。
 
 ## 8. ToolHistoryEvent
 
@@ -252,6 +252,6 @@ accepted CompletionResult with tool_calls
 10. 工具调用接受/结果完成时间各只采样一次；重试、审批和重渲染复用原时刻。
 11. `memory_source_query` 实现和结果 schema 不因时间标注改变；其 body 在外层消息中仍可逐字定位。
 12. 标注流程不写 raw/YAML，不修改原始 UTC 时间，并对 10,000 项保持 O(n) 时间和 O(n) 输出空间。
-13. 当前输入的 marker 时间等于 provisional `RawRecord.created_at`；正文保持 `USER_INSTRUCTION`，marker 保持数据元信息 trust，retry/resume 不重采样。
+13. 当前输入的 marker 时间等于 provisional `RawRecord.created_at`，使用可信时间元数据 trust 并位于边界外；正文保持 `USER_INSTRUCTION` 且位于 `current_input` 不可信边界内，retry/resume 不重采样。历史 marker 不提升信任。
 14. 每个不可信逻辑数据块在最终 payload 中恰有一对匹配的 visible boundary；wrapper、inner content 与 estimator 使用同一个最终字符串。
 15. system content 中 persona 与 boundary instruction 的 span 不重叠，并分别绑定同一 `ConfigSnapshot` 中各自的真实 asset/hash/revision。

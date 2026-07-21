@@ -249,7 +249,7 @@ next_cursor | null
 
 ## 12. 统一历史时间合同（2026-07-20）
 
-`PromptAssembler` 把每条近期 `RawRecord` 适配为统一日志项：正文仍是原有的 `role: content`，点时间严格使用已持久化的 `created_at`，来源绑定 raw record identity/hash。`memory_overview`、`long_term_memories`、`recent_records` 三个区块分别从空状态分段。`current_input` 是第四个独立时间化区块，严格复用本轮 provisional `RawRecord.created_at`；retry/resume 不重采样，时间 marker 保持数据元信息 trust，正文仍是 `USER_INSTRUCTION`。基础人格和状态人格不进入时间线。
+`PromptAssembler` 把每条近期 `RawRecord` 适配为统一日志项：正文仍是原有的 `role: content`，点时间严格使用已持久化的 `created_at`，来源绑定 raw record identity/hash。`memory_overview`、`long_term_memories`、`recent_records` 三个区块分别从空状态分段。`current_input` 是第四个独立时间化区块，严格复用本轮 provisional `RawRecord.created_at`；retry/resume 不重采样。仅当前输入的时间 marker 投影为边界外的可信时间元数据，用户正文位于 `current_input` 不可信块内且仍是 `USER_INSTRUCTION`；历史 marker 保持不可信。基础人格和状态人格不进入时间线。
 
 默认 `config/history_timestamps.toml` 使用 `Asia/Shanghai`、30 分钟 gap、120 分钟 refresh 并启用跨日。首项、`gap >= 30m`、本地日期改变、从最近 marker 起达到 120 分钟或时间倒退时，在承载项正文前生成一个固定中文 marker；多原因不会生成多行，未命中时不逐条标记。
 
@@ -261,7 +261,7 @@ marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `
 
 工具历史是第八个独立时间化 block。网关仅在成功 provider attempt 已解析并接受后为整个 tool-call batch 记录一次 `accepted_at`；executor 仅在结果校验、权限/大小/安全与可恢复事务处理结束、已形成可发送 `ToolResult` 后记录一次 `completed_at`。两者均为进程内 metadata，`CompletionResult.model_dump()`、`ToolResult.model_dump()`、canonical result JSON 与 DeepSeek wire 不含这些字段。
 
-所有历史、长期记忆、覆盖概览、整理输入和工具事件在最终标准 `content` 字段中使用共享的一对 `UNTRUSTED_DATA_BEGIN/END` 内容绑定边界；不向 DeepSeek 发送自定义 trust 字段。`chat.md`/`memory_curator.md` 与 `untrusted_memory_boundary.md` 共同组成 system content 时，各自保留当前 `ConfigSnapshot` asset/hash/revision 对应的独立 part/span。可见 wrapper 在字符预算、token 估算、TUI 和 provider materialization 前已经存在。
+所有历史、长期记忆、覆盖概览、整理输入和工具事件在最终标准 `content` 字段中使用共享的一对 `[UNTRUSTED block#8位ID]`/`[/UNTRUSTED block#8位ID]` 内容绑定边界；不向 DeepSeek 发送自定义 trust 字段。`chat.md`/`memory_curator.md` 与 `untrusted_memory_boundary.md` 共同组成 system content 时，各自保留当前 `ConfigSnapshot` asset/hash/revision 对应的独立 part/span。可见 wrapper 在字符预算、token 估算、TUI 和 provider materialization 前已经存在。
 
 每次 tool continuation 都从当前轮全部未标注 `ToolHistoryEvent` 重建 assistant/tool 消息：marker 只进入对应 message content，assistant 的 tool_calls 与 tool 的 `tool_call_id`、canonical body 保持原值和原顺序。DeepSeek content 的 marker/body 使用同一 pointer 下完整、无重叠 spans；已有上游 fragments 时 adapter 不再创建 whole-content fallback，tool_calls 来源保持最初 provider response origin。`memory_source_query` 直接输入、分页、权限、错误和 JSON 返回合同不变。
 

@@ -127,10 +127,10 @@ class ModelCallGateway(Protocol):
 
 ## 可见 untrusted_data 边界与精确 system 来源（2026-07-21）
 
-- 内部 `Message.trust`/`RequestPart.trust` 不能替代 LLM 可见边界。历史、长期记忆、覆盖概览、整理输入和每个工具事件必须在最终标准 `content` 中各有一对 block/id 匹配的 `UNTRUSTED_DATA_BEGIN/END`；不得发送 provider 不支持的自定义字段，也不得逐记录堆叠 wrapper。
+- 内部 `Message.trust`/`RequestPart.trust` 不能替代 LLM 可见边界。历史、长期记忆、覆盖概览、整理输入和每个工具事件必须在最终标准 `content` 中各有一对 block/id 匹配的 `[UNTRUSTED block#8位ID]`/`[/UNTRUSTED block#8位ID]`；不得发送 provider 不支持的自定义字段，也不得逐记录堆叠 wrapper。
 - wrapper、必要换行和 inner content 全部是 materialized payload 的 included、无重叠 span；wrapper 字符必须进入字符预算、token estimator、TUI 与 sender digest。
 - system content 中 persona 正文、generated separator 与 `untrusted_memory_boundary.md` 说明分别拥有独立 `RequestPart`。配置来源必须取当前 `ConfigSnapshot` 中真实 asset/hash/revision，reload 后不得保留旧来源或把整段误归因到 persona 文件。
-- 当前输入的 marker 使用 provisional `RawRecord.created_at` 并位于可见 untrusted block 内；正文继续处于该边界外并保持 `USER_INSTRUCTION`。retry、pending resume、审批与发送不重采样。
+- 当前输入的 marker 使用 provisional `RawRecord.created_at`，投影为边界外的可信时间元数据；用户正文位于 `current_input` 可见不可信块内并保持 `USER_INSTRUCTION`。retry、pending resume、审批与发送不重采样；其他历史 marker 的边界位置和 trust 不变。
 7. 新 provider fake 只实现 `prepare()`、`materialize_sdk_kwargs()`、`send_once()` 三个 adapter 方法即可复用完整网关语义。
 8. provider/网络普通失败只形成一条可恢复 USER pending；明确 reject 不形成 pending。
 9. approve 后 presenter 立即释放正文/来源，`send_once` 成功和失败路径均释放 sender payload，actual usage 不恢复原文。

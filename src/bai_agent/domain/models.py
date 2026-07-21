@@ -78,6 +78,7 @@ class Role(StrEnum):
 
 class TrustLevel(StrEnum):
     TRUSTED_INSTRUCTION = "trusted_instruction"
+    TRUSTED_METADATA = "trusted_metadata"
     USER_INSTRUCTION = "user_instruction"
     UNTRUSTED_DATA = "untrusted_data"
 
@@ -634,6 +635,7 @@ class TemporalMarkerReason(StrEnum):
 
 class AnnotatedFragmentKind(StrEnum):
     MARKER = "marker"
+    TRUSTED_TIME_METADATA = "trusted_time_metadata"
     BODY = "body"
     SEPARATOR = "separator"
 
@@ -739,6 +741,11 @@ class AnnotatedFragment(FrozenModel):
             raise ValueError("时间标注片段区间与正文长度不一致")
         if self.kind is AnnotatedFragmentKind.MARKER and self.trust is not TrustLevel.UNTRUSTED_DATA:
             raise ValueError("时间标记片段不能提升信任级别")
+        if (
+            self.kind is AnnotatedFragmentKind.TRUSTED_TIME_METADATA
+            and self.trust is not TrustLevel.TRUSTED_METADATA
+        ):
+            raise ValueError("可信时间元数据必须使用 trusted_metadata 级别")
         return self
 
 

@@ -41,7 +41,7 @@
 ### Session 2026-07-21
 
 - Q: 当前输入何时取时间，重试是否重采样？ → A: 使用本轮已经建立的 provisional `RawRecord.created_at`；retry、恢复 pending、审批和发送全部复用同一时刻，不读取新的 wall clock。
-- Q: 当前输入加时间后是否仍是用户指令？ → A: 是；只有时间 marker 位于 `untrusted_data` 可见边界内，正文保持 `USER_INSTRUCTION`。
+- Q: 当前输入加时间后如何划分信任边界？ → A: 可信时间 marker 位于可见边界外；用户正文位于 `current_input` 不可信边界内，但仍保持本轮 `USER_INSTRUCTION` 语义。历史 marker 暂不改变，继续位于各历史不可信块内。
 - Q: 内部 trust metadata 是否足够表达不可信边界？ → A: 不够；最终 provider 正文必须按逻辑块包含一对 block/id 匹配的可见文本边界，并由一个共享 renderer 生成。
 - Q: system message 中人格与边界说明如何追踪？ → A: 可在同一 system message 中发送，但必须具有不重叠的独立 `RequestPart`/span，分别引用本次 `ConfigSnapshot` 的真实 asset/hash/revision。
 
@@ -161,8 +161,8 @@
 - **FR-024**: 所有当前日志类提示消费者 MUST 接入统一能力；未来消费者只需提供统一日志项所需的内容、时间和来源语义，不得复制一套私有分段规则。
 - **FR-025**: 长期记忆来源追溯工具的公开行为及其返回内容 MUST 保持不变，也 MUST NOT 自动应用本功能的段落时间标记。
 - **FR-026**: 进入工具续接历史的工具调用 MUST 使用对应模型调用结果被接受的时间，工具结果 MUST 使用执行完成并形成可发送结果的时间；两者 MUST 作为独立日志项参与同一工具历史区块的分段，仅当阈值或其他统一条件命中时才在结果前产生新标记。
-- **FR-027**: 当前输入 MUST 使用本轮已建立 provisional `RawRecord.created_at` 通过同一 `annotate_history` 能力生成 marker；retry、pending resume、TUI 审批与 sender MUST 复用该时间，正文信任级别 MUST 保持 `USER_INSTRUCTION`，且 marker/boundary MUST NOT 写入 raw JSONL/YAML。
-- **FR-028**: 历史、长期记忆、覆盖概览、整理输入以及工具调用/结果等不可信数据 MUST 在最终 provider 正文中按逻辑数据块使用统一的一对 `UNTRUSTED_DATA_BEGIN/END` 文本边界；边界 MUST 使用匹配 block 与内容绑定 id，MUST NOT 依赖 provider 自定义 JSON 字段或逐记录重复标签。
+- **FR-027**: 当前输入 MUST 使用本轮已建立 provisional `RawRecord.created_at` 通过同一 `annotate_history` 能力生成 marker；retry、pending resume、TUI 审批与 sender MUST 复用该时间。仅当前输入的 marker MUST 作为可信时间元数据位于可见边界外，正文 MUST 位于 `current_input` 不可信边界内并保持 `USER_INSTRUCTION` 语义；marker/boundary MUST NOT 写入 raw JSONL/YAML。
+- **FR-028**: 历史、长期记忆、覆盖概览、整理输入以及工具调用/结果等不可信数据 MUST 在最终 provider 正文中按逻辑数据块使用统一的一对 `[UNTRUSTED block#id]`/`[/UNTRUSTED block#id]` 文本边界；id MUST 是由 block 与正文确定性派生的 8 位十六进制短标识，配对名称与 id MUST 匹配，且 MUST NOT 依赖 provider 自定义 JSON 字段或逐记录重复标签。
 - **FR-029**: `chat.md`/`memory_curator.md` 与 `untrusted_memory_boundary.md` 即使共同组成 system message，也 MUST 拥有不重叠且可逐字回读的独立 part/span，并引用当前 `ConfigSnapshot` 的真实 asset、hash 和 revision；reload 后 MUST 原子切换为新快照来源。
 - **FR-030**: 可见边界文字 MUST 在选择字符预算、token 估算、provenance 校验、TUI 展示与最终 provider payload 中逐字一致。
 - **FR-031**: TUI 对 whitespace-only included part 的折叠、稳定 message/record 配色和来源字段重命名 MUST 只改变展示；展开/复制 MUST 无损，`color=never` MUST 不含 ANSI/样式，RequestPart、provider payload、估算和非 TUI 输出 MUST 不变。
@@ -218,7 +218,7 @@
 - 默认显示时区为 `Asia/Shanghai`，同时显示 UTC 偏移以处理其他配置时区中的夏令时歧义；存储中的带时区时间仍是事实依据且不被转换写回。
 - 时间标签采用固定中文标签、绝对日期、24 小时时间和 UTC 偏移，而不是“刚刚”“昨天”等相对措辞；即使范围两端处于同一天或同一偏移，也完整重复日期与偏移，避免输出依赖运行时刻或省略规则。
 - 直接聊天记录已有可信创建时间；现行 schema v1 长期记忆通过来源关系取得覆盖时间。统一合同保留 `RECORDED` 扩展语义，但当前版本没有从持久化旧格式进入该路径的适配器；未来适配器必须先另行明确 schema/version 和可信 `created_at` 条件。
-- 当前用户输入正文属于本轮实时指令并保持 `USER_INSTRUCTION`；其 provisional raw record 的既定创建时间通过统一规则显示为边界内的数据元信息，后续进入历史时仍只从 raw 正文和 `created_at` 重新构建，不持久化生成标记。
+- 当前用户输入正文属于本轮实时指令并保持 `USER_INSTRUCTION`，同时置于 `current_input` 不可信边界内，防止它被提升为 system 规则；其 provisional raw record 的既定创建时间通过统一规则显示为边界外的可信时间元信息。后续进入历史时仍只从 raw 正文和 `created_at` 重新构建，不持久化生成标记；历史 marker 暂时仍在历史不可信块内。
 - 当前轮工具调用及结果属于日志类历史，并分别使用被接受时间和完成时间；标注不得改变供应商要求的角色顺序、调用标识或结果配对。
 - 本功能不新增凭据种类或凭据流；现有提示、工具和调试安全边界继续适用，时间标记不得复制工具参数或正文中的敏感数据。
 - 独立配置随项目提供并参与既有配置加载及版本追踪；本功能不提供按消费者分别覆盖参数的能力。

@@ -117,8 +117,8 @@ async def test_four_continuations_rebuild_one_block_without_duplicate_markers(tm
     )
     tool_messages = [message for message in final_messages if message["role"] in {"assistant", "tool"}]
     assert all(
-        message["content"].count("<<<UNTRUSTED_DATA_BEGIN block=tool_history.event.") == 1
-        and message["content"].count("<<<UNTRUSTED_DATA_END block=tool_history.event.") == 1
+        message["content"].count("[UNTRUSTED tool_history.event.") == 1
+        and message["content"].count("[/UNTRUSTED tool_history.event.") == 1
         for message in tool_messages
     )
     assert visible_tool_history.count("[时间：") == 1

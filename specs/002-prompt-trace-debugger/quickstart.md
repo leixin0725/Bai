@@ -149,7 +149,7 @@ $env:NO_COLOR = "1"
 Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
 ```
 
-预期：无 ANSI 颜色或 Rich 样式 span，但调用、included/excluded/empty/unknown_source、trusted_instruction/user_instruction/untrusted_data、`message:N`、来源字段、边界、缩进和操作含义仍完整。启用颜色时 message index 使用确定性的低饱和基础色，同一历史 message 内按结构化 record 顺序 A/B 交错；颜色不进入复制文本、日志或 provider payload。80×24 下操作按钮、完整 trace 和滚动区域仍可访问。
+预期：无 ANSI 颜色或 Rich 样式 span，但调用、included/excluded/empty/unknown_source、trusted_instruction/trusted_metadata/user_instruction/untrusted_data、`message:N`、来源字段、边界、缩进和操作含义仍完整。启用颜色时 message index 使用确定性的低饱和基础色，同一历史 message 内按结构化 record 顺序 A/B 交错；颜色不进入复制文本、日志或 provider payload。80×24 下操作按钮、完整 trace 和滚动区域仍可访问。
 
 稳定色板为 config_file=cyan、data_file=green、runtime=yellow、generated=magenta；颜色不是唯一语义。`NO_COLOR`/`never`/终端不支持颜色只适用于 stdin/stdout 都是 TTY 的交互环境，输出重定向必须 fail closed。
 

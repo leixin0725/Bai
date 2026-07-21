@@ -243,7 +243,7 @@ async def test_current_input_reuses_provisional_time_across_retry_resume_and_nev
         next_payload = thaw_json(resumed_adapter.sent[-1].sdk_kwargs)
         recent = next_payload["messages"][4]["content"]
         assert recent.count("需要恢复的输入") == 1
-        assert recent.count("<<<UNTRUSTED_DATA_BEGIN block=recent_records id=") == 1
+        assert recent.count("[UNTRUSTED recent_records#") == 1
 
         records = resumed.archive.read_all()
         assert [record.content for record in records] == [
@@ -257,7 +257,7 @@ async def test_current_input_reuses_provisional_time_across_retry_resume_and_nev
             for path in resumed.archive.memory_root.rglob("*.jsonl")
         )
         persisted += resumed.long_term_store.path.read_text(encoding="utf-8")
-        assert "UNTRUSTED_DATA_BEGIN" not in persisted
+        assert "[UNTRUSTED " not in persisted
         assert "[时间：" not in persisted
     finally:
         resumed.close()

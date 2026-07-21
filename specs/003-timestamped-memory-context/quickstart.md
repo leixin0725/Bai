@@ -91,7 +91,8 @@ pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_tem
 预期：
 
 - `memory_overview`、`long_term_memories`、`recent_records` 三个非空区块各有自己的首 marker；区块间不共享 previous/last-marker 状态。
-- `current_input` 使用本轮 provisional USER record 的 `created_at`，retry/pending resume/TUI/sender 逐字复用；marker 为 untrusted 时间元数据，正文仍是 user instruction。
+- `current_input` 使用本轮 provisional USER record 的 `created_at`，retry/pending resume/TUI/sender 逐字复用；正文仍是 user instruction。
+- 仅 current input 的 marker 在投影后成为边界外的可信时间元数据；用户正文位于 `[UNTRUSTED current_input#8位ID]` 块内。历史 marker 仍留在各自历史不可信块中。
 - recent 使用每条 raw `created_at` 点时间；body 仍为既有 `role: content`。
 - 长期记忆和 overview 使用全部已验证 raw 来源的最早—最晚范围，而不是 YAML item 的整理时间。
 - 来源引用乱序、重复、范围重叠或端点相等时仍保持既有选择顺序；相等端点仍显示 `[时间范围：… 至 …]`。
@@ -115,7 +116,7 @@ pytest tests/integration/test_temporal_curation_context.py tests/integration/tes
 
 逐项 canonical JSON 的字段、转义和 curation proposal 输出 schema 必须与实现前一致；marker 不进入 JSON。重复 body/JSON 夹具仍能通过构建时记录的绝对 span 精确关联来源，不允许反向 `find()` 猜测。
 
-上述每个不可信变量以及 batch metadata 在最终 user content 中各由一对匹配的 `UNTRUSTED_DATA_BEGIN/END` 包围；curator persona 与 boundary instruction 位于 system，分别引用其真实配置资产。
+上述每个不可信变量以及 batch metadata 在最终 user content 中各由一对匹配的 `[UNTRUSTED block#8位ID]`/`[/UNTRUSTED block#8位ID]` 包围；curator persona 与 boundary instruction 位于 system，分别引用其真实配置资产。
 
 ## 6. 验证工具续接协议与事件时间
 
@@ -135,8 +136,8 @@ pytest tests/integration/test_temporal_tool_continuation.py tests/integration/te
 wire payload 必须仍满足：
 
 ```text
-assistant(content="<<<UNTRUSTED_DATA_BEGIN ...>>>\n[时间：...]\n<原正文>\n<<<UNTRUSTED_DATA_END ...>>>", tool_calls=[原结构])
-tool(content="<<<UNTRUSTED_DATA_BEGIN ...>>>\n<可选 marker>\n<原 canonical JSON>\n<<<UNTRUSTED_DATA_END ...>>>", tool_call_id="原 id")
+assistant(content="[UNTRUSTED tool_history.event.0#abcd1234]\n[时间：...]\n<原正文>\n[/UNTRUSTED tool_history.event.0#abcd1234]", tool_calls=[原结构])
+tool(content="[UNTRUSTED tool_history.event.1#bcde2345]\n<可选 marker>\n<原 canonical JSON>\n[/UNTRUSTED tool_history.event.1#bcde2345]", tool_call_id="原 id")
 ```
 
 每条 assistant/tool 协议事件的 content 外层还各有一对共享格式的 visible untrusted boundary；`tool_calls` 和 `tool_call_id` 字段不增加 provider 自定义 trust 字段。

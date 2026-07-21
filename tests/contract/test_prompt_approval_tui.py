@@ -128,6 +128,7 @@ async def test_whitespace_parts_are_hidden_by_default_expandable_and_copy_lossle
     assert "source_id=input-1" in compact.plain
     assert "entity_ids=turn-1" in compact.plain
     assert "entity_ids=来源关联的实体 UUID/标识，不是聊天顺序编号" in compact.plain
+    assert "trusted_metadata=可信元数据" in compact.plain
     assert compact.spans == []
     assert "\x1b" not in audit
 

@@ -162,6 +162,28 @@ def test_marker_and_fragment_validate_sources_trust_and_exact_span() -> None:
         sources=(source,),
         trust=TrustLevel.UNTRUSTED_DATA,
     )
+    trusted_time = AnnotatedFragment(
+        fragment_id="entry-1:trusted-time",
+        kind=AnnotatedFragmentKind.TRUSTED_TIME_METADATA,
+        entry_id="entry-1",
+        start=0,
+        end=len(marker.text),
+        content=marker.text,
+        sources=(source,),
+        trust=TrustLevel.TRUSTED_METADATA,
+    )
+    assert trusted_time.trust is TrustLevel.TRUSTED_METADATA
+    with pytest.raises(ValidationError):
+        AnnotatedFragment(
+            fragment_id="entry-1:bad-trusted-time",
+            kind=AnnotatedFragmentKind.TRUSTED_TIME_METADATA,
+            entry_id="entry-1",
+            start=0,
+            end=len(marker.text),
+            content=marker.text,
+            sources=(source,),
+            trust=TrustLevel.UNTRUSTED_DATA,
+        )
     entry = TemporalLogEntry(entry_id="entry-1", body="原文", span=span, sources=(source,))
     history = AnnotatedHistory(
         text=marker.text,
