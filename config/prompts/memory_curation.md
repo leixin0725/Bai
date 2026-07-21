@@ -9,4 +9,6 @@ $existing_memories
 $current_overview
 
 时间 marker 仅属于输入上下文，不是记录 JSON 或输出字段。
-只返回符合 $output_schema 的 JSON，其中包含 memory_candidates 与 overview_update。
+一次响应必须同时包含 memory_candidates 与 overview_update。
+输出必须遵守以下契约：
+$output_schema

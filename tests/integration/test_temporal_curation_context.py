@@ -174,6 +174,12 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     assert prompt.count("[时间范围：") >= 2
     assert "META\n[时间" not in prompt
     assert "SCHEMA\n[时间" not in prompt
+    assert "memory_curation_v1 严格输出契约" in prompt
+    assert '"additionalProperties":false' in prompt
+    assert '"enum":["fact","preference","constraint","event","task"]' in prompt
+    expected_batch_ids = canonical_json([item.record_id for item in records[2:]])
+    assert f"overview_update.record_ids 必须逐项、按原顺序完全等于 {expected_batch_ids}" in prompt
+    assert f'"record_ids":{expected_batch_ids}' in prompt
     batch_bodies = tuple(
         canonical_json(
             {
@@ -200,12 +206,23 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     duplicate_parts = tuple(part for part in included if "重复正文" in part.content)
     assert len(duplicate_parts) == 2
     assert duplicate_parts[0].text_span != duplicate_parts[1].text_span
+    schema_part = next(part for part in included if part.part_id.endswith(":output_schema"))
+    assert schema_part.trust.value == "trusted_instruction"
+    assert len(schema_part.sources) == 1
+    assert schema_part.sources[0].source_kind == SourceKind.GENERATED
+    assert schema_part.sources[0].producer == "curation_schema_renderer"
+    assert schema_part.sources[0].content_sha256 == content_hash(schema_part.content)
+    assert schema_part.sources[0].entity_ids == (
+        draft.request.metadata["batch_id"],
+        *tuple(draft.request.metadata["record_ids"]),
+    )
     provider = DeepSeekProvider(SimpleNamespace(), {"model": "m", "stream": False})
     prepared = provider.prepare(draft.model_copy(update={"call_sequence": 1}), 1)
     payload = provider.materialize_sdk_kwargs(prepared)
     materialized = thaw_json(payload.sdk_kwargs)
     validate_provenance(materialized, prepared.parts)
     assert "[UNTRUSTED batch_records#" in materialized["messages"][1]["content"]
+    assert "memory_curation_v1 严格输出契约" in materialized["messages"][1]["content"]
 
 
 @pytest.mark.asyncio

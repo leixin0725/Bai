@@ -67,6 +67,38 @@ class _PromptPiece:
     trust: TrustLevel
 
 
+CURATION_OUTPUT_SCHEMA_ID = "memory_curation_v1"
+
+
+def _render_output_contract(batch: CurationBatch) -> str:
+    """Render the model-visible schema plus the batch-specific coverage constraints."""
+
+    schema = canonical_json(CurationProposal.model_json_schema())
+    record_ids = canonical_json(list(batch.record_ids))
+    empty_example = canonical_json(
+        {
+            "memory_candidates": [],
+            "overview_update": {
+                "text": "本批次没有需要新增的长期记忆。",
+                "record_ids": list(batch.record_ids),
+            },
+        }
+    )
+    return "\n".join(
+        (
+            f"{CURATION_OUTPUT_SCHEMA_ID} 严格输出契约：",
+            "只输出一个 JSON 对象；不要输出 Markdown、代码围栏、注释或解释。",
+            f"JSON Schema：{schema}",
+            "附加业务约束：",
+            f"- overview_update.record_ids 必须逐项、按原顺序完全等于 {record_ids}。",
+            "- 每个 memory_candidates[*].source_record_ids 必须非空，且只能引用上述 record_id。",
+            "- kind 只能是 fact、preference、constraint、event、task 之一；不得翻译这些枚举值。",
+            "- 没有值得长期保留的内容时，memory_candidates 必须是空数组，但 overview_update 仍必须覆盖整个批次。",
+            f"空候选时的最小合法示例：{empty_example}",
+        )
+    )
+
+
 class CurationPolicy:
     def __init__(
         self,
@@ -240,6 +272,15 @@ class CurationService:
             entity_ids=tuple(item.memory_id for item in document.memories),
             producer="long_term_store",
         )
+        output_contract = _render_output_contract(batch)
+        output_contract_source = SourceRef(
+            source_kind=SourceKind.GENERATED,
+            source_id=f"generated:curation-output-contract:{batch.batch_id}",
+            content_sha256=content_hash(output_contract),
+            revision=self.config_revision,
+            entity_ids=(batch.batch_id, *batch.record_ids),
+            producer="curation_schema_renderer",
+        )
 
         block_values = {
             "batch_records": self._history_pieces("batch_records", batch_entries),
@@ -282,7 +323,7 @@ class CurationService:
                 TrustLevel.TRUSTED_INSTRUCTION,
             ),
             "output_schema": _PromptPiece(
-                "output_schema", "memory_curation_v1", (prompt_source,),
+                "output_schema", output_contract, (output_contract_source,),
                 TrustLevel.TRUSTED_INSTRUCTION,
             ),
         }
