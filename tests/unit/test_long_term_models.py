@@ -14,6 +14,7 @@ from bai_agent.domain.models import (
     MemoryCoverageOverview,
     MemoryKind,
     MemoryStatus,
+    ModelCurationProposal,
     SourceReference,
     SourceRelation,
 )
@@ -27,7 +28,7 @@ REC1 = "rec-00000000-0000-4000-8000-000000000001"
 def item(memory_id="mem-00000000-0000-4000-8000-000000000001", **overrides):
     values = dict(
         memory_id=memory_id,
-        kind=MemoryKind.FACT,
+        kind=MemoryKind.USER,
         text="用户偏好清晰说明",
         status=MemoryStatus.ACTIVE,
         source_refs=(SourceReference(record_id=REC1, relation=SourceRelation.SUPPORTS, record_sha256=HASH),),
@@ -46,6 +47,32 @@ def test_memory_requires_source_and_valid_status() -> None:
         item(source_refs=())
     with pytest.raises(ValidationError):
         item(status="unknown")
+
+
+def test_memory_kind_uses_five_categories_and_reads_legacy_values() -> None:
+    assert {kind.value for kind in MemoryKind} == {"user", "rule", "self", "event", "else"}
+    assert MemoryKind("fact") is MemoryKind.USER
+    assert MemoryKind("preference") is MemoryKind.USER
+    assert MemoryKind("constraint") is MemoryKind.RULE
+    assert MemoryKind("task") is MemoryKind.ELSE
+
+
+def test_model_curation_contract_rejects_legacy_kinds_extras_and_invalid_aliases() -> None:
+    valid = {
+        "memory_candidates": [
+            {"kind": "rule", "text": "用户要求以后使用简体中文", "sources": ["r1"]}
+        ],
+        "overview": "用户提出了一项长期表达规则。",
+    }
+    assert ModelCurationProposal.model_validate(valid).memory_candidates[0].kind is MemoryKind.RULE
+    for invalid in (
+        {**valid, "record_ids": ["rec-hidden"]},
+        {**valid, "memory_candidates": [{"kind": "constraint", "text": "旧类别", "sources": ["r1"]}]},
+        {**valid, "memory_candidates": [{"kind": "rule", "text": "重复来源", "sources": ["r1", "r1"]}]},
+        {**valid, "overview": "   "},
+    ):
+        with pytest.raises(ValidationError):
+            ModelCurationProposal.model_validate(invalid)
 
 
 def test_document_rejects_dangling_supersedes_and_cycles() -> None:

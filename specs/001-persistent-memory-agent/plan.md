@@ -157,6 +157,12 @@ tests/
 
 **Structure Decision**: 采用单一 Python 包，保持从 `application` 到领域端口、再到文件/供应商适配器的单向依赖。`config/` 是所有提示词和可变参数的唯一维护入口；`data/` 只保存运行数据，不混入人格或代码。工具、状态解析和运行控制各自只有一个首版实现，但接口允许未来新增实现而不改变记忆核心。
 
+## 记忆整理语义视图增补（2026-07-21）
+
+在现有 `CurationBatch`/持久化 DTO 之外增加独立、严格的模型 DTO：provider 只接收按事件时间排列的紧凑语义字段并返回 `rN` 短别名；`CurationService` 在本地恢复真实来源、附加批次 coverage 和 hash。该分层不改变 raw/YAML schema v1、原子提交、来源查询或审计 provenance；旧类别值在读取边界兼容并规范到五类。
+
+文档影响：同步更新 README、quickstart、feature spec、data model、configuration/model/storage 契约与 tasks；验证方式为整理提示/响应契约测试、来源与 coverage 集成测试、全套单元/契约/集成/故障注入测试及 `git diff --check`。
+
 ## Complexity Tracking
 
 无宪章例外。文件分段、跨进程锁和适配器三个机制分别直接满足原子恢复、单写者假设与供应商可替换性，不属于可删减的预先复杂化。

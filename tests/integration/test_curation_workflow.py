@@ -20,19 +20,23 @@ REVISION = "sha256:" + "1" * 64
 
 
 class CuratorProvider:
-    def __init__(self, candidate=True, failure=None) -> None:
+    def __init__(self, candidate=True, failure=None, source_alias="r1") -> None:
         self.calls = []
         self.candidate = candidate
         self.failure = failure
+        self.source_alias = source_alias
 
     async def complete(self, request):
         self.calls.append(request)
         if self.failure:
             raise self.failure
-        source_ids = [item for item in request.metadata["record_ids"]]
         payload = {
-            "memory_candidates": ([{"kind": "fact", "text": "稳定事实", "source_record_ids": source_ids, "tags": ["fact"]}] if self.candidate else []),
-            "overview_update": {"text": "该批次已整理", "record_ids": source_ids},
+            "memory_candidates": (
+                [{"kind": "user", "text": "稳定事实", "sources": [self.source_alias]}]
+                if self.candidate
+                else []
+            ),
+            "overview": "该批次已整理",
         }
         return CompletionResult(text=json.dumps(payload, ensure_ascii=False), finish_reason="stop")
 
@@ -68,7 +72,12 @@ async def test_threshold_zero_call_then_single_joint_commit(tmp_path: Path) -> N
     document = store.load()
     assert document.revision == document.coverage_overview.revision
     assert document.curation.curated_through_sequence == document.coverage_overview.coverage_spans[-1].end_sequence
-    assert document.memories[0].source_refs
+    assert len(document.memories[0].source_refs) == 1
+    assert document.memories[0].source_refs[0].record_id == document.coverage_overview.coverage_spans[0].record_ids[0]
+    prompt = provider.calls[0].messages[1].content
+    assert document.memories[0].source_refs[0].record_id not in prompt
+    assert "sha256:" not in prompt
+    assert provider.calls[0].metadata == {}
     restarted_provider = CuratorProvider()
     restarted = CurationService(
         archive, LongTermStore(tmp_path, archive), restarted_provider,
@@ -96,6 +105,50 @@ async def test_empty_extraction_advances_coverage_and_failure_does_not(tmp_path:
     with pytest.raises(BaiError):
         await failed.curate_if_needed(force=True)
     assert store.load().curation.curated_through_sequence == old_frontier
+
+
+@pytest.mark.asyncio
+async def test_unknown_short_source_alias_is_rejected_without_advancing_coverage(tmp_path: Path) -> None:
+    archive = records(tmp_path, 4)
+    store = LongTermStore(tmp_path, archive)
+    baseline = store.initialize()
+    service = CurationService(
+        archive,
+        store,
+        CuratorProvider(source_alias="r999"),
+        CurationPolicy(max_records=6, reserved_records=2, min_batch_records=2, max_batch_records=4),
+        curator_persona="整理",
+        prompt_template="$batch_records",
+        config_revision=REVISION,
+    )
+
+    with pytest.raises(BaiError) as raised:
+        await service.curate_if_needed()
+
+    assert raised.value.code == "CURATION_SOURCE_INVALID"
+    assert store.load() == baseline
+
+
+@pytest.mark.asyncio
+async def test_exact_existing_memory_is_not_added_again_but_batch_is_covered(tmp_path: Path) -> None:
+    archive = records(tmp_path, 4)
+    store = LongTermStore(tmp_path, archive)
+    store.initialize_with_manual_memory("稳定事实", (archive.read_all()[0],))
+    service = CurationService(
+        archive,
+        store,
+        CuratorProvider(),
+        CurationPolicy(max_records=6, reserved_records=2, min_batch_records=2, max_batch_records=4),
+        curator_persona="整理",
+        prompt_template="$batch_records",
+        config_revision=REVISION,
+    )
+
+    await service.curate_if_needed()
+
+    document = store.load()
+    assert [item.text for item in document.memories] == ["稳定事实"]
+    assert document.coverage_overview.coverage_spans
 
 
 @pytest.mark.asyncio

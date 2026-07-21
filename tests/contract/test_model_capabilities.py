@@ -22,4 +22,4 @@ def test_deepseek_v4_flash_capabilities_and_profiles() -> None:
         validate_provider_capabilities(provider, profile)
     assert chat["temperature"] == 0.7 and chat["tools_enabled"] is True and chat["structured_output"] is False
     assert curator["tools_enabled"] is True and curator["structured_output"] is True
-    assert curator["output_schema"] == "memory_curation_v1"
+    assert curator["output_schema"] == "memory_curation_v2"

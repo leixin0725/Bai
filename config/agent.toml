@@ -16,8 +16,8 @@ allowed = ["trusted_personas", "untrusted_boundary", "memory_overview", "long_te
 untrusted = ["memory_overview", "long_term_memories", "recent_records", "current_input"]
 
 [template_variables.memory_curation]
-allowed = ["batch_metadata", "batch_records", "existing_memories", "current_overview", "output_schema"]
-untrusted = ["batch_metadata", "batch_records", "existing_memories", "current_overview"]
+allowed = ["batch_records", "existing_memories", "current_overview", "output_schema"]
+untrusted = ["batch_records", "existing_memories", "current_overview"]
 
 [template_variables.untrusted_memory_boundary]
 allowed = []

@@ -109,7 +109,7 @@ record_id -> (segment_path, byte_offset, byte_length, global_sequence)
 | Field | Type | Required | Rules |
 |---|---|---:|---|
 | `memory_id` | string | yes | `mem-<uuid>`；稳定且唯一 |
-| `kind` | enum | yes | `fact`、`preference`、`constraint`、`event`、`task` 或配置允许的受控值 |
+| `kind` | enum | yes | `user`、`rule`、`self`、`event`、`else`；schema v1 读取兼容旧 `fact/preference/constraint/task` 并规范到新类别 |
 | `text` | string | yes | 非空、长度受限、不得含凭据；作为不可信数据注入 |
 | `status` | enum | yes | `active`、`superseded`、`retracted` |
 | `source_refs` | list[SourceReference] | yes | 至少一项；与正文同一对象提交 |
@@ -211,12 +211,14 @@ record_id -> referencing memory_id[]
 
 ### CurationProposal
 
-记忆整理模型的结构化输出，只允许：新增候选、状态修正建议和来源引用。禁止出现人格、状态、工具授权、配置、安全策略或文件路径字段。
+模型边界使用独立的 `ModelCurationProposal`：根对象严格只有 `memory_candidates` 与非空 `overview`；每个候选严格只有 `kind`、`text` 和非空、去重的 `rN` 别名数组 `sources`。五类含义为：`user`（用户身份、关系、明确喜恶等）、`rule`（用户要求/边界/规则）、`self`（助手及用户—助手关系）、`event`（重要往事）、`else`（其它未来有用内容，如未完成事项）。
+
+应用在本地把短别名解析为真实 `record_id`，构造内部 `CurationProposal`，并自动把 `CurationBatch.record_ids` 原序附加到 `overview_update`。模型不负责长期记忆到 raw 的索引、批次 coverage 或 hash；这些字段仍由本地 raw 快照和批次对象确定性生成。
 
 本地校验必须证明：
 
-- JSON 完整且符合 Schema，数量/长度在配置范围内。
-- 每项至少一个来源，来源属于当前批次或配置允许引用的既有记录，且真实存在。
+- JSON 完整、无额外字段，数量/长度在配置范围内。
+- 每项至少一个当前语义视图别名；别名唯一映射到当前批次真实记录且真实存在。
 - 无凭据或可恢复秘密。
 - 关系和 `supersedes` 无环、无悬空引用。
 - 对人工项没有静默覆盖。

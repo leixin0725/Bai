@@ -239,11 +239,29 @@ class PromptContext(FrozenModel):
 
 
 class MemoryKind(StrEnum):
-    FACT = "fact"
-    PREFERENCE = "preference"
-    CONSTRAINT = "constraint"
+    """[2026-07-21] 五类语义按记忆主体/用途划分；旧值仅用于无损读取 schema v1。"""
+
+    USER = "user"
+    RULE = "rule"
+    SELF = "self"
     EVENT = "event"
-    TASK = "task"
+    ELSE = "else"
+
+    # [2026-07-21] 保留源码级别的旧成员别名，持久化与模型输出始终写新枚举值。
+    FACT = USER
+    PREFERENCE = USER
+    CONSTRAINT = RULE
+    TASK = ELSE
+
+    @classmethod
+    def _missing_(cls, value: object) -> "MemoryKind | None":
+        legacy = {
+            "fact": cls.USER,
+            "preference": cls.USER,
+            "constraint": cls.RULE,
+            "task": cls.ELSE,
+        }
+        return legacy.get(value) if isinstance(value, str) else None
 
 
 class MemoryStatus(StrEnum):
@@ -453,6 +471,57 @@ class OverviewUpdate(FrozenModel):
 class CurationProposal(FrozenModel):
     memory_candidates: tuple[CurationCandidate, ...]
     overview_update: OverviewUpdate
+
+
+class ModelCurationCandidate(FrozenModel):
+    """[2026-07-21] 模型只引用本次语义视图中的短别名，不接触持久化来源 ID。"""
+
+    kind: MemoryKind
+    text: str = Field(min_length=1, max_length=8192)
+    sources: tuple[str, ...] = Field(min_length=1)
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def reject_legacy_model_kinds(cls, value: object) -> object:
+        if isinstance(value, str) and value not in {item.value for item in MemoryKind}:
+            raise ValueError("模型候选类别必须使用当前五类枚举")
+        return value
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("候选正文不能只包含空白")
+        return value
+
+    @field_validator("sources")
+    @classmethod
+    def validate_source_aliases(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("候选来源别名不能重复")
+        if any(
+            len(alias) < 2
+            or alias[0] != "r"
+            or not alias[1:].isdigit()
+            or alias[1] == "0"
+            for alias in value
+        ):
+            raise ValueError("候选来源必须使用 r1、r2 形式的短别名")
+        return value
+
+
+class ModelCurationProposal(FrozenModel):
+    """[2026-07-21] 独立的紧凑模型契约不包含 coverage、hash 或真实记录索引。"""
+
+    memory_candidates: tuple[ModelCurationCandidate, ...]
+    overview: str = Field(min_length=1, max_length=8192)
+
+    @field_validator("overview")
+    @classmethod
+    def validate_overview(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("批次概览不能只包含空白")
+        return value
 
 
 class ToolOutcome(StrEnum):

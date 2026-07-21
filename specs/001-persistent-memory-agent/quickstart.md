@@ -168,14 +168,16 @@ pytest tests/integration/test_temporal_chat_context.py tests/integration/test_lo
 
 ### 4.1 记忆整理的三个时间区块
 
-整理提示分别标注 `batch_records`、`existing_memories`、`current_overview`；每个非空区块拥有自己的首 marker。历史项保持一项一行 canonical JSON，marker 位于 JSON 前一行，批次元数据、边界指令和输出 schema 不进入时间线。`memory_candidates` 与 `overview_update` 的返回结构不变。
+整理提示分别标注 `batch_records`、`existing_memories`、`current_overview`；每个非空区块拥有自己的首 marker，并按来源事件时间自然排列。模型语义视图保持一项一行 canonical JSON：原始记录只有 `time/role/text/source_alias`，既有记忆只有 `kind/text/status/source_time`，概览只有 `text` 与起止时间/记录数。模型看不到真实记录/记忆/批次 UUID、内容摘要、配置修订或完整 coverage DTO。
+
+`memory_curation_v2` 只接受根字段 `memory_candidates` 与 `overview`；每个候选只含五类 `kind`、忠实正文 `text` 和非空 `rN` 来源别名 `sources`。应用在本地严格校验别名并解析到真实 `record_id`，自动把整个批次附加到 overview coverage，再从 raw 快照计算来源 hash 和最终持久化索引。空候选仍必须给出简洁概览。旧 YAML 中 `fact/preference/constraint/task` 可继续读取，并在后续写入时规范为 `user/rule/else`，无需重置原始记忆。
 
 ```powershell
 pytest tests/integration/test_temporal_curation_context.py tests/integration/test_curation_workflow.py tests/integration/test_curation_transaction_proposal.py -q
 pytest tests/unit/test_prompt_provenance.py tests/unit/test_context_estimation.py tests/unit/test_context_estimation_properties.py -q
 ```
 
-验收时应使用跨三个区块的重复正文，逐个检查最终 prompt 的绝对 `[start,end)` span 可回读对应 marker/JSON 且互不重叠；破损来源必须在 provider 调用前失败。JSON 示例可直接用 `json.loads()` 解析，且其中不得出现时间 marker 字段。
+验收时应使用跨三个区块的重复正文和乱序事件时间，逐个检查最终 prompt 的绝对 `[start,end)` span 可回读对应 marker/JSON 且互不重叠；provider 正文不得出现真实 ID/摘要/内部 DTO 字段，持久化结果仍须包含完整来源与连续 coverage。破损来源必须在 provider 调用前失败。
 
 ### 4.2 工具调用与结果时间
 

@@ -54,12 +54,11 @@ class CapturingGateway:
 
     async def complete(self, draft):
         self.calls.append(draft)
-        record_ids = list(draft.request.metadata["record_ids"])
         return CompletionResult(
             text=json.dumps(
                 {
                     "memory_candidates": [],
-                    "overview_update": {"text": "新概览", "record_ids": record_ids},
+                    "overview": "新概览",
                 },
                 ensure_ascii=False,
             ),
@@ -88,7 +87,7 @@ def _policy() -> TemporalSegmentationPolicy:
 @pytest.mark.asyncio
 async def test_batch_existing_and_overview_are_independent_blocks_with_precise_prompt_spans(tmp_path: Path) -> None:
     archive = RawRecordArchive(tmp_path / "memory")
-    for index, minute in enumerate((0, 5, 60, 65), start=1):
+    for index, minute in enumerate((0, 5, 65, 60), start=1):
         archive.append(
             role=Role.USER if index % 2 else Role.ASSISTANT,
             content="重复正文" if index in {1, 3} else f"正文-{index}",
@@ -110,7 +109,7 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     )
     existing = LongTermMemoryItem(
         memory_id="mem-00000000-0000-4000-8000-000000000001",
-        kind=MemoryKind.FACT,
+        kind=MemoryKind.USER,
         text="重复正文",
         status=MemoryStatus.ACTIVE,
         source_refs=(
@@ -118,6 +117,22 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
                 record_id=records[0].record_id,
                 relation=SourceRelation.SUPPORTS,
                 record_sha256=records[0].content_sha256,
+            ),
+        ),
+        created_by=CreatedBy.MEMORY_CURATOR,
+        created_at=BASE,
+        updated_at=BASE,
+    )
+    later_existing = LongTermMemoryItem(
+        memory_id="mem-00000000-0000-4000-8000-000000000002",
+        kind=MemoryKind.SELF,
+        text="晚期记忆",
+        status=MemoryStatus.ACTIVE,
+        source_refs=(
+            SourceReference(
+                record_id=records[1].record_id,
+                relation=SourceRelation.SUPPORTS,
+                record_sha256=records[1].content_sha256,
             ),
         ),
         created_by=CreatedBy.MEMORY_CURATOR,
@@ -135,11 +150,11 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
                 covered_record_ids=first_span.record_ids,
             ),
             coverage_overview=MemoryCoverageOverview(revision=1, text="旧概览", coverage_spans=(first_span,)),
-            memories=(existing,),
+            memories=(later_existing, existing),
         )
     )
     gateway = CapturingGateway()
-    template = "BATCH\n$batch_records\nMETA\n$batch_metadata\nEXISTING\n$existing_memories\nOVERVIEW\n$current_overview\nPERSONA\n$curator_persona\nBOUNDARY\n$untrusted_boundary\nSCHEMA\n$output_schema"
+    template = "BATCH\n$batch_records\nEXISTING\n$existing_memories\nOVERVIEW\n$current_overview\nPERSONA\n$curator_persona\nBOUNDARY\n$untrusted_boundary\nSCHEMA\n$output_schema"
     boundary_text = Path("config/prompts/untrusted_memory_boundary.md").read_text(encoding="utf-8")
     renderer = UntrustedBoundaryRenderer(
         ConfigAsset(
@@ -166,37 +181,67 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     assert proposal is not None
     draft = gateway.calls[0]
     prompt = draft.request.messages[1].content
-    for block_name in ("batch_metadata", "batch_records", "existing_memories", "current_overview"):
+    for block_name in ("batch_records", "existing_memories", "current_overview"):
         assert prompt.count(f"[UNTRUSTED {block_name}#") == 1
         assert prompt.count(f"[/UNTRUSTED {block_name}#") == 1
     assert renderer.instruction_text in draft.request.messages[0].content
     assert prompt.count("[时间：") >= 1
     assert prompt.count("[时间范围：") >= 2
-    assert "META\n[时间" not in prompt
     assert "SCHEMA\n[时间" not in prompt
-    assert "memory_curation_v1 严格输出契约" in prompt
-    assert '"additionalProperties":false' in prompt
-    assert '"enum":["fact","preference","constraint","event","task"]' in prompt
-    expected_batch_ids = canonical_json([item.record_id for item in records[2:]])
-    assert f"overview_update.record_ids 必须逐项、按原顺序完全等于 {expected_batch_ids}" in prompt
-    assert f'"record_ids":{expected_batch_ids}' in prompt
+    assert "memory_curation_v2 严格输出契约" in prompt
+    assert "JSON Schema" not in prompt
+    assert "user、rule、self、event、else" in prompt
+    assert "r1" in prompt and "r2" in prompt
     batch_bodies = tuple(
         canonical_json(
             {
-                "record_id": item.record_id,
-                "global_sequence": item.global_sequence,
+                "source_alias": f"r{index}",
+                "time": item.created_at.isoformat(),
                 "role": item.role.value,
-                "content": item.content,
-                "content_sha256": item.content_sha256,
+                "text": item.content,
             }
         )
-        for item in records[2:]
+        for index, item in enumerate(sorted(records[2:], key=lambda value: (value.created_at, value.global_sequence)), start=1)
     )
-    memory_body = canonical_json(existing.model_dump(mode="json"))
-    overview_body = canonical_json(store.load().coverage_overview.model_dump(mode="json"))
-    assert all(body in prompt for body in (*batch_bodies, memory_body, overview_body))
+    memory_body = canonical_json(
+        {
+            "kind": "user",
+            "source_time": {"start": records[0].created_at.isoformat(), "end": records[0].created_at.isoformat()},
+            "status": "active",
+            "text": "重复正文",
+        }
+    )
+    later_memory_body = canonical_json(
+        {
+            "kind": "self",
+            "source_time": {"start": records[1].created_at.isoformat(), "end": records[1].created_at.isoformat()},
+            "status": "active",
+            "text": "晚期记忆",
+        }
+    )
+    overview_body = canonical_json(
+        {
+            "coverage": {
+                "end": records[1].created_at.isoformat(),
+                "record_count": 2,
+                "start": records[0].created_at.isoformat(),
+            },
+            "text": "旧概览",
+        }
+    )
+    assert all(body in prompt for body in (*batch_bodies, memory_body, later_memory_body, overview_body))
     assert "[时间" not in memory_body
     assert json.loads(memory_body)["text"] == "重复正文"
+    assert prompt.index(memory_body) < prompt.index(later_memory_body)
+    assert prompt.index(batch_bodies[0]) < prompt.index(batch_bodies[1])
+    for item in records:
+        assert item.record_id not in prompt
+        assert item.content_sha256 not in prompt
+    for forbidden in (
+        "coverage_spans", "record_hashes", "record_ids", "global_sequence",
+        "config_revision", "memory_id", "batch_id", '"revision"', "source_refs",
+    ):
+        assert forbidden not in prompt
     included = tuple(part for part in draft.parts if part.payload_pointer == "/messages/1/content")
     assert len(included) > 3
     for part in included:
@@ -213,16 +258,29 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     assert schema_part.sources[0].producer == "curation_schema_renderer"
     assert schema_part.sources[0].content_sha256 == content_hash(schema_part.content)
     assert schema_part.sources[0].entity_ids == (
-        draft.request.metadata["batch_id"],
-        *tuple(draft.request.metadata["record_ids"]),
+        proposal.batch.batch_id,
+        *proposal.batch.record_ids,
     )
+    assert draft.request.metadata == {}
     provider = DeepSeekProvider(SimpleNamespace(), {"model": "m", "stream": False})
     prepared = provider.prepare(draft.model_copy(update={"call_sequence": 1}), 1)
     payload = provider.materialize_sdk_kwargs(prepared)
     materialized = thaw_json(payload.sdk_kwargs)
     validate_provenance(materialized, prepared.parts)
     assert "[UNTRUSTED batch_records#" in materialized["messages"][1]["content"]
-    assert "memory_curation_v1 严格输出契约" in materialized["messages"][1]["content"]
+    assert "memory_curation_v2 严格输出契约" in materialized["messages"][1]["content"]
+    provider_text = canonical_json(materialized)
+    for item in records:
+        assert item.record_id not in provider_text
+        assert item.content_sha256 not in provider_text
+    assert proposal.batch.batch_id not in provider_text
+    assert existing.memory_id not in provider_text
+    assert later_existing.memory_id not in provider_text
+    for forbidden in (
+        "coverage_spans", "record_hashes", "record_ids", "global_sequence",
+        "config_revision", "memory_id", "batch_id", '"revision"', "source_refs",
+    ):
+        assert forbidden not in provider_text
 
 
 @pytest.mark.asyncio

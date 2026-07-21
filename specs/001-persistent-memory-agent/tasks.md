@@ -385,6 +385,13 @@ Setup -> Foundation -> US1 -> US2 -----> US5 -> Polish
 3. US1 稳定后推进 US2；US3 完成后可并行准备 US4 状态 fixture/契约。
 4. US2、US3、US4 收束后再接入 US5，避免工具/循环复制未稳定的核心逻辑。
 
+## Phase 8: 记忆整理语义视图收敛（2026-07-21）
+
+- [X] T105 为五类语义、证据边界、短来源别名、空候选概览、乱序事件时间和 provider 正文禁区增加失败优先回归测试
+- [X] T106 在领域模型与 `CurationService` 中分离模型 DTO/持久化 DTO，实现紧凑语义视图、本地来源解析、自动 coverage 和旧类别兼容读取
+- [X] T107 重写整理人格和输出契约，并同步 README、quickstart、spec、plan、data model、configuration/model/storage 契约
+- [X] T108 运行单元/契约/集成/故障注入测试、凭据安全检查和 diff 校验；相关测试全部通过，全套集成仅保留未改动的 `test_invalid_reload_has_no_partial_runtime_raw_tool_or_provider_effect_and_recovers` 基线矛盾（恢复为相同 revision 时实现按设计不替换 controller），复核用户已有 `config/agent.toml` 窗口改动不进入本次提交后创建原子提交
+
 ## Notes
 
 - `[P]` 只表示文件与未完成依赖允许并行，不代表可以跳过前置 Phase。

@@ -257,7 +257,7 @@ next_cursor | null
 
 marker 与 body 是同一 message content 下互不重叠、可逐字回读的 `RequestPart`。marker 来源同时包含 `config:history_timestamps` 与承载 raw/长期实体，信任级别固定为 `UNTRUSTED_DATA`；正文保持自身来源。overview、long-term 和 recent 字符预算检查最终含 marker 的文本，不能在预算后追加或因超限单独删除 marker。时间标记不进入 raw/YAML 存储，也不改变 `memory_source_query` 合同。
 
-记忆整理提示中的 `batch_records`、`existing_memories`、`current_overview` 也分别从空状态调用同一分段器。三个变量都采用“marker 行 + 单项 canonical JSON 行”，原有字段、JSON 排序/转义与 `CurationProposal` parser 不变；marker 不属于 JSON 或 `memory_curation_v1` 输出 schema，batch metadata 也不标注。模板替换在写入最终字符串时同步平移 fragment span，禁止用正文搜索来推断重复 JSON 的来源。
+记忆整理提示中的 `batch_records`、`existing_memories`、`current_overview` 也分别从空状态调用同一分段器，并在各区块内按来源事件时间排序。三个变量采用“marker 行 + 紧凑 canonical JSON 行”：raw 仅含 `time/role/text/source_alias`，既有记忆仅含 `kind/text/status/source_time`，概览仅含 `text` 与必要覆盖范围。真实 ID/hash/revision/完整 coverage DTO 仍保留在 `RequestPart.sources`、raw index 和持久化文档中，但不进入 provider `content`。`memory_curation_v2` 只解析候选 `kind/text/sources` 与 `overview`；应用确定性解析 `rN`、附加全批 coverage 并执行原有来源/连续性校验。模板展开仍同步平移 fragment span，禁止用正文搜索推断重复 JSON 的来源。
 
 工具历史是第八个独立时间化 block。网关仅在成功 provider attempt 已解析并接受后为整个 tool-call batch 记录一次 `accepted_at`；executor 仅在结果校验、权限/大小/安全与可恢复事务处理结束、已形成可发送 `ToolResult` 后记录一次 `completed_at`。两者均为进程内 metadata，`CompletionResult.model_dump()`、`ToolResult.model_dump()`、canonical result JSON 与 DeepSeek wire 不含这些字段。
 

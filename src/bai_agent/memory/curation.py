@@ -26,6 +26,7 @@ from bai_agent.domain.models import (
     MemoryKind,
     MemoryStatus,
     Message,
+    ModelCurationProposal,
     ModelCallDraft,
     Participation,
     RequestPart,
@@ -67,33 +68,31 @@ class _PromptPiece:
     trust: TrustLevel
 
 
-CURATION_OUTPUT_SCHEMA_ID = "memory_curation_v1"
+CURATION_OUTPUT_SCHEMA_ID = "memory_curation_v2"
 
 
-def _render_output_contract(batch: CurationBatch) -> str:
-    """Render the model-visible schema plus the batch-specific coverage constraints."""
+def _render_output_contract() -> str:
+    """[2026-07-21] 只描述模型负责的字段；真实来源和 coverage 由应用补齐。"""
 
-    schema = canonical_json(CurationProposal.model_json_schema())
-    record_ids = canonical_json(list(batch.record_ids))
-    empty_example = canonical_json(
+    shape = canonical_json(
         {
-            "memory_candidates": [],
-            "overview_update": {
-                "text": "本批次没有需要新增的长期记忆。",
-                "record_ids": list(batch.record_ids),
-            },
+            "memory_candidates": [
+                {"kind": "user", "text": "简洁、独立成立的记忆", "sources": ["r1"]}
+            ],
+            "overview": "本批次的简洁概览",
         }
+    )
+    empty_example = canonical_json(
+        {"memory_candidates": [], "overview": "本批次未发现值得长期保存的新信息。"}
     )
     return "\n".join(
         (
             f"{CURATION_OUTPUT_SCHEMA_ID} 严格输出契约：",
             "只输出一个 JSON 对象；不要输出 Markdown、代码围栏、注释或解释。",
-            f"JSON Schema：{schema}",
-            "附加业务约束：",
-            f"- overview_update.record_ids 必须逐项、按原顺序完全等于 {record_ids}。",
-            "- 每个 memory_candidates[*].source_record_ids 必须非空，且只能引用上述 record_id。",
-            "- kind 只能是 fact、preference、constraint、event、task 之一；不得翻译这些枚举值。",
-            "- 没有值得长期保留的内容时，memory_candidates 必须是空数组，但 overview_update 仍必须覆盖整个批次。",
+            f"固定结构：{shape}",
+            "根对象只能包含 memory_candidates 与 overview；候选只能包含 kind、text、sources。",
+            "kind 只能是 user、rule、self、event、else；sources 必须是当前原始记录中的非空短别名数组。",
+            "overview 必须是非空的简洁批次概览。没有值得长期保存的内容时返回空候选，仍要填写 overview。",
             f"空候选时的最小合法示例：{empty_example}",
         )
     )
@@ -208,27 +207,74 @@ class CurationService:
         indexed = {item.record_id: item for item in records}
         batch_records = tuple(indexed[item] for item in batch.record_ids)
         projector = MemoryTemporalProjector.from_records(records)
+        # [2026-07-21] 别名按事件时间生成；覆盖与提交仍严格使用原始全局序列。
+        semantic_batch_records = tuple(
+            sorted(batch_records, key=lambda item: (item.created_at, item.global_sequence))
+        )
+        source_aliases = {
+            f"r{index}": item.record_id
+            for index, item in enumerate(semantic_batch_records, start=1)
+        }
         batch_entries = tuple(
             projector.project_raw(
                 item,
                 body=canonical_json(
                     {
-                        "record_id": item.record_id,
-                        "global_sequence": item.global_sequence,
+                        "source_alias": f"r{index}",
+                        "time": item.created_at.isoformat(),
                         "role": item.role.value,
-                        "content": item.content,
-                        "content_sha256": item.content_sha256,
+                        "text": item.content,
                     }
                 ),
             )
-            for item in batch_records
+            for index, item in enumerate(semantic_batch_records, start=1)
         )
+        projected_memories = []
+        for item in document.memories:
+            entry = projector.project_memory(item)
+            projected_memories.append(
+                entry.model_copy(
+                    update={
+                        "body": canonical_json(
+                            {
+                                "kind": item.kind.value,
+                                "text": item.text,
+                                "status": item.status.value,
+                                "source_time": {
+                                    "start": entry.span.start.isoformat(),
+                                    "end": entry.span.end.isoformat(),
+                                },
+                            }
+                        )
+                    }
+                )
+            )
         memory_entries = tuple(
-            projector.project_memory(item, body=canonical_json(item.model_dump(mode="json")))
-            for item in document.memories
+            sorted(
+                projected_memories,
+                key=lambda entry: (entry.span.start, entry.span.end, entry.entry_id),
+            )
         )
-        overview_body = canonical_json(document.coverage_overview.model_dump(mode="json"))
-        overview_entry = projector.project_overview(document.coverage_overview, body=overview_body)
+        overview_entry = projector.project_overview(document.coverage_overview)
+        overview_body = canonical_json(
+            {
+                "text": document.coverage_overview.text,
+                "coverage": (
+                    {
+                        "start": overview_entry.span.start.isoformat(),
+                        "end": overview_entry.span.end.isoformat(),
+                        "record_count": sum(
+                            len(span.record_ids)
+                            for span in document.coverage_overview.coverage_spans
+                        ),
+                    }
+                    if overview_entry is not None
+                    else None
+                ),
+            }
+        )
+        if overview_entry is not None:
+            overview_entry = overview_entry.model_copy(update={"body": overview_body})
 
         prompt_source = (
             source_from_asset(self.prompt_asset)
@@ -254,15 +300,6 @@ class CurationService:
                 producer="config_loader",
             )
         )
-        batch_source = SourceRef(
-            source_kind=SourceKind.DATA_FILE,
-            source_id=f"curation-batch:{batch.batch_id}",
-            project_relative_path="data/memory/raw",
-            content_sha256=batch.content_sha256,
-            revision=projector.raw_revision,
-            entity_ids=batch.record_ids,
-            producer="curation_policy",
-        )
         long_term_source = SourceRef(
             source_kind=SourceKind.DATA_FILE,
             source_id=f"memory:document:{document.revision}",
@@ -272,7 +309,7 @@ class CurationService:
             entity_ids=tuple(item.memory_id for item in document.memories),
             producer="long_term_store",
         )
-        output_contract = _render_output_contract(batch)
+        output_contract = _render_output_contract()
         output_contract_source = SourceRef(
             source_kind=SourceKind.GENERATED,
             source_id=f"generated:curation-output-contract:{batch.batch_id}",
@@ -300,10 +337,6 @@ class CurationService:
                 for name, pieces in block_values.items()
             }
         scalar_values = {
-            "batch_metadata": _PromptPiece(
-                "batch_metadata", canonical_json(batch.model_dump(mode="json")), (batch_source,),
-                TrustLevel.UNTRUSTED_DATA,
-            ),
             "curator_persona": _PromptPiece(
                 "curator_persona", self.curator_persona, (persona_source,),
                 TrustLevel.TRUSTED_INSTRUCTION,
@@ -327,22 +360,11 @@ class CurationService:
                 TrustLevel.TRUSTED_INSTRUCTION,
             ),
         }
-        if self.boundary_renderer is not None:
-            bounded_metadata = self._bounded_pieces(
-                "batch_metadata", (scalar_values["batch_metadata"],)
-            )
-        else:
-            bounded_metadata = (scalar_values["batch_metadata"],)
         try:
             prompt, prompt_pieces = self._expand_prompt(
                 {
                     **block_values,
-                    **{
-                        name: (piece,)
-                        for name, piece in scalar_values.items()
-                        if name != "batch_metadata"
-                    },
-                    "batch_metadata": bounded_metadata,
+                    **{name: (piece,) for name, piece in scalar_values.items()},
                 },
                 template_source=prompt_source,
             )
@@ -367,7 +389,7 @@ class CurationService:
                 Message(role="system", content=system_content, trust=TrustLevel.TRUSTED_INSTRUCTION),
                 Message(role="user", content=prompt, trust=TrustLevel.UNTRUSTED_DATA),
             ),
-            metadata={"batch_id": batch.batch_id, "record_ids": list(batch.record_ids)},
+            metadata={},
         )
         last_error: Exception | None = None
         proposal = None
@@ -427,7 +449,7 @@ class CurationService:
                     )
                 else:
                     response = await self.provider.complete(request)
-                proposal = self._validate_response(response.text, batch)
+                proposal = self._validate_response(response.text, batch, source_aliases)
                 break
             except Exception as exc:
                 last_error = exc
@@ -600,36 +622,65 @@ class CurationService:
         proposal = await self.propose(force=force)
         return self.commit(proposal) if proposal is not None else None
 
-    def _validate_response(self, text: str, batch: CurationBatch) -> dict:
+    def _validate_response(
+        self,
+        text: str,
+        batch: CurationBatch,
+        source_aliases: dict[str, str],
+    ) -> dict:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
             raise BaiError("CURATION_SCHEMA_INVALID", "记忆整理响应不是完整 JSON。", retryable=True) from exc
         try:
-            proposal = CurationProposal.model_validate(payload)
+            model_proposal = ModelCurationProposal.model_validate(payload)
         except ValidationError as exc:
             raise BaiError("CURATION_SCHEMA_INVALID", "记忆整理响应字段不符合 Schema。") from exc
-        if proposal.overview_update.record_ids != batch.record_ids:
-            raise BaiError("CURATION_COVERAGE_INVALID", "整理概览必须覆盖且仅覆盖当前批次。")
-        allowed = set(batch.record_ids)
-        for candidate in proposal.memory_candidates:
-            sources = candidate.source_record_ids
-            if not sources or not set(sources).issubset(allowed):
-                raise BaiError("CURATION_SOURCE_INVALID", "长期记忆候选来源不属于当前批次。")
+        resolved_candidates = []
+        for candidate in model_proposal.memory_candidates:
+            try:
+                resolved_sources = tuple(source_aliases[alias] for alias in candidate.sources)
+            except KeyError as exc:
+                raise BaiError(
+                    "CURATION_SOURCE_INVALID",
+                    "长期记忆候选引用了当前语义视图之外的来源别名。",
+                ) from exc
             self.store.guard.ensure_safe(candidate.text)
-        self.store.guard.ensure_safe(proposal.overview_update.text)
+            resolved_candidates.append(
+                {
+                    "kind": candidate.kind,
+                    "text": candidate.text,
+                    "source_record_ids": resolved_sources,
+                    "tags": (),
+                }
+            )
+        self.store.guard.ensure_safe(model_proposal.overview)
+        # [2026-07-21] coverage 由本地批次对象自动附加，模型既不复制也不决定真实记录集合。
+        proposal = CurationProposal.model_validate(
+            {
+                "memory_candidates": resolved_candidates,
+                "overview_update": {
+                    "text": model_proposal.overview,
+                    "record_ids": batch.record_ids,
+                },
+            }
+        )
         return proposal.model_dump(mode="python")
 
     def _merge_document(self, document, batch, records, proposal) -> LongTermMemoryDocument:
         by_id = {item.record_id: item for item in records}
         memories = list(document.memories)
-        manual_texts = {
-            item.text for item in memories if item.created_by == CreatedBy.MANUAL and item.status == MemoryStatus.ACTIVE
+        existing_texts = {
+            " ".join(item.text.split()).casefold()
+            for item in memories
+            if item.status == MemoryStatus.ACTIVE
         }
-        now = records[-1].created_at
+        now = max(item.created_at for item in records)
         for index, candidate in enumerate(proposal["memory_candidates"]):
-            if candidate["text"] in manual_texts:
+            text_key = " ".join(candidate["text"].split()).casefold()
+            if text_key in existing_texts:
                 continue
+            existing_texts.add(text_key)
             memory_uuid = uuid5(NAMESPACE_URL, f"{batch.batch_id}:{index}:{candidate['text']}")
             memories.append(
                 LongTermMemoryItem(

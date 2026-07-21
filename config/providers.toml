@@ -41,4 +41,4 @@ thinking_enabled = false
 max_output_tokens = 8192
 tools_enabled = true
 structured_output = true
-output_schema = "memory_curation_v1"
+output_schema = "memory_curation_v2"

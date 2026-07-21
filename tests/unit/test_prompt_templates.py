@@ -26,13 +26,29 @@ def test_curation_template_has_candidates_and_overview_in_one_response() -> None
     validate_template(
         template,
         allowed_variables=(
-            "batch_metadata", "batch_records", "existing_memories", "current_overview",
+            "batch_records", "existing_memories", "current_overview",
             "output_schema",
         ),
-        untrusted_variables=("batch_metadata", "batch_records", "existing_memories", "current_overview"),
+        untrusted_variables=("batch_records", "existing_memories", "current_overview"),
     )
     assert "memory_candidates" in template
-    assert "overview_update" in template
+    assert "overview" in template
+
+
+def test_curator_persona_defines_five_kinds_and_evidence_boundaries() -> None:
+    persona = Path("config/personas/memory_curator.md").read_text(encoding="utf-8")
+    for kind in ("user", "rule", "self", "event", "else"):
+        assert f"- {kind}：" in persona
+    for rule in (
+        "玩笑、口令、测试语句、引用、虚构、假设或不确定说法",
+        "用户要求“记住”",
+        "助手自己的承诺、猜测或复述",
+        "不添加原文没有表达的态度、偏好、因果或确定性",
+        "语义重复的内容不再生成",
+        "出现冲突时",
+        "没有值得长期保存的内容时返回空候选",
+    ):
+        assert rule in persona
 
 
 def test_absolute_parent_and_symlink_escape_are_rejected(

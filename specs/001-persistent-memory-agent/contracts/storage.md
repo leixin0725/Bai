@@ -63,7 +63,7 @@ coverage_overview:
   coverage_spans: []
 memories:
   - memory_id: mem-00000000-0000-4000-8000-000000000001
-    kind: preference
+    kind: user
     text: 用户偏好简洁的技术说明。
     status: active
     source_refs:
@@ -84,8 +84,8 @@ memories:
 整理只选择旧前沿之后、即将移出直接注入窗口的最旧连续完整轮次。
 
 1. 原始批次已全部确认持久化，计算 `batch_id` 和输入哈希。
-2. 使用独立记忆整理人格和 `memory_curator` model profile 请求一次完整 JSON；同一响应同时包含长期候选和 `overview_update`。
-3. 校验 Schema、数量/长度、凭据、来源、关系、人工项优先级，以及 coverage span 的批次、序号、record ID/hash 连续性。
+2. 应用构造不含内部审计字段的紧凑语义视图，使用独立记忆整理人格和 `memory_curator` model profile 请求一次完整 JSON；响应只含带短来源别名的长期候选和概览正文。
+3. 严格校验结构、数量/长度、凭据和短别名；本地解析真实来源、自动附加全批 coverage，再校验关系、人工项优先级以及 coverage span 的批次、序号、record ID/hash 连续性。
 4. 重新读取 `long_term.yaml` 并比较基准哈希；发现人工并发修改则中止，不能覆盖。
 5. 在内存中合并新/修正记忆、全部 `source_refs` 和 overview update，递增根与概览 revision，并将 `curated_through_sequence` 推进到批次末尾。
 6. 对联合文档执行完整校验，包括每个来源在原始索引中存在且哈希一致，以及 sequence 1 到整理前沿恰好被连续 spans 覆盖。

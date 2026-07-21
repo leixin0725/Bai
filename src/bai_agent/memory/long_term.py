@@ -312,7 +312,7 @@ class LongTermStore:
         now = utc_now()
         item = LongTermMemoryItem(
             memory_id=new_id("mem"),
-            kind=MemoryKind.FACT,
+            kind=MemoryKind.ELSE,
             text=safe_text,
             status=MemoryStatus.ACTIVE,
             source_refs=tuple(

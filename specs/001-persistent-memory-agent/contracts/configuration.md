@@ -126,7 +126,7 @@ thinking_enabled = false
 max_output_tokens = 8192
 tools_enabled = true
 structured_output = true
-output_schema = "memory_curation_v1"
+output_schema = "memory_curation_v2"
 ```
 
 约束：
@@ -213,7 +213,8 @@ reload 先用同一 snapshot 构造 policy、assembler、curation service、gate
 
 - Markdown 只保存提示正文；职责、模型参数、权限和阈值留在 TOML。
 - `chat.md`、`memory_curator.md` 和每个状态人格为独立文件，统一由同一加载器处理。
-- 记忆整理人格必须明确要求一次完整 JSON 响应同时给出长期记忆候选与 `overview_update`，并声明只处理当前批次；不得通过 `memory_overview.md`、第二次模型调用或第二事实来源生成概览。
+- 记忆整理人格必须定义 `user/rule/self/event/else` 五类、长期保存门槛和证据边界，并要求一次完整 JSON 同时给出 `memory_candidates` 与 `overview`；不得通过第二次模型调用或第二事实来源生成概览。
+- `memory_curation.md` 只允许 `batch_records`、`existing_memories`、`current_overview`、`output_schema` 四个变量；内部批次元数据不得成为模型变量。
 - 所有运行时插槽使用 `string.Template` 标识符；实际标识符必须与入口清单允许集合完全一致。
 - 不使用 `safe_substitute()`；缺失、额外或畸形变量均 fail closed。
 - 历史记录、长期记忆、工具结果只能填入标记为 `untrusted_data` 的插槽，不得进入可信指令插槽。

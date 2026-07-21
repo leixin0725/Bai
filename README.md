@@ -78,7 +78,7 @@ TUI 的来源详情明确分列 `来源数`、`类型`、`路径`、`source_id`�
 
 当前输入也复用同一个 annotator，并严格使用本轮已经建立的 provisional `RawRecord.created_at`；retry、恢复 pending、TUI 审批与实际发送不重新读取 wall clock。只有当前输入的时间 marker 作为可信时间元数据放在边界外，用户正文放入 `current_input` 不可信边界内，同时仍保持本轮 `USER_INSTRUCTION` 语义；历史记录中的 marker 暂时继续与历史正文一起位于不可信边界内。基础人格、状态人格和系统规则不标注。聊天中的 `memory_overview`、`long_term_memories`、`recent_records` 分别从空状态分段，因此三个非空区块各有自己的首标记。recent 使用 raw `created_at` 点时间；长期记忆和 coverage overview 对全部已验证 `source_refs` 求最早—最晚事件时间并显示 `[时间范围：… 至 …]`，不会把整理时间冒充发生时间。
 
-记忆整理同样把 `batch_records`、`existing_memories`、`current_overview` 作为三个独立历史区块。每项正文仍是一行 canonical JSON，marker 只占前一行，不进入记录对象或 `memory_curation_v1` 输出 schema；批次元数据和输出格式指令不标注。输出格式指令会从实际 `CurationProposal` 模型生成完整 JSON Schema，并绑定本批次必须原序覆盖的 `record_ids`，避免 provider 只看到 schema 名称而猜测字段。构建器在模板展开时直接累计每个 marker/JSON 片段的绝对位置，因此即使不同区块含有重复正文，调试与审批仍能精确显示各自来源。
+记忆整理同样把 `batch_records`、`existing_memories`、`current_overview` 作为三个独立历史区块，并按来源事件时间自然排列。模型可见的 `memory_curation_v2` 语义视图只含：原始记录的时间/角色/正文/`rN` 短别名，既有记忆的五类类别/正文/状态/来源时间，以及概览正文和时间覆盖范围；真实 UUID、摘要、配置修订、完整 coverage DTO 与批次元数据不进入 provider 正文。模型只返回候选的 `kind/text/sources` 和 `overview`；应用本地把别名解析为真实来源、自动附加整批 coverage，并继续校验来源 hash、连续前沿和精确 provenance。输出契约使用短小固定结构，不再展开完整自动 Schema 或要求回显批次 ID。构建器仍在模板展开时累计每个 marker/JSON 片段的绝对位置，因此重复正文也有精确、互不混淆的来源 span。
 
 当前共有八个时间化逻辑区块：聊天的 `memory_overview`、`long_term_memories`、`recent_records`、`current_input`，整理的 `batch_records`、`existing_memories`、`current_overview`，以及当前轮 `tool_history`。工具调用批次以成功响应被网关接受的时刻为 EVENT，工具结果以校验、大小/安全检查和事务处理完成后的可发送时刻为 EVENT；这些进程内时间不写入 DTO JSON。每次续接从整轮未标注事件重建同一个 block，仍保持相邻 assistant(tool_calls)→tool、原 call id/name/arguments/tool_call_id 和 canonical result body。`memory_source_query` 直接返回完全不变，只有作为普通 tool message 回放时可在外层正文前出现 marker。
 
