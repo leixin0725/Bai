@@ -26,8 +26,8 @@ def test_curation_template_has_candidates_and_overview_in_one_response() -> None
     validate_template(
         template,
         allowed_variables=(
-            "curator_persona", "untrusted_boundary", "batch_metadata", "batch_records",
-            "existing_memories", "current_overview", "output_schema",
+            "batch_metadata", "batch_records", "existing_memories", "current_overview",
+            "output_schema",
         ),
         untrusted_variables=("batch_metadata", "batch_records", "existing_memories", "current_overview"),
     )

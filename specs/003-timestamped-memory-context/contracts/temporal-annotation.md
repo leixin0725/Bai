@@ -76,9 +76,32 @@
 
 时间触发原因可作为不含正文的诊断 metadata，但不得取代配置和事件来源。
 
+### Current input contract
+
+- `current_input` 也作为一个独立 EVENT block 调用本合同；时间必须取本轮已建立 provisional `RawRecord.created_at`，不得在 retry、pending resume、批准或 sender 边界读取 wall clock。
+- marker sources 必须同时包含真实 `config:history_timestamps` asset 与 provisional USER record 的 runtime source；正文 fragment trust 保持 `USER_INSTRUCTION`。
+- 只有 marker 及其分隔符置于 visible `untrusted_data` block，当前用户正文在该边界外继续作为本轮指令；不得把整个 current input 降级为历史数据。
+- 生成 marker/boundary 只存在于 PromptContext/RequestPart/materialized payload，不进入 raw JSONL 或 long-term YAML；下一轮 recent history 从原始正文和持久化 `created_at` 重新标注。
+
+### Visible untrusted-data boundary contract
+
+所有不可信逻辑块在最终 provider `content` 中使用共享 renderer 包装一次：
+
+```text
+<<<UNTRUSTED_DATA_BEGIN block=<logical-name> id=<content-bound-32-hex>>>
+<untrusted content>
+<<<UNTRUSTED_DATA_END block=<same-name> id=<same-id>>>
+```
+
+- opening/closing、inner fragments 与必要 separator 都必须是最终 payload 的 included、无重叠 span；不得只依赖 `Message.trust`/`RequestPart.trust` 或 provider 不支持的扩展字段。
+- wrapper 来源包含真实 `prompt:untrusted_memory_boundary` asset/hash/revision 与 renderer generated source；inner marker/body 保持各自原来源。
+- `chat.md`/`memory_curator.md` 与 boundary instruction 可以共享 system message，但必须拥有各自精确 part/span；generated separator 单独归因，不能把整个 system content 只算作 persona 文件。
+- visible wrapper 字符先于字符预算、token 估算和 provenance 校验生成；TUI、estimator 与 `send_once()` 看到同一字符串。
+
 ## Budget and failure contract
 
 - marker 必须先生成，再执行 overview/recent/long-term 字符预算、provider token 估算、provenance 和凭据门禁。
+- visible untrusted wrapper 必须在字符预算和 provider token 估算前生成；预算比较的对象就是 materialized payload 中的最终 block 文本。
 - 选择型预算按既有候选顺序计算“加入当前项后整个区块的精确渲染增量”；不得用未标注 body 大小替代。
 - formatter 不负责截断、删项或删 marker；调用方无法在预算内保留完整不变量时，以既有可操作 overflow 错误失败。
 - 以下情况必须在模型请求前失败：naive datetime、无效 offset、end < start、重复 entry id、空来源、非法 kind/span 组合、非法策略或不可归因 fragment。

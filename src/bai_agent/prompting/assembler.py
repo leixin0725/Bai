@@ -7,12 +7,14 @@ from typing import Iterable
 
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
+    AnnotatedFragmentKind,
     PromptContext,
     PromptSegment,
     ConfigAsset,
     LongTermMemoryItem,
     Participation,
     RawRecord,
+    Role,
     RequestPart,
     SourceKind,
     SourceRef,
@@ -27,6 +29,13 @@ from bai_agent.domain.models import (
 )
 from bai_agent.memory.selection import validate_complete_coverage
 from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.boundaries import (
+    PromptTextPiece,
+    UntrustedBoundaryRenderer,
+    pieces_from_fragments,
+    position_pieces,
+    source_from_asset,
+)
 from bai_agent.prompting.temporal import annotate_history
 
 
@@ -37,6 +46,7 @@ class PromptAssembler:
     base_asset: ConfigAsset | None = None
     state_assets: tuple[ConfigAsset, ...] = ()
     temporal_policy: TemporalSegmentationPolicy | None = None
+    boundary_renderer: UntrustedBoundaryRenderer | None = None
 
     @classmethod
     def mvp(
@@ -47,10 +57,18 @@ class PromptAssembler:
         base_asset: ConfigAsset | None = None,
         state_assets: tuple[ConfigAsset, ...] = (),
         temporal_policy: TemporalSegmentationPolicy | None = None,
+        boundary_renderer: UntrustedBoundaryRenderer | None = None,
     ) -> "PromptAssembler":
         if not base_persona.strip() or any(not item.strip() for item in state_personas):
             raise BaiError("PROMPT_SEGMENT_MISSING", "强制提示段缺失。")
-        return cls(base_persona, state_personas, base_asset, state_assets, temporal_policy)
+        return cls(
+            base_persona,
+            state_personas,
+            base_asset,
+            state_assets,
+            temporal_policy,
+            boundary_renderer,
+        )
 
     def assemble(
         self,
@@ -63,7 +81,8 @@ class PromptAssembler:
         long_term_memories: Iterable[str | LongTermMemoryItem],
         long_term_source_ids: Iterable[str] = (),
         recent_records: Iterable[RawRecord],
-        current_input: str,
+        current_input_record: RawRecord | None = None,
+        current_input: str | None = None,
         all_raw_records: Iterable[RawRecord] | None = None,
         curated_through: int = 0,
         budgets: dict[str, int] | None = None,
@@ -71,13 +90,50 @@ class PromptAssembler:
     ) -> PromptContext:
         if len(state_resolution.ordered_persona_ids) != len(self.state_personas):
             raise BaiError("STATE_PERSONA_MISSING", "状态人格引用无法完整解析。")
-        segments = [
-            PromptSegment(
-                segment_id="base_persona",
-                trust=TrustLevel.TRUSTED_INSTRUCTION,
-                content=self.base_persona,
+        if current_input_record is None:
+            if current_input is None:
+                raise BaiError("PROMPT_SEGMENT_MISSING", "当前输入缺失。")
+            if self.temporal_policy is not None:
+                raise BaiError("TEMPORAL_ENTRY_INVALID", "启用时间策略时必须提供本轮 provisional USER 记录。")
+        elif current_input is not None and current_input != current_input_record.content:
+            raise BaiError("TEMPORAL_ENTRY_INVALID", "当前输入字符串与 provisional 记录不一致。")
+        if current_input_record is not None and (
+            current_input_record.role is not Role.USER or current_input_record.turn_id != turn_id
+        ):
+            raise BaiError("TEMPORAL_ENTRY_INVALID", "当前输入必须来自本轮 provisional USER 记录。")
+        if self.boundary_renderer is not None:
+            base_source = (
+                source_from_asset(self.base_asset)
+                if self.base_asset is not None
+                else SourceRef(
+                    source_kind=SourceKind.GENERATED,
+                    source_id="generated:base_persona",
+                    content_sha256=content_hash(self.base_persona),
+                    revision=config_revision,
+                    producer="prompt_assembler",
+                )
             )
-        ]
+            base_rendered = self.boundary_renderer.compose_system_instruction(
+                self.base_persona,
+                base_source,
+                composition_id="chat-system",
+            )
+            segments = [
+                PromptSegment(
+                    segment_id="base_persona",
+                    trust=TrustLevel.TRUSTED_INSTRUCTION,
+                    content=base_rendered.text,
+                    fragments=base_rendered.fragments,
+                )
+            ]
+        else:
+            segments = [
+                PromptSegment(
+                    segment_id="base_persona",
+                    trust=TrustLevel.TRUSTED_INSTRUCTION,
+                    content=self.base_persona,
+                )
+            ]
         for persona_id, content in zip(state_resolution.ordered_persona_ids, self.state_personas, strict=True):
             segments.append(
                 PromptSegment(
@@ -103,6 +159,7 @@ class PromptAssembler:
                 overview,
                 curated_through=curated_through,
                 recent_records=recent,
+                current_input_record=current_input_record,
             )
         projector = memory_projector
         if projector is None and raw_snapshot is not None:
@@ -119,9 +176,6 @@ class PromptAssembler:
                 overview_text = overview_history.text
 
         limits = budgets or {}
-        overview_limit = limits.get("overview_chars", len(overview_text))
-        if len(overview_text) > overview_limit:
-            raise BaiError("PROMPT_BUDGET_EXCEEDED", "记忆覆盖概览超过配置预算。")
         long_history = None
         if (
             self.temporal_policy is not None
@@ -133,9 +187,6 @@ class PromptAssembler:
             long_history = annotate_history(long_entries, self.temporal_policy)
             long_text = long_history.text
             long_source_ids = tuple(item.memory_id for item in long_items)
-            long_limit = limits.get("long_term_chars", len(long_text))
-            if len(long_text) > long_limit:
-                raise BaiError("PROMPT_BUDGET_EXCEEDED", "长期记忆超过配置预算。")
         else:
             string_items = tuple(str(item) for item in long_items)
             long_limit = limits.get("long_term_chars", sum(len(item) for item in string_items) + len(string_items))
@@ -178,43 +229,56 @@ class PromptAssembler:
             recent_text = recent_history.text
         else:
             recent_text = "\n".join(f"{item.role.value}: {item.content}" for item in recent)
-        if len(recent_text) > limits.get("recent_chars", len(recent_text)):
-            raise BaiError("PROMPT_BUDGET_EXCEEDED", "近期原文超过预算，必须先完成整理。")
         recent_text = recent_text or "[]"
-        segments.extend(
-            [
-                PromptSegment(
-                    segment_id="memory_overview", trust=TrustLevel.UNTRUSTED_DATA,
-                    content=overview_text or "[]",
-                    source_ids=(
-                        tuple(
-                            source_id
-                            for span in memory_overview.coverage_spans
-                            for source_id in (span.batch_id, *span.record_ids)
-                        )
-                        if isinstance(memory_overview, MemoryCoverageOverview)
-                        else ()
-                    ),
-                    fragments=overview_history.fragments if overview_history is not None else (),
-                ),
-                PromptSegment(
-                    segment_id="long_term_memories", trust=TrustLevel.UNTRUSTED_DATA,
-                    content=long_text, source_ids=long_source_ids,
-                    fragments=long_history.fragments if long_history is not None else (),
-                ),
-                PromptSegment(
-                    segment_id="recent_records",
-                    trust=TrustLevel.UNTRUSTED_DATA,
-                    content=recent_text,
-                    source_ids=tuple(item.record_id for item in recent),
-                    fragments=recent_history.fragments if recent_history is not None else (),
-                ),
-                PromptSegment(
-                    segment_id="current_input", trust=TrustLevel.USER_INSTRUCTION,
-                    content=current_input, source_ids=(turn_id,),
-                ),
-            ]
+        overview_source_ids = (
+            tuple(
+                source_id
+                for span in memory_overview.coverage_spans
+                for source_id in (span.batch_id, *span.record_ids)
+            )
+            if isinstance(memory_overview, MemoryCoverageOverview)
+            else ()
         )
+        memory_segments = (
+            self._untrusted_segment(
+                "memory_overview",
+                overview_text or "[]",
+                overview_source_ids,
+                overview_history.fragments if overview_history is not None else (),
+                config_revision,
+            ),
+            self._untrusted_segment(
+                "long_term_memories",
+                long_text,
+                long_source_ids,
+                long_history.fragments if long_history is not None else (),
+                config_revision,
+            ),
+            self._untrusted_segment(
+                "recent_records",
+                recent_text,
+                tuple(item.record_id for item in recent),
+                recent_history.fragments if recent_history is not None else (),
+                config_revision,
+            ),
+        )
+        if len(memory_segments[0].content) > limits.get("overview_chars", len(memory_segments[0].content)):
+            raise BaiError("PROMPT_BUDGET_EXCEEDED", "记忆覆盖概览超过配置预算。")
+        if len(memory_segments[1].content) > limits.get("long_term_chars", len(memory_segments[1].content)):
+            raise BaiError("PROMPT_BUDGET_EXCEEDED", "长期记忆超过配置预算。")
+        if len(memory_segments[2].content) > limits.get("recent_chars", len(memory_segments[2].content)):
+            raise BaiError("PROMPT_BUDGET_EXCEEDED", "近期原文超过预算，必须先完成整理。")
+        current_segment = (
+            self._current_input_segment(current_input_record)
+            if current_input_record is not None
+            else PromptSegment(
+                segment_id="current_input",
+                trust=TrustLevel.USER_INSTRUCTION,
+                content=current_input or "",
+                source_ids=(turn_id,),
+            )
+        )
+        segments.extend((*memory_segments, current_segment))
         required = {"base_persona", "memory_overview", "long_term_memories", "recent_records", "current_input"}
         if required - {item.segment_id for item in segments}:
             raise BaiError("PROMPT_SEGMENT_MISSING", "强制提示段缺失。")
@@ -253,6 +317,125 @@ class PromptAssembler:
                 if coverage
                 else {}
             ),
+        )
+
+    def _untrusted_segment(
+        self,
+        segment_id: str,
+        content: str,
+        source_ids: tuple[str, ...],
+        fragments,
+        config_revision: str,
+    ) -> PromptSegment:
+        if self.boundary_renderer is None:
+            return PromptSegment(
+                segment_id=segment_id,
+                trust=TrustLevel.UNTRUSTED_DATA,
+                content=content,
+                source_ids=source_ids,
+                fragments=tuple(fragments),
+            )
+        if fragments:
+            pieces = pieces_from_fragments(fragments)
+        else:
+            source_kind = SourceKind.DATA_FILE if segment_id != "current_input" else SourceKind.RUNTIME
+            path = "data/memory/raw" if segment_id == "recent_records" else "data/memory/long_term.yaml"
+            pieces = (
+                PromptTextPiece(
+                    piece_id=f"{segment_id}:body",
+                    content=content,
+                    sources=(
+                        SourceRef(
+                            source_kind=source_kind,
+                            source_id=f"memory:{segment_id}",
+                            project_relative_path=path if source_kind is SourceKind.DATA_FILE else None,
+                            content_sha256=content_hash(content),
+                            revision=config_revision,
+                            entity_ids=source_ids,
+                            producer="prompt_assembler",
+                        ),
+                    ),
+                    trust=TrustLevel.UNTRUSTED_DATA,
+                    entry_id=segment_id,
+                ),
+            )
+        rendered = self.boundary_renderer.wrap(segment_id, pieces)
+        return PromptSegment(
+            segment_id=segment_id,
+            trust=TrustLevel.UNTRUSTED_DATA,
+            content=rendered.text,
+            source_ids=source_ids,
+            fragments=rendered.fragments,
+        )
+
+    def _current_input_segment(self, record: RawRecord) -> PromptSegment:
+        source = SourceRef(
+            source_kind=SourceKind.RUNTIME,
+            source_id=f"runtime:current-input:{record.record_id}",
+            content_sha256=record.content_sha256,
+            revision=record.config_revision,
+            entity_ids=(record.record_id, record.turn_id),
+            producer="provisional_raw_record",
+        )
+        if self.temporal_policy is None:
+            return PromptSegment(
+                segment_id="current_input",
+                trust=TrustLevel.USER_INSTRUCTION,
+                content=record.content,
+                source_ids=(record.record_id, record.turn_id),
+            )
+        annotated = annotate_history(
+            (
+                TemporalLogEntry(
+                    entry_id=record.record_id,
+                    body=record.content,
+                    span=TemporalSpan(
+                        start=record.created_at,
+                        end=record.created_at,
+                        kind=TemporalTimeKind.EVENT,
+                    ),
+                    sources=(source,),
+                    trust=TrustLevel.USER_INSTRUCTION,
+                    metadata={"role": record.role.value, "record_id": record.record_id},
+                ),
+            ),
+            self.temporal_policy,
+        )
+        if self.boundary_renderer is None:
+            return PromptSegment(
+                segment_id="current_input",
+                trust=TrustLevel.USER_INSTRUCTION,
+                content=annotated.text,
+                source_ids=(record.record_id, record.turn_id),
+                fragments=annotated.fragments,
+            )
+        marker_pieces = pieces_from_fragments(
+            fragment for fragment in annotated.fragments if fragment.kind is not AnnotatedFragmentKind.BODY
+        )
+        body_fragment = next(
+            fragment for fragment in annotated.fragments if fragment.kind is AnnotatedFragmentKind.BODY
+        )
+        bounded_marker = self.boundary_renderer.wrap("current_input.timestamp", marker_pieces)
+        positioned = position_pieces(
+            (
+                *pieces_from_fragments(bounded_marker.fragments),
+                PromptTextPiece(
+                    piece_id=f"{record.record_id}:instruction-separator",
+                    content="\n",
+                    sources=(source,),
+                    trust=TrustLevel.USER_INSTRUCTION,
+                    entry_id=record.record_id,
+                    kind=AnnotatedFragmentKind.SEPARATOR,
+                ),
+                *pieces_from_fragments((body_fragment,)),
+            )
+        )
+        return PromptSegment(
+            segment_id="current_input",
+            trust=TrustLevel.USER_INSTRUCTION,
+            content=positioned.text,
+            source_ids=(record.record_id, record.turn_id),
+            fragments=positioned.fragments,
         )
 
     def request_parts(self, context: PromptContext) -> tuple[RequestPart, ...]:

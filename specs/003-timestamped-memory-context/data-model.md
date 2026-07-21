@@ -9,6 +9,7 @@
 - `RawRecord.created_at` 及其 UTC 瞬时是直接聊天事件的事实来源，展示时区转换不得写回。
 - 长期记忆与 coverage overview 的时间由已验证来源动态派生，不保存第二份范围。
 - 时间标记只存在于当次提示构建结果，不成为 raw、长期记忆或工具结果正文。
+- 当前输入使用本轮 provisional `RawRecord` 的既定 `created_at`，不在 retry、恢复、审批或发送时重采样。
 - 所有逻辑历史区块分别以空分段状态运行，但共享同一不可变策略实例。
 - 通用时间模块不读取存储、不理解消息角色、不填模板、不调用 provider。
 - 任意无效时间、来源或配置在模型发送前失败；formatter 不猜测、不排序、不删项。
@@ -106,12 +107,29 @@
 
 **Coverage invariant**: separator/newline 可以归入相邻 fragment 或显式 generated separator part，但所有最终模型可见字符必须由唯一、非重叠 `RequestPart` 或 provider overhead 归因，不能以 whole-content part 再次覆盖 marker/body。
 
-## 6. MemoryTemporalProjection
+## 6. VisibleUntrustedBlock
+
+共享 `UntrustedBoundaryRenderer` 把一个已经定位来源的逻辑数据块渲染为：
+
+```text
+<<<UNTRUSTED_DATA_BEGIN block=<name> id=<32 hex>>>
+<content>
+<<<UNTRUSTED_DATA_END block=<same name> id=<same id>>>
+```
+
+- `id` 由 block name 与完整 inner content 确定性派生；同形正文不能跨 block 复用边界身份。
+- opening/closing 由同一个真实 `prompt:untrusted_memory_boundary` `ConfigAsset` 与 generated renderer source 归因，inner fragments 保持自己的 trust 与来源。
+- 一个历史/记忆/整理逻辑块恰有一对边界；工具协议按一条 assistant/tool 事件消息作为逻辑块，不逐字段或逐记录重复包装。
+- provider 只接收已有 role/content/tool_calls 等支持字段；边界作为 content 字符进入字符预算、token 估算和 provenance span。
+- `compose_system_instruction()` 只负责把 persona、generated separator 与 boundary instruction 串接为同一 system content；三段使用不重叠 fragment，分别引用 persona asset、generated source 和 boundary asset。
+
+## 7. MemoryTemporalProjection
 
 `src/bai_agent/memory/temporal.py` 的瞬态适配结果，不持久化。
 
 | Projection | Body owner | Time derivation | Required sources |
 |---|---|---|---|
+| current input | assembler 序列化 provisional USER body | 本轮 provisional `RawRecord.created_at` 的 EVENT 点时间 | runtime provisional record id/turn id/hash + timestamp config |
 | raw recent/batch | assembler/curation 序列化 `RawRecord` | `created_at` 的 EVENT 点时间 | raw file + record id/hash |
 | long-term item | assembler/curation 序列化现有字段 | 所有已验证 source refs 的 min/max，SOURCE_RANGE | long-term item + 每个 raw source ref |
 | coverage overview | assembler/curation 序列化现有 overview | 所有 coverage records 的 min/max，SOURCE_RANGE | long-term document/coverage + 每个 raw ref |
@@ -127,7 +145,11 @@
 
 **Failure behavior**: 复用 `RAW_SEGMENT_INVALID`、`SOURCE_RECORD_MISSING`、`SOURCE_HASH_MISMATCH`、`MEMORY_COVERAGE_INVALID`/`MEMORY_COVERAGE_GAP`；仅通用时间值本身非法时新增/使用 `TEMPORAL_ENTRY_INVALID`。已声明来源的任何错误不得转为 `RECORDED`。
 
-## 7. ToolHistoryEvent
+### Current input trust split
+
+当前输入由一个 EVENT entry 经过同一 annotator 产生 marker；renderer 只包围 marker 与 marker separator，随后正文以 `USER_INSTRUCTION` fragment 紧接。重试和 pending resume 必须传入同一个 provisional/persisted USER record。raw archive 仅保存用户原正文和原 `created_at`，下一轮历史重新生成 marker，不能读取或复制上轮的展示字符串。
+
+## 8. ToolHistoryEvent
 
 当前轮进程内、排除持久化/SDK 序列化的原始工具历史事件。它保存未标注 body，使每次 continuation 都能从同一事实重建整个工具区块。
 
@@ -150,7 +172,7 @@
 - assistant/tool 消息顺序和配对保持；禁止插入额外 marker message。
 - 运行时时间字段必须从 DTO `model_dump()`、canonical result JSON 和 SDK payload 扩展字段中排除。
 
-## 8. Existing persisted entities
+## 9. Existing persisted entities
 
 本功能读取但不改变以下既有持久化合同：
 
@@ -175,7 +197,7 @@
 - 输入、分页、权限、错误、字段和 canonical JSON 完全不变。
 - 外层工具消息可能由通用 tool history bridge 前缀 marker；这不是工具返回 schema 的一部分。
 
-## 9. State transitions
+## 10. State transitions
 
 ### Configuration lifecycle
 
@@ -216,7 +238,7 @@ accepted CompletionResult with tool_calls
   -> provider materialize and send
 ```
 
-## 10. Cross-entity invariants
+## 11. Cross-entity invariants
 
 1. 对同一 ordered entries + policy，`AnnotatedHistory.text`、marker positions/reasons 和 fragment spans 逐字确定。
 2. 每个非空区块第一个 entry 恰有一个 marker；空区块、区块尾和无承载时刻没有 marker。
@@ -230,3 +252,6 @@ accepted CompletionResult with tool_calls
 10. 工具调用接受/结果完成时间各只采样一次；重试、审批和重渲染复用原时刻。
 11. `memory_source_query` 实现和结果 schema 不因时间标注改变；其 body 在外层消息中仍可逐字定位。
 12. 标注流程不写 raw/YAML，不修改原始 UTC 时间，并对 10,000 项保持 O(n) 时间和 O(n) 输出空间。
+13. 当前输入的 marker 时间等于 provisional `RawRecord.created_at`；正文保持 `USER_INSTRUCTION`，marker 保持数据元信息 trust，retry/resume 不重采样。
+14. 每个不可信逻辑数据块在最终 payload 中恰有一对匹配的 visible boundary；wrapper、inner content 与 estimator 使用同一个最终字符串。
+15. system content 中 persona 与 boundary instruction 的 span 不重叠，并分别绑定同一 `ConfigSnapshot` 中各自的真实 asset/hash/revision。

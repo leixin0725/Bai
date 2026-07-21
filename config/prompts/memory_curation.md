@@ -1,9 +1,6 @@
-<!-- [2026-07-19] 一个结构化响应同时生成候选和 overview_update，禁止第二次整理调用。 -->
-$curator_persona
-
-$untrusted_boundary
-
-批次元数据：$batch_metadata
+<!-- [2026-07-21] 人格与可见边界规则位于 system；每个不可信变量只包装一次。 -->
+批次元数据：
+$batch_metadata
 待整理原始记录（时间 marker 独占一行，每条记录保持一行 canonical JSON）：
 $batch_records
 现有长期记忆（时间范围 marker 独占一行，每项保持一行 canonical JSON）：

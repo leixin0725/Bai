@@ -14,6 +14,7 @@ from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
     AnnotatedHistory,
     CompletionRequest,
+    ConfigAsset,
     CreatedBy,
     CoverageSpan,
     CurationBatch,
@@ -39,6 +40,11 @@ from bai_agent.domain.models import (
     content_hash,
 )
 from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.boundaries import (
+    PromptTextPiece,
+    UntrustedBoundaryRenderer,
+    source_from_asset,
+)
 from bai_agent.prompting.temporal import annotate_history
 
 
@@ -130,6 +136,9 @@ class CurationService:
         prompt_template: str,
         config_revision: str,
         temporal_policy: TemporalSegmentationPolicy | None = None,
+        boundary_renderer: UntrustedBoundaryRenderer | None = None,
+        curator_asset: ConfigAsset | None = None,
+        prompt_asset: ConfigAsset | None = None,
         max_attempts: int = 1,
         tracer=None,
     ) -> None:
@@ -141,6 +150,9 @@ class CurationService:
         self.prompt_template = prompt_template
         self.config_revision = config_revision
         self.temporal_policy = temporal_policy
+        self.boundary_renderer = boundary_renderer
+        self.curator_asset = curator_asset
+        self.prompt_asset = prompt_asset
         self.max_attempts = max(1, max_attempts)
         self.tracer = tracer
 
@@ -186,21 +198,29 @@ class CurationService:
         overview_body = canonical_json(document.coverage_overview.model_dump(mode="json"))
         overview_entry = projector.project_overview(document.coverage_overview, body=overview_body)
 
-        prompt_source = SourceRef(
-            source_kind=SourceKind.CONFIG_FILE,
-            source_id="prompt:memory_curation",
-            project_relative_path="config/prompts/memory_curation.md",
-            content_sha256=content_hash(self.prompt_template),
-            revision=self.config_revision,
-            producer="config_loader",
+        prompt_source = (
+            source_from_asset(self.prompt_asset)
+            if self.prompt_asset is not None
+            else SourceRef(
+                source_kind=SourceKind.CONFIG_FILE,
+                source_id="prompt:memory_curation",
+                project_relative_path="config/prompts/memory_curation.md",
+                content_sha256=content_hash(self.prompt_template),
+                revision=self.config_revision,
+                producer="config_loader",
+            )
         )
-        persona_source = SourceRef(
-            source_kind=SourceKind.CONFIG_FILE,
-            source_id="persona:memory_curator",
-            project_relative_path="config/personas/memory_curator.md",
-            content_sha256=content_hash(self.curator_persona),
-            revision=self.config_revision,
-            producer="config_loader",
+        persona_source = (
+            source_from_asset(self.curator_asset)
+            if self.curator_asset is not None
+            else SourceRef(
+                source_kind=SourceKind.CONFIG_FILE,
+                source_id="persona:memory_curator",
+                project_relative_path="config/personas/memory_curator.md",
+                content_sha256=content_hash(self.curator_persona),
+                revision=self.config_revision,
+                producer="config_loader",
+            )
         )
         batch_source = SourceRef(
             source_kind=SourceKind.DATA_FILE,
@@ -233,6 +253,11 @@ class CurationService:
                 empty_sources=(long_term_source,),
             ),
         }
+        if self.boundary_renderer is not None:
+            block_values = {
+                name: self._bounded_pieces(name, pieces)
+                for name, pieces in block_values.items()
+            }
         scalar_values = {
             "batch_metadata": _PromptPiece(
                 "batch_metadata", canonical_json(batch.model_dump(mode="json")), (batch_source,),
@@ -243,7 +268,17 @@ class CurationService:
                 TrustLevel.TRUSTED_INSTRUCTION,
             ),
             "untrusted_boundary": _PromptPiece(
-                "untrusted_boundary", "untrusted_data", (prompt_source,),
+                "untrusted_boundary",
+                (
+                    self.boundary_renderer.instruction_text
+                    if self.boundary_renderer is not None
+                    else "untrusted_data"
+                ),
+                (
+                    (self.boundary_renderer.config_source,)
+                    if self.boundary_renderer is not None
+                    else (prompt_source,)
+                ),
                 TrustLevel.TRUSTED_INSTRUCTION,
             ),
             "output_schema": _PromptPiece(
@@ -251,23 +286,44 @@ class CurationService:
                 TrustLevel.TRUSTED_INSTRUCTION,
             ),
         }
+        if self.boundary_renderer is not None:
+            bounded_metadata = self._bounded_pieces(
+                "batch_metadata", (scalar_values["batch_metadata"],)
+            )
+        else:
+            bounded_metadata = (scalar_values["batch_metadata"],)
         try:
             prompt, prompt_pieces = self._expand_prompt(
                 {
                     **block_values,
-                    **{name: (piece,) for name, piece in scalar_values.items()},
+                    **{
+                        name: (piece,)
+                        for name, piece in scalar_values.items()
+                        if name != "batch_metadata"
+                    },
+                    "batch_metadata": bounded_metadata,
                 },
                 template_source=prompt_source,
             )
         except (KeyError, ValueError) as exc:
             raise BaiError("PROMPT_TEMPLATE_INVALID", "记忆整理模板变量无效。") from exc
         resolved_turn_id = turn_id or f"curation-{batch.batch_id}"
+        system_rendered = (
+            self.boundary_renderer.compose_system_instruction(
+                self.curator_persona,
+                persona_source,
+                composition_id="curation-system",
+            )
+            if self.boundary_renderer is not None
+            else None
+        )
+        system_content = system_rendered.text if system_rendered is not None else self.curator_persona
         request = CompletionRequest(
             flow_id=f"curation-{batch.batch_id}",
             turn_id=resolved_turn_id,
             model_profile_id="memory_curator",
             messages=(
-                Message(role="system", content=self.curator_persona, trust=TrustLevel.TRUSTED_INSTRUCTION),
+                Message(role="system", content=system_content, trust=TrustLevel.TRUSTED_INSTRUCTION),
                 Message(role="user", content=prompt, trust=TrustLevel.UNTRUSTED_DATA),
             ),
             metadata={"batch_id": batch.batch_id, "record_ids": list(batch.record_ids)},
@@ -278,26 +334,37 @@ class CurationService:
         for _ in range(attempts):
             try:
                 if getattr(self.provider, "is_model_call_gateway", False):
-                    system_source = SourceRef(
-                        source_kind=SourceKind.CONFIG_FILE,
-                        source_id="persona:memory_curator",
-                        project_relative_path="config/personas/memory_curator.md",
-                        content_sha256=content_hash(self.curator_persona),
-                        revision=self.config_revision,
-                        producer="config_loader",
+                    system_parts = (
+                        tuple(
+                            RequestPart(
+                                part_id=f"curation:{batch.batch_id}:system:{fragment.fragment_id}",
+                                order=index,
+                                participation=Participation.INCLUDED,
+                                trust=fragment.trust,
+                                payload_pointer="/messages/0/content",
+                                text_span=(fragment.start, fragment.end),
+                                content=fragment.content,
+                                sources=fragment.sources,
+                            )
+                            for index, fragment in enumerate(system_rendered.fragments)
+                        )
+                        if system_rendered is not None
+                        else (
+                            RequestPart(
+                                part_id=f"curation:{batch.batch_id}:system", order=0,
+                                participation=Participation.INCLUDED,
+                                trust=TrustLevel.TRUSTED_INSTRUCTION,
+                                payload_pointer="/messages/0/content", text_span=(0, len(self.curator_persona)),
+                                content=self.curator_persona, sources=(persona_source,),
+                            ),
+                        )
                     )
                     parts = (
-                        RequestPart(
-                            part_id=f"curation:{batch.batch_id}:system", order=0,
-                            participation=Participation.INCLUDED,
-                            trust=TrustLevel.TRUSTED_INSTRUCTION,
-                            payload_pointer="/messages/0/content", text_span=(0, len(self.curator_persona)),
-                            content=self.curator_persona, sources=(system_source,),
-                        ),
+                        *system_parts,
                         *(
                             RequestPart(
                                 part_id=f"curation:{batch.batch_id}:user:{index}:{piece.piece_id}",
-                                order=index,
+                                order=len(system_parts) + index - 1,
                                 participation=Participation.INCLUDED,
                                 trust=piece.trust,
                                 payload_pointer="/messages/1/content",
@@ -332,6 +399,38 @@ class CurationService:
             target_document=target,
             source_record_ids=batch.record_ids,
             batch=batch,
+        )
+
+    def _bounded_pieces(
+        self,
+        block_name: str,
+        pieces: tuple[_PromptPiece, ...],
+    ) -> tuple[_PromptPiece, ...]:
+        """[2026-07-21] 每个整理变量只加一对边界，同时保留内部逐项来源。"""
+
+        if self.boundary_renderer is None:
+            return pieces
+        rendered = self.boundary_renderer.wrap(
+            block_name,
+            tuple(
+                PromptTextPiece(
+                    piece_id=piece.piece_id,
+                    content=piece.content,
+                    sources=piece.sources,
+                    trust=piece.trust,
+                    entry_id=piece.piece_id,
+                )
+                for piece in pieces
+            ),
+        )
+        return tuple(
+            _PromptPiece(
+                fragment.fragment_id,
+                fragment.content,
+                fragment.sources,
+                fragment.trust,
+            )
+            for fragment in rendered.fragments
         )
 
     def _history_pieces(

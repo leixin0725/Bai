@@ -24,6 +24,7 @@ CURRENT_HISTORY_BLOCKS = (
     "memory_overview",
     "long_term_memories",
     "recent_records",
+    "current_input",
     "batch_records",
     "existing_memories",
     "current_overview",

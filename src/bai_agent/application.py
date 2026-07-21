@@ -19,6 +19,7 @@ from bai_agent.memory.transaction import TurnUnitOfWork
 from bai_agent.model_calls.gateway import CallIdentityAllocator, LegacyProviderAdapter, ModelCallGateway
 from bai_agent.model_calls.estimation import create_estimator
 from bai_agent.prompting.assembler import PromptAssembler
+from bai_agent.prompting.boundaries import UntrustedBoundaryRenderer
 from bai_agent.prompting.personas import PersonaPromptSet
 from bai_agent.providers.registry import create_provider
 from bai_agent.runtime.controller import SingleTurnController
@@ -97,12 +98,16 @@ class AgentApplication:
             if f"persona:{persona_id}" in assets
         )
         temporal_policy = _temporal_policy(fresh)
+        boundary_renderer = UntrustedBoundaryRenderer(
+            assets["prompt:untrusted_memory_boundary"]
+        )
         assembler = PromptAssembler.mvp(
-            persona_prompts.trusted_chat_instruction,
+            persona_prompts.chat,
             persona_prompts.state_prompts(states[fresh.default_state_id]),
             base_asset=assets.get("persona:chat"),
             state_assets=state_asset_values,
             temporal_policy=temporal_policy,
+            boundary_renderer=boundary_renderer,
         )
         chat_provider = self.controller.provider
         curator_provider = self.controller.curation_service.provider
@@ -156,6 +161,9 @@ class AgentApplication:
             prompt_template=fresh.prompts["memory_curation"],
             config_revision=fresh.revision,
             temporal_policy=temporal_policy,
+            boundary_renderer=boundary_renderer,
+            curator_asset=assets.get("persona:memory_curator"),
+            prompt_asset=assets.get("prompt:memory_curation"),
             tracer=getattr(self.controller.curation_service, "tracer", None),
         )
         tool_config = next(
@@ -284,8 +292,11 @@ def build_application(
         state_prompts = persona_prompts.state_prompts(states[snapshot.default_state_id])
         assets = {item.asset_id: item for item in snapshot.assets}
         temporal_policy = _temporal_policy(snapshot)
+        boundary_renderer = UntrustedBoundaryRenderer(
+            assets["prompt:untrusted_memory_boundary"]
+        )
         assembler = PromptAssembler.mvp(
-            persona_prompts.trusted_chat_instruction,
+            persona_prompts.chat,
             state_prompts,
             base_asset=assets.get("persona:chat"),
             state_assets=tuple(
@@ -294,6 +305,7 @@ def build_application(
                 if f"persona:{persona_id}" in assets
             ),
             temporal_policy=temporal_policy,
+            boundary_renderer=boundary_renderer,
         )
         managed_provider = provider is None
         if managed_provider:
@@ -357,6 +369,9 @@ def build_application(
             prompt_template=snapshot.prompts["memory_curation"],
             config_revision=snapshot.revision,
             temporal_policy=temporal_policy,
+            boundary_renderer=boundary_renderer,
+            curator_asset=assets.get("persona:memory_curator"),
+            prompt_asset=assets.get("prompt:memory_curation"),
             tracer=tracer,
         )
         tool_config = next(item for item in settings["tools.toml"]["tools"] if item["id"] == "memory_source_query")

@@ -40,6 +40,8 @@ def test_valid_reload_replaces_complete_runtime_and_freezes_old_snapshot(tmp_pat
         timestamp_file = config / "history_timestamps.toml"
         old_controller = app.controller
         old_policy = old_controller.temporal_policy
+        old_boundary = old_controller.prompt_assembler.boundary_renderer
+        assert old_boundary is old_controller.curation_service.boundary_renderer
         assert len(annotate_history(_entries(), old_policy).markers) == 2
 
         _replace(timestamp_file, "long_gap_minutes = 30", "long_gap_minutes = 60")
@@ -51,6 +53,9 @@ def test_valid_reload_replaces_complete_runtime_and_freezes_old_snapshot(tmp_pat
         assert app.controller.temporal_policy is app.controller.curation_service.temporal_policy
         assert len(annotate_history(_entries(), app.controller.temporal_policy).markers) == 1
         assert app.controller.temporal_policy.config_source.revision == app.snapshot.revision
+        assert app.controller.prompt_assembler.boundary_renderer is app.controller.curation_service.boundary_renderer
+        assert app.controller.prompt_assembler.boundary_renderer is not old_boundary
+        assert app.controller.prompt_assembler.boundary_renderer.config_source.revision == app.snapshot.revision
 
         previous = app.controller
         _replace(timestamp_file, 'display_timezone = "Asia/Shanghai"', 'display_timezone = "UTC"')
@@ -60,6 +65,19 @@ def test_valid_reload_replaces_complete_runtime_and_freezes_old_snapshot(tmp_pat
         assert annotate_history(_entries()[:1], app.controller.temporal_policy).text.startswith(
             "[时间：2026-07-20 00:00 +00:00]"
         )
+
+        boundary_file = config / "prompts" / "untrusted_memory_boundary.md"
+        boundary_file.write_text(
+            boundary_file.read_text(encoding="utf-8") + "\n重载边界说明。\n",
+            encoding="utf-8",
+        )
+        previous_boundary = app.controller.prompt_assembler.boundary_renderer
+        app._reload_config()
+        reloaded_boundary = app.controller.prompt_assembler.boundary_renderer
+        assert reloaded_boundary is app.controller.curation_service.boundary_renderer
+        assert reloaded_boundary is not previous_boundary
+        assert reloaded_boundary.instruction_text.endswith("重载边界说明。")
+        assert reloaded_boundary.config_source.revision == app.snapshot.revision
     finally:
         app.close()
 

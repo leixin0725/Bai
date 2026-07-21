@@ -32,6 +32,7 @@ from bai_agent.domain.models import (
 from bai_agent.memory.transaction import PreTurnCheckpoint, TurnUnitOfWork
 from bai_agent.memory.selection import select_long_term
 from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.boundaries import pieces_from_fragments
 from bai_agent.prompting.temporal import annotate_history
 from bai_agent.domain.ports import SystemClock
 
@@ -42,6 +43,7 @@ def render_tool_history(
     *,
     message_offset: int,
     part_order: int,
+    boundary_renderer=None,
 ) -> tuple[tuple[Message, ...], tuple[RequestPart, ...]]:
     """[2026-07-20] 从整轮未标注事件重建工具 block，并平移 fragment。"""
     entries = tuple(
@@ -70,7 +72,15 @@ def render_tool_history(
     parts: list[RequestPart] = []
     for event_index, event in enumerate(events):
         fragments = fragments_by_entry[event.event_id]
-        content = "".join(fragment.content for fragment in fragments)
+        if boundary_renderer is not None:
+            rendered = boundary_renderer.wrap(
+                f"tool_history.event.{event_index}",
+                pieces_from_fragments(fragments),
+            )
+            content = rendered.text
+            fragments = rendered.fragments
+        else:
+            content = "".join(fragment.content for fragment in fragments)
         tool_calls = tuple(call.model_dump(mode="python") for call in event.tool_calls)
         messages.append(
             Message(
@@ -268,6 +278,7 @@ class SingleTurnController:
                 item
                 for item in all_records
                 if item.global_sequence > long_document.curation.curated_through_sequence
+                and item.record_id != user_record.record_id
             )
             selected_memories = select_long_term(
                 long_document.memories,
@@ -275,6 +286,7 @@ class SingleTurnController:
                 max_chars=self.memory_budgets.get("long_term_chars", 16_384),
                 temporal_projector=memory_projector,
                 temporal_policy=self.prompt_assembler.temporal_policy,
+                boundary_renderer=self.prompt_assembler.boundary_renderer,
             )
             memory_overview = long_document.coverage_overview
             long_term_values = selected_memories
@@ -298,7 +310,7 @@ class SingleTurnController:
             long_term_memories=long_term_values,
             long_term_source_ids=long_term_source_ids,
             recent_records=recent,
-            current_input=content,
+            current_input_record=user_record,
             all_raw_records=coverage_records,
             curated_through=curated_through,
             budgets=self.memory_budgets,
@@ -416,6 +428,7 @@ class SingleTurnController:
                     self.temporal_policy,
                     message_offset=len(base_request.messages),
                     part_order=len(base_parts),
+                    boundary_renderer=self.prompt_assembler.boundary_renderer,
                 )
                 request = base_request.model_copy(
                     update={"messages": (*base_request.messages, *tool_messages)}

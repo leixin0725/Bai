@@ -172,7 +172,7 @@ def test_all_temporal_consumers_share_one_revision_and_reload_without_storage_re
         app.close()
 
 
-def test_seven_history_blocks_share_boundaries_and_exclude_non_logs_without_writes(tmp_path: Path) -> None:
+def test_eight_history_blocks_share_boundaries_and_exclude_non_logs_without_writes(tmp_path: Path) -> None:
     config_source = SourceRef(
         source_kind=SourceKind.CONFIG_FILE, source_id="config:history_timestamps",
         project_relative_path="config/history_timestamps.toml",
@@ -225,5 +225,5 @@ def test_seven_history_blocks_share_boundaries_and_exclude_non_logs_without_writ
     assert messages[0].tool_calls[0] == {"call_id": "call-a", "name": "query", "arguments": {"x": 1}}
     assert messages[1].tool_call_id == "call-a"
     assert all(body in message.content for body, message in zip(("原正文-1", "原正文-2"), messages, strict=True))
-    assert not ({"current_input", "persona", "state_rules", "batch_metadata", "output_schema"} & set(outputs))
+    assert not ({"persona", "state_rules", "batch_metadata", "output_schema"} & set(outputs))
     assert storage.read_bytes() == before

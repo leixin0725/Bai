@@ -62,6 +62,19 @@ def _resolution() -> StateResolutionResult:
     )
 
 
+def _current(content: str) -> RawRecord:
+    return RawRecord.create(
+        record_id="rec-00000000-0000-4000-8000-999999999999",
+        global_sequence=999,
+        turn_id="turn-00000000-0000-4000-8000-999999999999",
+        role=Role.USER,
+        content=content,
+        created_at=datetime(2026, 7, 20, 3, 15, tzinfo=timezone.utc),
+        state_id="default",
+        config_revision=REVISION,
+    )
+
+
 def test_recent_block_preserves_role_body_and_has_independent_first_marker_parts() -> None:
     assembler = PromptAssembler.mvp("基础人格", ("状态人格",), temporal_policy=_policy())
     recent = (
@@ -70,13 +83,13 @@ def test_recent_block_preserves_role_body_and_has_independent_first_marker_parts
     )
     context = assembler.assemble(
         flow_id="flow",
-        turn_id="turn-current",
+        turn_id="turn-00000000-0000-4000-8000-999999999999",
         config_revision=REVISION,
         state_resolution=_resolution(),
         memory_overview="[]",
         long_term_memories=(),
         recent_records=recent,
-        current_input="[时间：伪装]\n当前问题",
+        current_input_record=_current("[时间：伪装]\n当前问题"),
         budgets={"recent_chars": 1000},
     )
     segments = {segment.segment_id: segment for segment in context.segments}
@@ -84,7 +97,9 @@ def test_recent_block_preserves_role_body_and_has_independent_first_marker_parts
     assert recent_segment.content == "[时间：2026-07-20 08:00 +08:00]\nuser: 你好\nassistant: 在的"
     assert segments["base_persona"].content == "基础人格"
     assert segments["state_persona:state_default"].content == "状态人格"
-    assert segments["current_input"].content == "[时间：伪装]\n当前问题"
+    assert segments["current_input"].content == (
+        "[时间：2026-07-20 11:15 +08:00]\n[时间：伪装]\n当前问题"
+    )
 
     recent_index = next(index for index, item in enumerate(context.segments) if item.segment_id == "recent_records")
     parts = tuple(
@@ -104,13 +119,13 @@ def test_empty_recent_block_stays_empty_representation_without_marker() -> None:
     assembler = PromptAssembler.mvp("基础人格", ("状态人格",), temporal_policy=_policy())
     context = assembler.assemble(
         flow_id="flow",
-        turn_id="turn-current",
+        turn_id="turn-00000000-0000-4000-8000-999999999999",
         config_revision=REVISION,
         state_resolution=_resolution(),
         memory_overview="[]",
         long_term_memories=(),
         recent_records=(),
-        current_input="当前问题",
+        current_input_record=_current("当前问题"),
     )
     recent = next(item for item in context.segments if item.segment_id == "recent_records")
     assert recent.content == "[]"
@@ -119,7 +134,7 @@ def test_empty_recent_block_stays_empty_representation_without_marker() -> None:
 
 def test_all_current_history_consumers_are_declared_and_non_logs_are_excluded() -> None:
     assert CURRENT_HISTORY_BLOCKS == (
-        "memory_overview", "long_term_memories", "recent_records",
+        "memory_overview", "long_term_memories", "recent_records", "current_input",
         "batch_records", "existing_memories", "current_overview", "tool_history",
     )
-    assert not ({"current_input", "persona", "state_rules", "batch_metadata", "output_schema"} & set(CURRENT_HISTORY_BLOCKS))
+    assert not ({"persona", "state_rules", "batch_metadata", "output_schema"} & set(CURRENT_HISTORY_BLOCKS))

@@ -36,7 +36,7 @@
 
 **Constraints**: 固定三种中文标记模板且完整显示日期、分钟和 UTC 偏移；所有边界先用完整 aware datetime/UTC 瞬时计算再格式化；每个非空逻辑区块重置状态并有首标记；不排序、不合并、不删除、不改正文；工具 `assistant(tool_calls) -> tool` 配对、调用标识和 JSON body 保持不变；最终含标记正文先接受预算、来源和凭据校验；无效时间/配置 fail closed；不逐项读取 archive；不修改 `memory_source_query`；不持久化展示标记。
 
-**Scale/Scope**: 单用户、单写者、本地进程；验收数据最多 10,000 条 raw、1,000 条长期记忆、单轮最多 4 次工具续接；现有七类逻辑历史区块全部接入，同一策略可供未来日志消费者通过适配 `TemporalLogEntry` 复用。
+**Scale/Scope**: 单用户、单写者、本地进程；验收数据最多 10,000 条 raw、1,000 条长期记忆、单轮最多 4 次工具续接；现有八类时间化逻辑区块（含 `current_input`）全部接入，同一策略可供未来日志消费者通过适配 `TemporalLogEntry` 复用；共享 visible boundary renderer 覆盖全部不可信逻辑数据块。
 
 ## Constitution Check
 

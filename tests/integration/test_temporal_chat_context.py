@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from bai_agent.application import build_application
+from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
     CoverageSpan,
     CreatedBy,
@@ -15,6 +17,7 @@ from bai_agent.domain.models import (
     MemoryCoverageOverview,
     MemoryKind,
     MemoryStatus,
+    RawRecord,
     Role,
     SourceKind,
     SourceRef,
@@ -22,16 +25,26 @@ from bai_agent.domain.models import (
     SourceRelation,
     StateResolutionResult,
     TemporalSegmentationPolicy,
+    thaw_json,
 )
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.prompting.assembler import PromptAssembler
 from bai_agent.runtime.controller import SingleTurnController
 from bai_agent.states.resolver import StaticStateResolver
 from tests.fakes import FakeProvider
+from tests.prompt_debug_fakes import FakeAdapter
 
 
 REVISION = "sha256:" + "1" * 64
 BASE = datetime(2026, 7, 20, tzinfo=timezone.utc)
+
+
+class SequenceClock:
+    def __init__(self, *values: datetime) -> None:
+        self.values = iter(values)
+
+    def now(self) -> datetime:
+        return next(self.values)
 
 
 def _policy() -> TemporalSegmentationPolicy:
@@ -94,7 +107,7 @@ async def test_recent_history_boundaries_reach_debug_off_provider_request(
         memory_budgets={"recent_chars": 10_000},
     )
     await controller.run_turn(
-        "当前输入不应标注",
+        "当前输入应标注",
         turn_id="turn-00000000-0000-4000-8000-999999999999",
         config_revision=REVISION,
     )
@@ -102,8 +115,9 @@ async def test_recent_history_boundaries_reach_debug_off_provider_request(
     recent = request.messages[4]
     current = request.messages[5]
     assert sum(line.startswith("[时间：") for line in recent.content.splitlines()) == expected_markers
-    assert "当前输入不应标注" not in recent.content
-    assert current.content == "当前输入不应标注"
+    assert "当前输入应标注" not in recent.content
+    assert current.content.startswith("[时间：")
+    assert current.content.endswith("当前输入应标注")
     assert all(f"历史-{index}" in recent.content for index in range(1, len(offsets) + 1))
 
 
@@ -142,9 +156,19 @@ def test_overview_long_term_and_recent_are_three_independent_annotated_blocks(tm
     newest_first = memory(1, (2, 3), "较新的相关记忆")
     older_second = memory(2, (0, 1), "较旧但次相关的记忆")
     assembler = PromptAssembler.mvp("基础人格", ("状态人格",), temporal_policy=_policy())
+    current_record = RawRecord.create(
+        record_id="rec-00000000-0000-4000-8000-999999999999",
+        global_sequence=999,
+        turn_id="turn-00000000-0000-4000-8000-999999999999",
+        role=Role.USER,
+        content="当前输入",
+        created_at=BASE + timedelta(minutes=180),
+        state_id="default",
+        config_revision=REVISION,
+    )
     context = assembler.assemble(
         flow_id="flow",
-        turn_id="turn-current",
+        turn_id=current_record.turn_id,
         config_revision=REVISION,
         state_resolution=StateResolutionResult(
             state_id="default",
@@ -156,7 +180,7 @@ def test_overview_long_term_and_recent_are_three_independent_annotated_blocks(tm
         memory_overview=overview,
         long_term_memories=(newest_first, older_second),
         recent_records=records[4:],
-        current_input="当前输入",
+        current_input_record=current_record,
         all_raw_records=records,
         curated_through=4,
         budgets={"overview_chars": 1000, "long_term_chars": 1000, "recent_chars": 1000},
@@ -166,4 +190,74 @@ def test_overview_long_term_and_recent_are_three_independent_annotated_blocks(tm
     assert segments["long_term_memories"].content.count("[时间范围：") == 2
     assert segments["long_term_memories"].content.index(newest_first.text) < segments["long_term_memories"].content.index(older_second.text)
     assert segments["recent_records"].content.startswith("[时间：")
-    assert not segments["current_input"].content.startswith("[时间")
+    assert segments["current_input"].content.startswith("[时间：")
+
+
+@pytest.mark.asyncio
+async def test_current_input_reuses_provisional_time_across_retry_resume_and_never_persists_wrappers(
+    tmp_path: Path,
+) -> None:
+    created_at = datetime(2026, 7, 20, 1, 34, 56, tzinfo=timezone.utc)
+    failures = [BaiError("NETWORK_FAILED", "retry", retryable=True) for _ in range(3)]
+    failing_adapter = FakeAdapter(failures=failures)
+    turn_id = "turn-00000000-0000-4000-8000-888888888888"
+    first = build_application(
+        Path("config"),
+        tmp_path / "data",
+        provider=failing_adapter,
+        clock=SequenceClock(created_at),
+    )
+    try:
+        first.controller.provider.max_attempts = 3
+        with pytest.raises(BaiError):
+            await first.run_turn("需要恢复的输入", turn_id=turn_id)
+        pending = first.archive.pending_turn()
+        assert pending is not None and pending.created_at == created_at
+        attempts = [thaw_json(payload.sdk_kwargs)["messages"][-1]["content"] for payload in failing_adapter.sent]
+        assert len(attempts) == 3
+        assert len(set(attempts)) == 1
+        assert "[时间：2026-07-20 09:34 +08:00]" in attempts[0]
+    finally:
+        first.close()
+
+    resumed_adapter = FakeAdapter()
+    resumed = build_application(
+        Path("config"),
+        tmp_path / "data",
+        provider=resumed_adapter,
+        clock=SequenceClock(
+            created_at + timedelta(minutes=1),
+            created_at + timedelta(minutes=2),
+            created_at + timedelta(minutes=3),
+        ),
+    )
+    try:
+        assert await resumed.run_turn(
+            "需要恢复的输入",
+            resume_pending=True,
+            turn_id=turn_id,
+        ) == "完成"
+        resumed_current = thaw_json(resumed_adapter.sent[0].sdk_kwargs)["messages"][-1]["content"]
+        assert resumed_current == attempts[0]
+        assert await resumed.run_turn("下一轮输入") == "完成"
+        next_payload = thaw_json(resumed_adapter.sent[-1].sdk_kwargs)
+        recent = next_payload["messages"][4]["content"]
+        assert recent.count("需要恢复的输入") == 1
+        assert recent.count("<<<UNTRUSTED_DATA_BEGIN block=recent_records id=") == 1
+
+        records = resumed.archive.read_all()
+        assert [record.content for record in records] == [
+            "需要恢复的输入",
+            "完成",
+            "下一轮输入",
+            "完成",
+        ]
+        persisted = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in resumed.archive.memory_root.rglob("*.jsonl")
+        )
+        persisted += resumed.long_term_store.path.read_text(encoding="utf-8")
+        assert "UNTRUSTED_DATA_BEGIN" not in persisted
+        assert "[时间：" not in persisted
+    finally:
+        resumed.close()

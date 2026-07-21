@@ -55,21 +55,21 @@ description: "智能历史时间段标注的依赖有序实现任务"
 
 ## Phase 3: User Story 1 - 从近期对话理解时间分段（Priority: P1）🎯 MVP
 
-**Goal**: 让近期聊天按默认或已验证策略显示稀疏时间段 marker，同时保持历史角色/正文/顺序，排除当前输入和非日志指令，并把 marker 纳入预算与来源追踪。
+**Goal**: 让近期聊天按默认或已验证策略显示稀疏时间段 marker，同时保持历史角色/正文/顺序，并把 marker 纳入预算与来源追踪。当前输入的后续纳入与 trust split 由 T066—T073 完成。
 
-**Independent Test**: 仅使用固定 `RawRecord.created_at` 的近期历史构建聊天提示；密集消息只显示首 marker，gap/refresh/跨日/倒序在正确项前标记，当前输入不标记，最终正文、来源 spans 和预算结果可逐字验证。
+**Independent Test**: 仅使用固定 `RawRecord.created_at` 的近期历史构建聊天提示；密集消息只显示首 marker，gap/refresh/跨日/倒序在正确项前标记；当前输入使用 provisional record 的既定时间，最终正文、来源 spans 和预算结果可逐字验证。
 
 ### Tests for User Story 1（先写并确认失败）
 
-- [X] T011 [P] [US1] 为 BR-001/BR-010 在 `tests/contract/test_prompt_temporal_context.py` 固定 `recent_records` 的 `role: content` 原文、独立首 marker、空区块表示、当前输入/人格/状态排除和 RequestPart marker+body 来源合同并确认失败
+- [X] T011 [P] [US1] 为 BR-001/BR-010 在 `tests/contract/test_prompt_temporal_context.py` 固定 `recent_records` 的 `role: content` 原文、独立首 marker、空区块表示、人格/状态排除和 RequestPart marker+body 来源合同；当前输入合同由 T066 扩展
 - [X] T012 [P] [US1] 为 BR-002/BR-003/BR-004/BR-006 在 `tests/integration/test_temporal_chat_context.py` 增加密集、30 分钟临界、120 分钟刷新、跨日、同刻、倒序及 debug 关闭路径的近期聊天端到端请求测试并确认失败
 - [X] T013 [P] [US1] 为 BR-008/BR-009 在 `tests/unit/test_temporal_prompt_budget.py` 增加 recent 字符边界包含 marker、恰好命中、超限明确失败、marker `UNTRUSTED_DATA`、配置+raw 双来源及伪装 marker 正文不提升信任测试并确认失败；overview 预算留给 US2/T021
 
 ### Implementation for User Story 1
 
-- [X] T014 [US1] 在 `src/bai_agent/prompting/assembler.py` 将 recent `RawRecord` 适配为 EVENT 日志项并独立标注，保留 `role: content`、空区块和 current input 排除语义，只在最终 annotated recent text 上执行本阶段预算并生成非重叠 RequestPart spans；overview 标注与预算由 US2/T021/T026 实现
+- [X] T014 [US1] 在 `src/bai_agent/prompting/assembler.py` 将 recent `RawRecord` 适配为 EVENT 日志项并独立标注，保留 `role: content`、空区块和非日志排除语义，只在最终 annotated recent text 上执行本阶段预算并生成非重叠 RequestPart spans；current input 接入由 T068 完成，overview 标注与预算由 US2/T021/T026 实现
 - [X] T015 [US1] 在 `src/bai_agent/application.py` 从同一 `ConfigSnapshot` 构造 `TemporalSegmentationPolicy`/annotator 并注入 `PromptAssembler`，确保聊天构建使用 persisted `RawRecord.created_at` 而非 prompt 构建时刻
-- [X] T016 [P] [US1] 为 DR-001 更新 `README.md`，说明近期聊天的稀疏段首/gap/refresh/跨日行为、三个固定标签、默认配置入口、当前输入与人格排除以及 marker 不回写存储
+- [X] T016 [P] [US1] 为 DR-001 更新 `README.md`，说明近期聊天的稀疏段首/gap/refresh/跨日行为、三个固定标签、默认配置入口、人格排除以及 marker 不回写存储；current input 新语义由 T072 更新
 - [X] T017 [P] [US1] 为 DR-002/DR-003/DR-005 更新 `specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，加入统一日志项/recent 合同、默认配置示例和密集/gap/refresh/跨日/倒序可执行验收
 - [X] T018 [US1] 运行 `tests/unit/test_domain_models.py`、`tests/unit/test_temporal_annotation.py`、`tests/unit/test_temporal_annotation_properties.py`、`tests/contract/test_history_timestamp_config.py`、`tests/contract/test_prompt_temporal_context.py`、`tests/integration/test_temporal_chat_context.py`、`tests/unit/test_temporal_prompt_budget.py` 及现有 prompt/config 回归，执行 config validate、文档链接/示例检查和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 Phase 1—3 的依赖、配置、共享模块、US1、测试与对应文档
 
@@ -125,7 +125,7 @@ description: "智能历史时间段标注的依赖有序实现任务"
 - [X] T037 [P] [US3] 为 BR-005/BR-006 在 `tests/integration/test_temporal_tool_continuation.py` 用 deterministic clock 覆盖成功 attempt 才采样 accepted_at、可发送结果后采样 completed_at、审批/重试不重采样、四轮整体重建不重复 marker 和失败时发送 0 并确认失败
 - [X] T038 [P] [US3] 为 BR-008/BR-009 在 `tests/integration/test_prompt_debug_equivalence.py` 与 `tests/unit/test_prompt_provenance.py` 增加 marker/body 同 pointer 非重叠 spans、配置+事件来源、无 whole-content 重叠、part token 守恒、固定 clock 下 debug on/off 最终 payload 逐字相同和篡改阻断测试并确认失败
 - [X] T039 [P] [US3] 为 FR-025/BR-010 扩展 `tests/contract/test_memory_source_tool.py` 的 direct golden 输入/分页/权限/错误/返回 JSON 不变测试，并新增它作为外层 tool history body 时去掉 marker 后逐字相等的失败断言；确认新增断言失败但既有 golden 仍通过，且不得修改 `src/bai_agent/tools/memory_source.py`
-- [X] T040 [P] [US3] 为 BR-006/BR-010 在 `tests/contract/test_prompt_temporal_context.py` 增加相同统一日志项经 chat/curation/tool/future fake consumer 得到相同边界/标签、七个现有 block 全清单和非日志排除合同测试并确认失败
+- [X] T040 [P] [US3] 为 BR-006/BR-010 在 `tests/contract/test_prompt_temporal_context.py` 增加相同统一日志项经 chat/curation/tool/future fake consumer 得到相同边界/标签、完整 block 清单和非日志排除合同；T066 将清单扩展为八个
 
 ### Implementation for User Story 3
 
@@ -136,10 +136,10 @@ description: "智能历史时间段标注的依赖有序实现任务"
 - [X] T045 [US3] 在 `src/bai_agent/providers/deepseek.py` 使用 controller 提供的 content fragments，只有缺失时才创建 whole-content fallback；为 tool_calls 保留原始 origin 来源并消除重叠 part/当前 draft 误归因
 - [X] T046 [US3] 在 `src/bai_agent/model_calls/provenance.py` 拒绝同一 pointer 的 included text spans 重叠/越界/未覆盖，在 `src/bai_agent/model_calls/estimation.py` 让最终 marker 只计费一次并保持 part+protocol overhead 守恒
 - [X] T047 [US3] 在 `src/bai_agent/application.py` 向 gateway、executor 和 controller 注入同一策略 annotator 与可测试 clock，确保配置在任何工具副作用前已完整校验
-- [X] T048 [P] [US3] 为 DR-001 更新 `README.md`，列全七个现有日志 block、工具接受/完成时间、未来消费者接入规则、调试所见即所发及 `memory_source_query` 直接合同不变边界
+- [X] T048 [P] [US3] 为 DR-001 更新 `README.md`，列全现有日志 block、工具接受/完成时间、未来消费者接入规则、调试所见即所发及 `memory_source_query` 直接合同不变边界；T072 将清单扩展为八个
 - [X] T049 [P] [US3] 为 DR-003/DR-005 更新 `specs/001-persistent-memory-agent/contracts/model-and-tools.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，同步工具 metadata envelope、assistant/tool 协议、外层 marker 与来源工具排除验收
 - [X] T050 [P] [US3] 更新 `specs/002-prompt-trace-debugger/contracts/model-call.md` 与 `specs/002-prompt-trace-debugger/quickstart.md`，记录 marker/body non-overlap spans、最终预算、stable origin、debug on/off 等价和 DeepSeek whole-content fallback 限制
-- [X] T051 [US3] 运行 `tests/unit/test_model_call_models.py`、`tests/contract/test_temporal_tool_protocol.py`、`tests/integration/test_temporal_tool_continuation.py`、`tests/integration/test_prompt_debug_equivalence.py`、`tests/unit/test_prompt_provenance.py`、`tests/contract/test_memory_source_tool.py`、`tests/contract/test_prompt_temporal_context.py` 及现有 DeepSeek/tool/gateway/estimation 回归，执行七 block 清单、文档链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US3 的 Tools/Provider 实现、测试和 README/001/002 文档
+- [X] T051 [US3] 运行 `tests/unit/test_model_call_models.py`、`tests/contract/test_temporal_tool_protocol.py`、`tests/integration/test_temporal_tool_continuation.py`、`tests/integration/test_prompt_debug_equivalence.py`、`tests/unit/test_prompt_provenance.py`、`tests/contract/test_memory_source_tool.py`、`tests/contract/test_prompt_temporal_context.py` 及现有 DeepSeek/tool/gateway/estimation 回归，执行完整 block 清单、文档链接和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录结果并通过 Git 扩展原子提交 US3 的 Tools/Provider 实现、测试和 README/001/002 文档
 
 **Checkpoint**: US3 可独立证明所有当前日志消费者共享规则、工具协议/来源/预算不被破坏，且来源追溯工具实现和直接返回完全不变。
 
@@ -173,12 +173,25 @@ description: "智能历史时间段标注的依赖有序实现任务"
 **Purpose**: 完成性能、全消费者覆盖、兼容性、安全、注释和文档一致性门禁；不替代各故事阶段已经要求的文档同步。
 
 - [X] T059 [P] 为 BR-006/SC-008 在 `tests/performance/test_temporal_annotation_scale.py` 增加 10,000 个预构造日志项预热后 `<1.0s`、输出验真和相同输入 100 次逐字一致测试，并增加 10,000 raw+1,000 long-term 单次索引/O(raw+refs) 无 N+1 断言
-- [X] T060 [P] 为 BR-010/SC-002/SC-007 在 `tests/integration/test_full_acceptance.py` 汇总七个 block 的 100% 接入、block 状态隔离、未来 fake consumer、非日志排除、顺序/正文/协议保持和存储 no-write 验收
+- [X] T060 [P] 为 BR-010/SC-002/SC-007 在 `tests/integration/test_full_acceptance.py` 汇总八个 block 的 100% 接入、block 状态隔离、未来 fake consumer、非日志排除、顺序/正文/协议保持和存储 no-write 验收
 - [X] T061 [P] 扩展 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py`，确认时间配置、marker 来源、错误、debug payload、测试夹具、工作树和可达 Git 历史不含可用凭据或新增持久 prompt trace
 - [X] T062 审核 `src/bai_agent/` 本功能新增/更新注释全部为带日期/版本的简体中文并说明模块边界、时间真实性、配置原子性和工具协议不变量；仅在失真时修改既有注释，并在 `specs/003-timestamped-memory-context/tasks.md` 记录修正或 N/A 理由
-- [X] T063 为 DR-001—DR-005/SC-009 逐项核对 `README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/configuration.md,contracts/model-and-tools.md,contracts/storage.md}`、`specs/002-prompt-trace-debugger/{quickstart.md,contracts/model-call.md}` 与 `specs/003-timestamped-memory-context/{spec.md,plan.md,research.md,data-model.md,contracts/,quickstart.md,tasks.md}` 的默认值、七 block、示例、链接、UTC/迁移、来源工具排除和验证命令一致性
+- [X] T063 为 DR-001—DR-005/SC-009 逐项核对 `README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/configuration.md,contracts/model-and-tools.md,contracts/storage.md}`、`specs/002-prompt-trace-debugger/{quickstart.md,contracts/model-call.md}` 与 `specs/003-timestamped-memory-context/{spec.md,plan.md,research.md,data-model.md,contracts/,quickstart.md,tasks.md}` 的默认值、八 block、示例、链接、UTC/迁移、来源工具排除和验证命令一致性
 - [X] T064 检查 `.github/workflows/compatibility.yml` 是否已在 Ubuntu 24.04/Python 3.13/3.14 与 Windows 功能矩阵运行新增非性能测试；缺失时在该文件补齐，已覆盖时在 `specs/003-timestamped-memory-context/tasks.md` 记录 `N/A` 理由，不把 1 秒强制性能门禁迁移到 Windows
 - [X] T065 按 `specs/003-timestamped-memory-context/quickstart.md` 执行全部定向命令、`pytest -m "not performance" -q`、`pytest tests/performance/test_temporal_annotation_scale.py -q -s`、适用现有 performance/fault-injection 回归、配置/文档链接/占位符/凭据扫描和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录 FR-001—FR-026、BR-001—BR-010、DR-001—DR-005、SC-001—SC-009 闭环并通过 Git 扩展原子提交最终测试、注释、workflow（如需）和文档审计变更
+
+---
+
+## Phase 8: TUI 检查修复与 visible boundary 收口（2026-07-21）
+
+- [X] T066 扩展 `CURRENT_HISTORY_BLOCKS`、合同/集成测试和 full acceptance 为八个时间化 block，并直接覆盖 current input provisional 时间、retry/resume 稳定性及 raw/YAML no-write
+- [X] T067 新增共享 `UntrustedBoundaryRenderer`，让 chat/curation system persona 与 `untrusted_memory_boundary.md` 拥有独立精确 snapshot asset/hash/revision span，并验证 reload 原子替换
+- [X] T068 在 assembler 中用同一 `annotate_history` 标注 current input，只包装 marker 元数据、保持正文 `USER_INSTRUCTION`，controller 排除 recent 重复项并复用 provisional record
+- [X] T069 将 history/long-term/overview/curation metadata+history/tool events 接入统一 visible boundary，确保最终字符预算、token 估算、provenance 与 materialized payload 一致且不增加 provider 自定义字段
+- [X] T070 在 TUI 中实现 whitespace-only 默认紧凑/W 展开/复制无损、来源字段与图例澄清、message index 稳定莫兰迪配色及同 message 内 record A/B 交错，保持 `color=never` 无样式和 80×24 可用
+- [X] T071 新增/更新 visible payload、system provenance、current time、retry/resume、no-write、TUI whitespace/color/no-color/80×24 的 unit/contract/integration 测试，并保持 `memory_source_query` direct contract 不变
+- [X] T072 同步 `README.md`、001/002 合同与 quickstart、003 spec/plan/research/data-model/contract/quickstart/tasks 的 current input、八 block、visible boundary、TUI 字段与纯展示语义
+- [X] T073 运行全部非性能、相关性能/故障注入、config validate、wheel、文档链接、秘密扫描、`git diff --check`，记录结果并完成原子提交
 
 ---
 
@@ -190,7 +203,7 @@ description: "智能历史时间段标注的依赖有序实现任务"
 - **Foundational (Phase 2)**: 依赖 Setup；T003—T006 测试先行，阻塞所有用户故事。
 - **US1 (Phase 3)**: 依赖 Foundational；T018 通过后交付近期聊天 MVP。
 - **US2 (Phase 4)**: 依赖 Foundational；实现上可与 US1 分支并行，但因共同修改 assembler/application，主执行顺序采用 US1→US2。T030 与 T034 分别是 Memory/Prompt 和 Curation 原子检查点。
-- **US3 (Phase 5)**: 依赖 Foundational 和 US1 的 fragment/request-part 接线；工具核心可与 US2 并行，七 block/文档/完整消费者检查点依赖 US2 完成。
+- **US3 (Phase 5)**: 依赖 Foundational 和 US1 的 fragment/request-part 接线；工具核心可与 US2 并行，完整 block/文档/消费者检查点依赖 US2 完成，最终八 block 清单由 Phase 8 收口。
 - **US4 (Phase 6)**: 依赖 US1—US3，以便证明一次 reload 同时作用于所有现有消费者。
 - **Polish (Phase 7)**: 依赖所需的四个故事全部完成。
 
@@ -297,13 +310,14 @@ Curation：T031 || T032 -> T033 -> T034
 - **T018 / 2026-07-20**: Foundation + US1 定向及既有 prompt/config 回归共 79 项通过；独立 `config validate` 使用无效占位凭据通过；12 份受影响 Markdown 的本地相对链接检查为 0 个断链，默认值/固定标签搜索一致，`git diff --check` 通过。
 - **T030 / 2026-07-20**: Memory/Prompt 定向及既有 archive/selection/coverage 回归共 53 项通过；5 份受影响 Markdown 的本地相对链接检查为 0 个断链，术语/默认值检查一致，`git diff --check` 通过。
 - **T034 / 2026-07-20**: Curation 三区块、事务提案、模板、provenance 与 estimation 回归共 21 项通过；7 个必需模板变量均保留，canonical JSON/重复正文绝对 span/损坏来源 provider=0 断言通过；4 份受影响 Markdown 的本地相对链接检查为 0 个断链，`git diff --check` 通过。
-- **T051 / 2026-07-20**: Tools/Provider 定向及既有 DeepSeek/tool/gateway/estimation 回归共 56 项通过，并额外完成全量非性能回归 334 passed/2 deselected；七个现有日志 block 清单、四轮整体重建、stable origin、debug on/off 等价和 `memory_source_query` direct golden 边界均通过；6 份受影响 Markdown 的本地相对链接检查为 0 个断链，`memory_source.py` 无改动，`git diff --check` 通过。
+- **T051 / 2026-07-20**: Tools/Provider 定向及既有 DeepSeek/tool/gateway/estimation 回归共 56 项通过，并额外完成全量非性能回归 334 passed/2 deselected；当时完整日志 block 清单、四轮整体重建、stable origin、debug on/off 等价和 `memory_source_query` direct golden 边界均通过；6 份受影响 Markdown 的本地相对链接检查为 0 个断链，`memory_source.py` 无改动，`git diff --check` 通过。Phase 8 随 current input 接入扩展为八个。
 - **T058 / 2026-07-20**: Configuration/reload/packaging/full-acceptance 及既有 persona/config 回归共 41 项通过；30→60、UTC 显示、无效 reload 原子失败与修复恢复通过，实际 wheel 含完整默认配置，固定 instant 在 Windows 输出 `2026-07-20 08:00 +0800`；独立无效占位凭据 `config validate` 通过，4 份文档 0 个断链且默认值一致，`git diff --check` 通过。Ubuntu 同一夹具由 compatibility matrix 执行。
-- **T059—T061 / 2026-07-20**: 10k 标注和 10k raw+1k memory 投影性能门禁 2 项通过（单次均 `<1.0s`，100 次逐字一致）；七 block/future consumer/no-write 与工作树、时间表面、可达 Git 历史秘密扫描共 6 项通过，未发现可用凭据或持久 prompt trace。
+- **T059—T061 / 2026-07-20**: 10k 标注和 10k raw+1k memory 投影性能门禁 2 项通过（单次均 `<1.0s`，100 次逐字一致）；当时完整 block/future consumer/no-write 与工作树、时间表面、可达 Git 历史秘密扫描共 6 项通过，未发现可用凭据或持久 prompt trace。Phase 8 追加 current input no-write 验收。
 - **T062 / 2026-07-20**: 审核 `main...HEAD` 的新增源码注释/模块与公开边界说明，补齐 `_PromptPiece`、模板 span、`ToolHistoryEvent`、`SystemClock`、tool-history renderer 共 5 处日期前缀；时间真实性、配置原子性、工具协议不变量说明均已覆盖。
-- **T063 / 2026-07-20**: 核对指定 16 份 Markdown，默认值、七 block、示例、UTC/无迁移、来源工具排除和命令一致；0 个本地断链、0 个缺失测试路径。
+- **T063 / 2026-07-20**: 核对指定 16 份 Markdown 的默认值、当时 block 清单、示例、UTC/无迁移、来源工具排除和命令一致；0 个本地断链、0 个缺失测试路径。Phase 8 重新同步八 block 与 visible boundary。
 - **T064 / 2026-07-20**: N/A（无需修改 workflow）：现有 Ubuntu 24.04/Python 3.13+3.14 与 Windows/Python 3.13+3.14 均执行 `pytest -m "not performance"`，已覆盖全部新增非性能测试；1 秒 temporal 性能门禁保持仅在主要平台/显式本地命令执行，未迁移到 Windows 功能矩阵。
 - **T065 / 2026-07-20**: feature quickstart 10 组定向测试共 83 项通过；editable 安装因隔离环境无法联网获取 build dependency 超时后，以已声明并安装的 `hatchling`/`editables` 执行 `--no-build-isolation` 等价复验通过，离线 `config validate` 通过。最终 `pytest -m "not performance" -q` 为 343 passed/4 deselected；全部 performance 为 5 passed/2 platform-gated skipped（其中 temporal scale 2 passed）；fault injection 为 33 passed；模板/配置占位符补充回归 17 passed。16 份文档 0 断链/0 缺失测试路径，秘密与持久 trace 扫描无发现，`git diff --check` 通过。
+- **T066—T073 / 2026-07-21**: visible boundary/current input/TUI 聚焦回归 38 passed；完整 `.venv` 非性能回归 349 passed/4 deselected；performance 5 passed/2 platform-gated skipped，fault injection 33 passed。真实 wheel 默认配置测试、无凭据占位 `config validate`、`compileall`、35 份 Markdown 本地链接（0 断链）、秘密/持久 trace 回归与 `git diff --check` 全部通过；八 block、system 双资产精确 provenance、current retry/resume 时间、raw/YAML no-write、TUI 80×24/无色/空白审计均闭环。`src/bai_agent/tools/memory_source.py` 无改动。
 
 ## Requirement Closure（2026-07-20）
 
@@ -312,10 +326,12 @@ Curation：T031 || T032 -> T033 -> T034
 | FR-001—FR-008 | T003—T018 的统一值对象、纯分段器、固定标签、边界/属性与 recent 接线 | CLOSED |
 | FR-009—FR-014 | T019—T051 的来源范围、curation/tool 协议、精确 provenance、预算与 debug 等价 | CLOSED |
 | FR-015—FR-020 | T052—T058 的独立严格配置、IANA/tzdata、单引用原子 reload 与失败恢复 | CLOSED |
-| FR-021—FR-026 | T021/T038/T039/T044—T046/T059—T060 的最终预算、确定性、no-write、七消费者、来源工具排除与工具事件时间 | CLOSED |
+| FR-021—FR-026 | T021/T038/T039/T044—T046/T059—T060 的最终预算、确定性、no-write、原消费者、来源工具排除与工具事件时间 | CLOSED |
+| FR-027—FR-031 | T066—T073 的 current provisional 时间、visible boundary、system 双资产 provenance、最终预算/估算一致和 TUI 纯展示门禁 | CLOSED |
 | BR-001—BR-010 | Core Business Rule Coverage 表对应任务全部 `[X]`，并由 343 项非性能、5 项性能及 33 项故障注入回归闭环 | CLOSED |
+| BR-011 | materialized provider payload、边界仿冒、block/id 匹配和共享 renderer 合同/集成测试 | CLOSED |
 | DR-001—DR-005 | README、001/002 合同与 quickstart、003 全设计制品共 16 份文档一致性审计 | CLOSED |
 | SC-001—SC-004 | 算法单元/属性、密集/gap/refresh/跨日/倒序固定验收 | CLOSED |
 | SC-005—SC-007 | memory source fail-closed、配置 provider=0、协议/正文/顺序/no migration 回归 | CLOSED |
 | SC-008 | 10,000 项单次 `<1.0s` 且相同输入 100 次逐字一致；10k raw+1k memory 单索引 | CLOSED |
-| SC-009 | 16 份指定文档 0 断链、0 缺失测试路径，默认值/七 block/UTC/工具排除一致 | CLOSED |
+| SC-009 | 16 份指定文档 0 断链、0 缺失测试路径，默认值/完整 block/UTC/工具排除一致；Phase 8 重新审计八 block | CLOSED |

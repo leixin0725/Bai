@@ -36,7 +36,3 @@ class PersonaPromptSet:
             return tuple(self.states[persona_id] for persona_id in persona_ids)
         except KeyError as exc:
             raise BaiError("STATE_PERSONA_MISSING", "状态人格引用不存在。") from exc
-
-    @property
-    def trusted_chat_instruction(self) -> str:
-        return f"{self.chat.rstrip()}\n\n{self.untrusted_boundary.strip()}"

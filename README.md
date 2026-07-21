@@ -58,7 +58,9 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 明确拒绝不会留下历史或 pending；恢复旧 pending 时发生 R/Esc/拒绝按钮/Ctrl+C，也会安全删除 raw 尾部的该 pending。已经批准的请求若因普通 provider/网络错误且重试结束，则只发布一条 USER pending；只有 `--resume-pending` 恢复，下一次普通启动或 `--discard-pending` 会丢弃并继续新对话。该模式默认关闭、退出即失效，也不会保存原始追踪。stdin/stdout 任一不是 TTY 时以 `DEBUG_TTY_REQUIRED`/exit 2 在任何持久化和模型发送前失败；Textual application-mode 预检同样先于应用构建。TUI 中 `Ctrl+C` 先按拒绝路径撤销再以 130 退出，EOF/终端丢失绝不批准并以脱敏 presentation failure 阻断。
 
-同一轮的 memory curation → chat → tool continuation 按网关分配的严格 call sequence 逐项出现；tool continuation 会先回放 assistant/tool_calls，再追加匹配的 tool result。只有网络/超时和 HTTP 429/500/503 会形成新的 retry attempt 与批准项；400/401/402/403/422 等不可重试错误只审批/发送一次并立即返回脱敏错误，OpenAI SDK 内部重试已关闭。交互 TTY 的稳定色板只增强来源类别，`NO_COLOR=1` 或 `debug_prompt.color="never"` 时仍保留 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]`、分组边界与缩进。输出重定向不是无色模式，会按非 TTY 规则失败。
+同一轮的 memory curation → chat → tool continuation 按网关分配的严格 call sequence 逐项出现；tool continuation 会先回放 assistant/tool_calls，再追加匹配的 tool result。只有网络/超时和 HTTP 429/500/503 会形成新的 retry attempt 与批准项；400/401/402/403/422 等不可重试错误只审批/发送一次并立即返回脱敏错误，OpenAI SDK 内部重试已关闭。交互 TTY 使用低饱和莫兰迪色：`message:N` 决定稳定基础色，历史 message 内按结构化 `rec-*` 记录顺序使用 A/B 近似色交错，同一记录的 marker、分隔符和正文保持同组；来源类型只作次级强调。`NO_COLOR=1` 或 `debug_prompt.color="never"` 时不产生 ANSI/样式，但仍保留全部文本标签、分组边界与缩进。输出重定向不是无色模式，会按非 TTY 规则失败。
+
+TUI 的来源详情明确分列 `来源数`、`类型`、`路径`、`source_id`、`producer` 与 `entity_ids`；其中 `entity_ids` 是 `rec-*`、`turn-*` 等实体 UUID，不代表聊天顺序。图例同时解释 `included/excluded/empty/unknown_source`、`trusted_instruction/user_instruction/untrusted_data` 与 `message:N`。只含换行/空格的 included part 默认压缩为 `<换行 1>` 等摘要，按 `W` 可展开为转义文本；`C` 复制始终包含可审计的无损转义内容。该折叠与配色只改变 TUI renderable，不改变 provider payload、RequestPart、span 或 token 估算；80×24 终端仍可滚动查看完整 trace 并操作按钮。
 
 批准前的上下文栏把输入近似估算、逐段估算、provider 协议开销、最大输出预留、预计峰值、模型容量、占比、剩余和 `normal/high/critical/exceeded` 分开显示；`≈` 表示 `deepseek_character_v1` 的保守离线估算，不是精确 tokenizer。容量未知或载荷不受支持时明确显示未知/不可估算。响应带合法 usage 时，TUI 已关闭，普通聊天输出只显示实际输入/输出/总量、实际占比和输入估算误差，不恢复原文。
 
@@ -74,15 +76,15 @@ python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 
 `long_gap_minutes` 的单位为分钟、范围 `1..1440`；`continuous_segment_refresh_minutes` 范围 `1..10080` 且不得小于 gap；跨日开关必须是布尔值，显示时区必须是可解析的 IANA 名称。标准库 `zoneinfo` 配合运行依赖 `tzdata`，使 Ubuntu 与 Windows 不依赖本机 locale 或固定 offset。有效改动在下一轮把 assembler、curation、tool bridge 与 provider/executor 整组替换；缺失、未知字段、类型/范围/关系或时区错误会在 raw、工具和 provider 边界前失败，旧对象不部分更新。修复文件后直接重试下一轮即可，无需迁移记忆。
 
-时间标记只作用于历史数据；当前输入、基础人格、状态人格和系统规则不标注。聊天中的 `memory_overview`、`long_term_memories`、`recent_records` 分别从空状态分段，因此三个非空区块各有自己的首标记。recent 使用 raw `created_at` 点时间；长期记忆和 coverage overview 对全部已验证 `source_refs` 求最早—最晚事件时间并显示 `[时间范围：… 至 …]`，不会把整理时间冒充发生时间。
+当前输入也复用同一个 annotator，并严格使用本轮已经建立的 provisional `RawRecord.created_at`；retry、恢复 pending、TUI 审批与实际发送不重新读取 wall clock。它的时间 marker 作为 `UNTRUSTED_DATA` 元数据放入可见边界，输入正文仍保持边界外的 `USER_INSTRUCTION`。基础人格、状态人格和系统规则不标注。聊天中的 `memory_overview`、`long_term_memories`、`recent_records` 分别从空状态分段，因此三个非空区块各有自己的首标记。recent 使用 raw `created_at` 点时间；长期记忆和 coverage overview 对全部已验证 `source_refs` 求最早—最晚事件时间并显示 `[时间范围：… 至 …]`，不会把整理时间冒充发生时间。
 
 记忆整理同样把 `batch_records`、`existing_memories`、`current_overview` 作为三个独立历史区块。每项正文仍是一行 canonical JSON，marker 只占前一行，不进入记录对象或 `memory_curation_v1` 输出 schema；批次元数据和输出格式指令不标注。构建器在模板展开时直接累计每个 marker/JSON 片段的绝对位置，因此即使不同区块含有重复正文，调试与审批仍能精确显示各自来源。
 
-当前共有七个日志区块：聊天的 `memory_overview`、`long_term_memories`、`recent_records`，整理的 `batch_records`、`existing_memories`、`current_overview`，以及当前轮 `tool_history`。工具调用批次以成功响应被网关接受的时刻为 EVENT，工具结果以校验、大小/安全检查和事务处理完成后的可发送时刻为 EVENT；这些进程内时间不写入 DTO JSON。每次续接从整轮未标注事件重建同一个 block，仍保持相邻 assistant(tool_calls)→tool、原 call id/name/arguments/tool_call_id 和 canonical result body。`memory_source_query` 直接返回完全不变，只有作为普通 tool message 回放时可在外层正文前出现 marker。
+当前共有八个时间化逻辑区块：聊天的 `memory_overview`、`long_term_memories`、`recent_records`、`current_input`，整理的 `batch_records`、`existing_memories`、`current_overview`，以及当前轮 `tool_history`。工具调用批次以成功响应被网关接受的时刻为 EVENT，工具结果以校验、大小/安全检查和事务处理完成后的可发送时刻为 EVENT；这些进程内时间不写入 DTO JSON。每次续接从整轮未标注事件重建同一个 block，仍保持相邻 assistant(tool_calls)→tool、原 call id/name/arguments/tool_call_id 和 canonical result body。`memory_source_query` 直接返回完全不变，只有作为普通 tool message 回放时可在外层正文前出现 marker。
 
 未来日志消费者只需提供有序原始 body、稳定 identity、真实来源与 EVENT/SOURCE_RANGE，再复用同一策略并把 fragments 映射为无重叠 spans；不得自行复制时间规则。调试开关只增加审批门禁，固定时钟下最终物化载荷逐字相同，界面看到的 marker 就是实际发送且已计入估算的 marker。
 
-标记与对应历史正文都保持 `UNTRUSTED_DATA`，并分别记录时间配置、长期实体及原始记录来源；overview、长期选择和 recent 预算都按最终含标记文本计算。来源缺失、摘要不符、coverage 不连续或时间无效会在 provider 前失败，不使用记忆 `created_at` 降级。通用合同保留 `[记录时间：…]` 供未来明确 schema/version 的适配器复用，但当前没有持久化 `RECORDED` 入口。标记仅在提示构建期生成，不写回 `data/memory/raw/*.jsonl` 或长期记忆文件，既有文件无需迁移。
+每个不可信逻辑块只在最终 provider 正文中出现一对内容绑定边界：`<<<UNTRUSTED_DATA_BEGIN block=… id=…>>>` 与匹配的 `<<<UNTRUSTED_DATA_END block=… id=…>>>`。历史、长期记忆、覆盖概览、整理输入以及每个工具事件都使用同一个 renderer；不会发送 provider 不支持的自定义字段，也不会逐条堆叠标签。system message 中 `chat.md`/`memory_curator.md` 与 `untrusted_memory_boundary.md` 虽共同发送，却各自保留真实 `ConfigSnapshot` asset/hash/revision 的精确 span；reload 后整组原子替换。边界、标记与历史正文都进入最终字符预算、token 估算和 provenance 校验。来源缺失、摘要不符、coverage 不连续或时间无效会在 provider 前失败，不使用记忆 `created_at` 降级。通用合同保留 `[记录时间：…]` 供未来明确 schema/version 的适配器复用，但当前没有持久化 `RECORDED` 入口。标记和边界仅在提示构建期生成，不写回 `data/memory/raw/*.jsonl` 或长期记忆文件，既有文件无需迁移。
 
 ## 记忆与安全
 

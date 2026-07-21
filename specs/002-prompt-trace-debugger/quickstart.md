@@ -67,6 +67,9 @@ CLI 会先运行不含正文的 TTY/Textual application-mode probe；stdin/stdou
    - 短期记录指向 raw segment 及稳定 record id；
    - 当前输入标为 `runtime:user_input`，不伪造文件路径；
    - messages、正文顺序和 tools 均完整可见。
+   - system message 中 persona 与 `untrusted_memory_boundary.md` 是两个独立精确 span；materialized payload 内每个不可信逻辑块真实包含一对匹配的 visible boundary。
+   - 来源详情分列 `来源数`、`类型`、`路径`、`source_id`、`producer`、`entity_ids`；`entity_ids` 是实体 UUID，不是聊天顺序。
+   - whitespace-only part 默认显示 `<换行 1>` 等紧凑摘要；按 `W` 可查看转义详情，复制文本仍无损。
 4. 按 `C` 或点击“复制框内全部内容”，核对剪贴板包含最终 provider 载荷、全部提示片段和来源；界面应继续等待决定，且 provider 发送次数仍为 0。
 5. 核对输入估算明细之和加协议开销等于输入总估算；峰值等于输入总估算加最大输出预留。
 6. 按 `A` 批准。TUI 必须在网络发送前退出并清除原文、来源和 presenter 引用，sender 只保留已批准的同一不可变载荷。
@@ -146,7 +149,7 @@ $env:NO_COLOR = "1"
 Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
 ```
 
-预期：无 ANSI 颜色，但调用、included/excluded/empty、来源类型、边界、缩进和操作含义仍完整。
+预期：无 ANSI 颜色或 Rich 样式 span，但调用、included/excluded/empty/unknown_source、trusted_instruction/user_instruction/untrusted_data、`message:N`、来源字段、边界、缩进和操作含义仍完整。启用颜色时 message index 使用确定性的低饱和基础色，同一历史 message 内按结构化 record 顺序 A/B 交错；颜色不进入复制文本、日志或 provider payload。80×24 下操作按钮、完整 trace 和滚动区域仍可访问。
 
 稳定色板为 config_file=cyan、data_file=green、runtime=yellow、generated=magenta；颜色不是唯一语义。`NO_COLOR`/`never`/终端不支持颜色只适用于 stdin/stdout 都是 TTY 的交互环境，输出重定向必须 fail closed。
 

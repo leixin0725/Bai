@@ -116,7 +116,7 @@ pytest tests/unit/test_temporal_annotation.py tests/unit/test_temporal_annotatio
 pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_temporal_chat_context.py tests/unit/test_temporal_prompt_budget.py -q
 ```
 
-验收时固定检查：密集消息只有首 marker；相邻 gap 恰好 30 分钟时新分段；连续短间隔在最近 marker 后恰好 120 分钟时刷新；跨 `Asia/Shanghai` 自然日和时间倒退时分段；同刻事件保持一段。输出使用完整日期、分钟和 offset。`current_input`、人格及状态指令保持无标记；原始 `role: content` 是 marker 后的逐字连续子串。
+验收时固定检查：密集消息只有首 marker；相邻 gap 恰好 30 分钟时新分段；连续短间隔在最近 marker 后恰好 120 分钟时刷新；跨 `Asia/Shanghai` 自然日和时间倒退时分段；同刻事件保持一段。输出使用完整日期、分钟和 offset。`current_input` 使用本轮 provisional USER record 的既定 `created_at`，其 marker 位于可见 untrusted boundary 内而正文保持 user instruction；人格及状态指令保持无标记。原始 `role: content` 是历史 marker 后的逐字连续子串。
 
 配置修改只在下一份完整快照边界生效，缺失或无效文件必须在请求前失败。生成 marker 不写入 raw/长期记忆；直接检查 `data/memory/` 构建前后字节可证明无持久化副作用。
 

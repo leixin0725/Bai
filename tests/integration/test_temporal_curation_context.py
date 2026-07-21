@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -14,6 +15,7 @@ from ruamel.yaml import YAML
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
     CompletionResult,
+    ConfigAsset,
     CoverageSpan,
     CreatedBy,
     CurationCheckpoint,
@@ -29,10 +31,15 @@ from bai_agent.domain.models import (
     SourceRelation,
     TemporalSegmentationPolicy,
     canonical_json,
+    content_hash,
+    thaw_json,
 )
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.curation import CurationPolicy, CurationService
 from bai_agent.memory.long_term import LongTermStore
+from bai_agent.model_calls.provenance import validate_provenance
+from bai_agent.prompting.boundaries import UntrustedBoundaryRenderer
+from bai_agent.providers.deepseek import DeepSeekProvider
 
 
 REVISION = "sha256:" + "1" * 64
@@ -133,6 +140,17 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     )
     gateway = CapturingGateway()
     template = "BATCH\n$batch_records\nMETA\n$batch_metadata\nEXISTING\n$existing_memories\nOVERVIEW\n$current_overview\nPERSONA\n$curator_persona\nBOUNDARY\n$untrusted_boundary\nSCHEMA\n$output_schema"
+    boundary_text = Path("config/prompts/untrusted_memory_boundary.md").read_text(encoding="utf-8")
+    renderer = UntrustedBoundaryRenderer(
+        ConfigAsset(
+            asset_id="prompt:untrusted_memory_boundary",
+            kind="prompt_template",
+            project_relative_path="prompts/untrusted_memory_boundary.md",
+            content=boundary_text,
+            content_sha256=content_hash(boundary_text),
+            revision=REVISION,
+        )
+    )
     service = CurationService(
         archive,
         store,
@@ -142,11 +160,16 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
         prompt_template=template,
         config_revision=REVISION,
         temporal_policy=_policy(),
+        boundary_renderer=renderer,
     )
     proposal = await service.propose(force=True)
     assert proposal is not None
     draft = gateway.calls[0]
     prompt = draft.request.messages[1].content
+    for block_name in ("batch_metadata", "batch_records", "existing_memories", "current_overview"):
+        assert prompt.count(f"<<<UNTRUSTED_DATA_BEGIN block={block_name} id=") == 1
+        assert prompt.count(f"<<<UNTRUSTED_DATA_END block={block_name} id=") == 1
+    assert renderer.instruction_text in draft.request.messages[0].content
     assert prompt.count("[时间：") >= 1
     assert prompt.count("[时间范围：") >= 2
     assert "META\n[时间" not in prompt
@@ -177,6 +200,12 @@ async def test_batch_existing_and_overview_are_independent_blocks_with_precise_p
     duplicate_parts = tuple(part for part in included if "重复正文" in part.content)
     assert len(duplicate_parts) == 2
     assert duplicate_parts[0].text_span != duplicate_parts[1].text_span
+    provider = DeepSeekProvider(SimpleNamespace(), {"model": "m", "stream": False})
+    prepared = provider.prepare(draft.model_copy(update={"call_sequence": 1}), 1)
+    payload = provider.materialize_sdk_kwargs(prepared)
+    materialized = thaw_json(payload.sdk_kwargs)
+    validate_provenance(materialized, prepared.parts)
+    assert "<<<UNTRUSTED_DATA_BEGIN block=batch_records id=" in materialized["messages"][1]["content"]
 
 
 @pytest.mark.asyncio

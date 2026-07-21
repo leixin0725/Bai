@@ -91,6 +91,7 @@ pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_tem
 预期：
 
 - `memory_overview`、`long_term_memories`、`recent_records` 三个非空区块各有自己的首 marker；区块间不共享 previous/last-marker 状态。
+- `current_input` 使用本轮 provisional USER record 的 `created_at`，retry/pending resume/TUI/sender 逐字复用；marker 为 untrusted 时间元数据，正文仍是 user instruction。
 - recent 使用每条 raw `created_at` 点时间；body 仍为既有 `role: content`。
 - 长期记忆和 overview 使用全部已验证 raw 来源的最早—最晚范围，而不是 YAML item 的整理时间。
 - 来源引用乱序、重复、范围重叠或端点相等时仍保持既有选择顺序；相等端点仍显示 `[时间范围：… 至 …]`。
@@ -114,6 +115,8 @@ pytest tests/integration/test_temporal_curation_context.py tests/integration/tes
 
 逐项 canonical JSON 的字段、转义和 curation proposal 输出 schema 必须与实现前一致；marker 不进入 JSON。重复 body/JSON 夹具仍能通过构建时记录的绝对 span 精确关联来源，不允许反向 `find()` 猜测。
 
+上述每个不可信变量以及 batch metadata 在最终 user content 中各由一对匹配的 `UNTRUSTED_DATA_BEGIN/END` 包围；curator persona 与 boundary instruction 位于 system，分别引用其真实配置资产。
+
 ## 6. 验证工具续接协议与事件时间
 
 ```bash
@@ -132,9 +135,11 @@ pytest tests/integration/test_temporal_tool_continuation.py tests/integration/te
 wire payload 必须仍满足：
 
 ```text
-assistant(content="[时间：...]\n<原正文>" 或仅 marker, tool_calls=[原结构])
-tool(content="<可选 marker>\n<原 canonical JSON>", tool_call_id="原 id")
+assistant(content="<<<UNTRUSTED_DATA_BEGIN ...>>>\n[时间：...]\n<原正文>\n<<<UNTRUSTED_DATA_END ...>>>", tool_calls=[原结构])
+tool(content="<<<UNTRUSTED_DATA_BEGIN ...>>>\n<可选 marker>\n<原 canonical JSON>\n<<<UNTRUSTED_DATA_END ...>>>", tool_call_id="原 id")
 ```
+
+每条 assistant/tool 协议事件的 content 外层还各有一对共享格式的 visible untrusted boundary；`tool_calls` 和 `tool_call_id` 字段不增加 provider 自定义 trust 字段。
 
 没有新增 role/message；call id/name/arguments/order、tool_call_id 与原 JSON body 逐字段/逐字不变。内部逻辑读取渲染前 `ToolResult`，不把带 marker content 当整串 JSON 解析。
 
@@ -142,6 +147,7 @@ tool(content="<可选 marker>\n<原 canonical JSON>", tool_call_id="原 id")
 
 ```bash
 pytest tests/unit/test_prompt_provenance.py tests/unit/test_context_estimation.py tests/unit/test_context_estimation_properties.py -q
+pytest tests/contract/test_visible_untrusted_boundaries.py tests/contract/test_prompt_approval_tui.py tests/contract/test_prompt_tui_presentation.py -q
 pytest tests/integration/test_prompt_debug_equivalence.py tests/integration/test_prompt_trace_actual_usage.py -q
 ```
 
@@ -153,6 +159,10 @@ pytest tests/integration/test_prompt_debug_equivalence.py tests/integration/test
 - DeepSeek 不再额外产生覆盖整个 content 的重复 part；part token + protocol overhead 守恒；
 - marker 在物化前已进入最终 payload，因此 estimator、TUI 和 sender 看到相同字符；
 - 固定 clock/input 下 debug on/off 的最终请求逐字一致，等待批准不会改变 marker。
+- system message 中 persona 文件与 `untrusted_memory_boundary.md` 各有独立、不重叠的 part/span，并使用当前 snapshot 的真实 hash/revision；配置 reload 后切换为新资产。
+- materialized provider payload 的每个不可信逻辑块都真实包含一对 block/id 匹配的可见边界，而不只是内部 trust metadata。
+- whitespace-only part 默认显示 `<换行 1>` 等摘要，按 `W` 展开、`C` 复制仍以转义形式无损；来源字段分列来源数/类型/路径/source_id/producer/entity_ids。
+- message index 使用确定性的低饱和基础色，历史 record 按结构化 part id A/B 交错；`color=never` 的 Rich `Text` 无样式 span/ANSI，80×24 下按钮和滚动 trace 可用。
 
 ## 8. 验证来源追溯工具保持不变
 
@@ -194,4 +204,4 @@ python -m pytest tests/integration/test_repository_secret_safety.py -q
 rg -n "history_timestamps|Asia/Shanghai|30|120|时间范围|memory_source" README.md specs/001-persistent-memory-agent specs/002-prompt-trace-debugger specs/003-timestamped-memory-context
 ```
 
-README、001 配置/模型工具/存储合同、001/002 quickstart、002 model-call contract 和本功能文档必须对默认值、七个逻辑区块、预算/来源、UTC 不迁移及来源工具排除给出一致说明。文档修改与对应重大实现处于同一原子提交；若现有 compatibility workflow 已执行所有新增非性能测试，可记录 workflow 修改为 N/A，否则同步新增命令。
+README、001 配置/模型工具/存储合同、001/002 quickstart、002 model-call contract 和本功能文档必须对默认值、八个时间化逻辑区块、visible untrusted boundary、预算/来源、UTC 不迁移及来源工具排除给出一致说明。文档修改与对应重大实现处于同一原子提交；若现有 compatibility workflow 已执行所有新增非性能测试，可记录 workflow 修改为 N/A，否则同步新增命令。

@@ -17,6 +17,7 @@ from bai_agent.domain.models import (
     TemporalSegmentationPolicy,
 )
 from bai_agent.memory.temporal import MemoryTemporalProjector
+from bai_agent.prompting.boundaries import UntrustedBoundaryRenderer
 from bai_agent.prompting.temporal import annotate_history
 
 
@@ -32,6 +33,7 @@ def validate_complete_coverage(
     *,
     curated_through: int,
     recent_records: Iterable[RawRecord],
+    current_input_record: RawRecord | None = None,
 ) -> CoverageResult:
     records = tuple(all_records)
     recent = tuple(recent_records)
@@ -51,13 +53,34 @@ def validate_complete_coverage(
             record = raw_by_sequence.get(sequence)
             if record is None or record.record_id != record_id or record.content_sha256 != digest:
                 raise BaiError("MEMORY_COVERAGE_GAP", "覆盖概览与原始记录不一致。")
-    expected_recent = tuple(item.record_id for item in records if item.global_sequence > curated_through)
+    current_id = current_input_record.record_id if current_input_record is not None else None
+    expected_recent = tuple(
+        item.record_id
+        for item in records
+        if item.global_sequence > curated_through and item.record_id != current_id
+    )
     actual_recent = tuple(item.record_id for item in recent)
     if actual_recent != expected_recent:
         raise BaiError("MEMORY_COVERAGE_GAP", "近期直接注入范围存在缺口或额外旧记录。")
     covered_range = (1, curated_through) if curated_through else ()
+    direct_records = tuple(
+        sorted(
+            (
+                *recent,
+                *(
+                    (current_input_record,)
+                    if current_input_record is not None
+                    and any(record.record_id == current_id for record in records)
+                    else ()
+                ),
+            ),
+            key=lambda item: item.global_sequence,
+        )
+    )
     direct_range = (
-        (recent[0].global_sequence, recent[-1].global_sequence) if recent else ()
+        (direct_records[0].global_sequence, direct_records[-1].global_sequence)
+        if direct_records
+        else ()
     )
     return CoverageResult(covered_range=covered_range, direct_range=direct_range)
 
@@ -81,6 +104,7 @@ def select_long_term(
     max_chars: int,
     temporal_projector: MemoryTemporalProjector | None = None,
     temporal_policy: TemporalSegmentationPolicy | None = None,
+    boundary_renderer: UntrustedBoundaryRenderer | None = None,
 ) -> tuple[LongTermMemoryItem, ...]:
     terms = set(re.findall(r"[\w\u4e00-\u9fff]+", query.casefold()))
 
@@ -100,7 +124,12 @@ def select_long_term(
         if temporal_projector is not None and temporal_policy is not None:
             candidate = (*selected, item)
             entries = tuple(temporal_projector.project_memory(value) for value in candidate)
-            size = len(annotate_history(entries, temporal_policy).text)
+            annotated_text = annotate_history(entries, temporal_policy).text
+            size = (
+                boundary_renderer.rendered_length("long_term_memories", annotated_text)
+                if boundary_renderer is not None
+                else len(annotated_text)
+            )
             if size > max_chars:
                 continue
             selected.append(item)

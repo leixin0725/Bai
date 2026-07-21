@@ -183,7 +183,7 @@ def startup_probe(config_dir: Path, data_dir: Path) -> dict[str, int]:
     )
     personas = PersonaPromptSet.from_snapshot(snapshot)
     assembler = PromptAssembler.mvp(
-        personas.trusted_chat_instruction,
+        personas.chat,
         personas.state_prompts(resolution.ordered_persona_ids),
     )
     recent = select_recent_complete_turns(

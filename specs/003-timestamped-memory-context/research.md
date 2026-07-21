@@ -66,11 +66,11 @@ split_on_local_date_change = true
 
 ## 7. 各逻辑区块的适配
 
-**Decision**: 以下七个区块分别从空状态调用同一 annotator：主聊天的 `memory_overview`、`long_term_memories`、`recent_records`；整理提示的 `batch_records`、`existing_memories`、`current_overview`；当前轮累计工具调用/结果历史。`current_input`、人格、系统规则、批次元数据与 output schema 不标注。整理历史采用“marker 行 + 单项 canonical JSON 行”的表示，保持字段和输出 `CurationProposal` schema 不变。
+**Decision**: 以下八个区块分别从空状态调用同一 annotator：主聊天的 `memory_overview`、`long_term_memories`、`recent_records`、`current_input`；整理提示的 `batch_records`、`existing_memories`、`current_overview`；当前轮累计工具调用/结果历史。`current_input` 使用本轮已建立 provisional `RawRecord.created_at`，其 marker 是 `UNTRUSTED_DATA` 元数据而正文保持 `USER_INSTRUCTION`；人格、系统规则、批次元数据正文与 output schema 不作为历史时间线。整理历史采用“marker 行 + 单项 canonical JSON 行”的表示，保持字段和输出 `CurationProposal` schema 不变。
 
 **Rationale**: 独立调用直接保证每个非空区块都有首 marker 且不跨区块泄漏状态。调用方保有正文序列化职责，通用模块无需理解 `role:` 文本、YAML memory 或 JSON curation schema。
 
-**Alternatives considered**: 一次请求共用全局时间线会让旧长期记忆影响近期聊天段落；把整个 curation JSON 数组外包一层 marker 无法逐项分段；标注 batch metadata/output schema 会把非日志指令误作历史。
+**Alternatives considered**: 一次请求共用全局时间线会让旧长期记忆影响近期聊天段落；把整个 curation JSON 数组外包一层 marker 无法逐项分段；在重试时读取 wall clock 会使审批与实发不一致；标注 batch metadata/output schema 正文会把非日志指令误作历史。
 
 ## 8. 工具调用与结果事件时间
 
@@ -100,7 +100,15 @@ split_on_local_date_change = true
 
 **Alternatives considered**: 超限时静默删除 marker 违反真实性；整段聚合来源无法关联单个 marker；反向搜索重复正文会误归因；保留重叠 whole-content part 会 double count；把配置来源标为 trusted instruction 会错误提升数据权限。
 
-## 11. 存储、来源工具、测试与文档边界
+## 11. 模型可见的不可信数据边界
+
+**Decision**: 内部 trust metadata 继续用于校验与 TUI，但不再把它当成模型可见边界。所有历史、长期记忆、覆盖概览、整理输入和工具事件在 provider 支持的 `content` 字段中按逻辑块加入一对 `UNTRUSTED_DATA_BEGIN/END`，block 与由完整正文派生的 id 必须匹配。system 中 persona 与边界说明共同发送，但分别由当前 `ConfigSnapshot` 的真实 asset/hash/revision 和独立 span 归因。
+
+**Rationale**: DeepSeek wire 只发送标准 role/content/tool 字段；共享 renderer 使 LLM、预算、estimator、provenance 和 TUI 面对同一结构，同时避免逐记录重复标签。内容绑定 id 让数据正文中的仿冒边界不能与应用生成的外层结构混淆。
+
+**Alternatives considered**: 只保留 `Message.trust`/`RequestPart.trust` 会使 LLM 看不到边界；给 provider 增加自定义 `trust` 字段不受支持；每条 record 独立包装会增加大量重复标签和视觉噪声；把 persona 与 boundary instruction 整段只归因到 persona 文件会产生错误溯源。
+
+## 12. 存储、来源工具、测试与文档边界
 
 **Decision**: 不修改 raw/long-term 持久化格式，不写回 marker，不迁移 UTC 时间；`src/bai_agent/tools/memory_source.py` 的输入、输出、分页、权限和返回 JSON 逐字保持。该工具作为工具历史返回模型时，只允许 controller 在外层 message content 前添加时间 marker，工具自身返回 body 仍是精确子串。分层测试覆盖算法/配置/投影/预算、聊天/整理/工具集成、wire/provenance/debug 回归、10k 性能和 Windows/Linux 时区；README 与 001/002/003 合同和 quickstart 随实现同步。
 

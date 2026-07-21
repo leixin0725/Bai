@@ -10,6 +10,7 @@ import pytest
 from bai_agent.domain.errors import BaiError
 from bai_agent.domain.models import (
     CreatedBy,
+    ConfigAsset,
     LongTermMemoryItem,
     MemoryKind,
     MemoryStatus,
@@ -22,11 +23,13 @@ from bai_agent.domain.models import (
     StateResolutionResult,
     TemporalSegmentationPolicy,
     TrustLevel,
+    content_hash,
 )
 from bai_agent.memory.selection import select_long_term
 from bai_agent.memory.temporal import MemoryTemporalProjector
 from bai_agent.prompting.temporal import annotate_history
 from bai_agent.prompting.assembler import PromptAssembler
+from bai_agent.prompting.boundaries import UntrustedBoundaryRenderer
 
 
 REVISION = "sha256:" + "1" * 64
@@ -48,7 +51,23 @@ def _assembler() -> PromptAssembler:
             producer="config_loader",
         ),
     )
-    return PromptAssembler.mvp("基础人格", ("状态人格",), temporal_policy=policy)
+    boundary_text = "可信边界说明"
+    renderer = UntrustedBoundaryRenderer(
+        ConfigAsset(
+            asset_id="prompt:untrusted_memory_boundary",
+            kind="prompt_template",
+            project_relative_path="prompts/untrusted_memory_boundary.md",
+            content=boundary_text,
+            content_sha256=content_hash(boundary_text),
+            revision=REVISION,
+        )
+    )
+    return PromptAssembler.mvp(
+        "基础人格",
+        ("状态人格",),
+        temporal_policy=policy,
+        boundary_renderer=renderer,
+    )
 
 
 def _record() -> RawRecord:
@@ -64,10 +83,23 @@ def _record() -> RawRecord:
     )
 
 
+def _current() -> RawRecord:
+    return RawRecord.create(
+        record_id="rec-00000000-0000-4000-8000-999999999999",
+        global_sequence=999,
+        turn_id="turn-00000000-0000-4000-8000-999999999999",
+        role=Role.USER,
+        content="问题",
+        created_at=datetime(2026, 7, 20, 3, tzinfo=timezone.utc),
+        state_id="default",
+        config_revision=REVISION,
+    )
+
+
 def _assemble(assembler: PromptAssembler, record: RawRecord, budget: int | None = None):
     return assembler.assemble(
         flow_id="flow",
-        turn_id="turn-current",
+        turn_id="turn-00000000-0000-4000-8000-999999999999",
         config_revision=REVISION,
         state_resolution=StateResolutionResult(
             state_id="default",
@@ -79,7 +111,7 @@ def _assemble(assembler: PromptAssembler, record: RawRecord, budget: int | None 
         memory_overview="[]",
         long_term_memories=(),
         recent_records=(record,),
-        current_input="问题",
+        current_input_record=_current(),
         budgets={} if budget is None else {"recent_chars": budget},
     )
 
@@ -157,12 +189,15 @@ def test_long_term_selection_uses_exact_annotated_increment_and_stably_skips_ove
         (projector.project_memory(first), projector.project_memory(third)),
         policy,
     )
+    renderer = assembler.boundary_renderer
+    assert renderer is not None
     selected = select_long_term(
         (first, oversized, third),
         "匹配",
-        max_chars=len(expected.text),
+        max_chars=renderer.rendered_length("long_term_memories", expected.text),
         temporal_projector=projector,
         temporal_policy=policy,
+        boundary_renderer=renderer,
     )
     assert selected == (first, third)
     assert len(annotate_history(tuple(projector.project_memory(item) for item in selected), policy).text) == len(expected.text)
@@ -190,7 +225,7 @@ def test_overview_and_long_term_overflow_never_remove_marker_or_source() -> None
     with pytest.raises(BaiError) as raised:
         assembler.assemble(
             flow_id="flow",
-            turn_id="turn-current",
+            turn_id="turn-00000000-0000-4000-8000-999999999999",
             config_revision=REVISION,
             state_resolution=StateResolutionResult(
                 state_id="default",
@@ -202,7 +237,7 @@ def test_overview_and_long_term_overflow_never_remove_marker_or_source() -> None
             memory_overview=overview,
             long_term_memories=(),
             recent_records=(),
-            current_input="问题",
+            current_input_record=_current(),
             all_raw_records=(record,),
             curated_through=1,
             budgets={"overview_chars": len("概览"), "long_term_chars": 100, "recent_chars": 100},
