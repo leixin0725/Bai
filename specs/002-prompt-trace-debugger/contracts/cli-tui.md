@@ -81,11 +81,11 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 └─────────────────────────────────────────────────────────────┘
 ```
 
-实际控件可按终端宽度纵向重排，但不得隐藏以下字段：
+实际控件可按终端宽度纵向重排。除下述 `W` 折叠模式外，不得隐藏以下字段：
 
 - turn/flow/call sequence/purpose/persona/state/provider/model/config revision/attempt/status；
 - 最终 provider payload 的全部提示承载字段；
-- included part 的正文、顺序、trust、来源数量和全部来源；
+- included part 的正文、顺序、trust 和来源数量；全部来源在展开模式及复制文本中可见；
 - excluded/empty/unknown_source 的状态与原因；
 - 输入总估算、每段估算、协议开销、最大输出预留、峰值、容量、占比、剩余和风险；
 - approve/reject 的明确后果。
@@ -95,7 +95,8 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 | Input | Semantic |
 |---|---|
 | `A` 或点击“批准并发送” | 仅在完整渲染/校验后 approve 当前 attempt |
-| `C` 或点击“复制框内全部内容” | 将“最终请求 / 来源”边框内的完整安全可见纯文本复制到终端剪贴板；不作决定、不发送、不关闭界面、不改变请求 |
+| `C` 或点击“复制框内全部内容” | 将“最终请求 / 来源”的完整安全审计纯文本（包括当前折叠项）复制到终端剪贴板；不作决定、不发送、不关闭界面、不改变请求 |
+| `W` | 在折叠模式（隐藏来源明细及整个 whitespace-only part）与完整展开模式之间切换；不改变复制文本或请求 |
 | `R`、`Esc` 或点击“拒绝并撤销整轮” | reject 当前 attempt，provider 不发送；fresh PREPARED 丢弃，resumed raw pending 安全截尾，随后返回聊天输入 |
 | `Ctrl+C` | 等同 reject 当前 attempt；完成 fresh PREPARED 或 resumed pending 丢弃后退出进程，退出码 130 |
 | EOF/终端丢失 | 不 approve；按 presentation failure 安全阻断并使事务恢复可收敛 |

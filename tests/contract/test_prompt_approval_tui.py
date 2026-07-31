@@ -72,7 +72,7 @@ async def test_many_usage_parts_stay_inside_scroll_box_at_80x24() -> None:
 
 
 @pytest.mark.asyncio
-async def test_whitespace_parts_are_hidden_by_default_expandable_and_copy_losslessly_at_80x24() -> None:
+async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_losslessly_at_80x24() -> None:
     adapter = FakeAdapter()
     draft = make_draft("A\nB")
     source = draft.parts[0].sources
@@ -123,10 +123,14 @@ async def test_whitespace_parts_are_hidden_by_default_expandable_and_copy_lossle
     assert separator_source_id in audit
     assert "\\n" in audit
     assert "来源数=1" in compact.plain
-    assert "类型=runtime" in compact.plain
-    assert "路径=无" in compact.plain
-    assert "source_id=input-1" in compact.plain
-    assert "entity_ids=turn-1" in compact.plain
+    assert "类型=runtime" not in compact.plain
+    assert "路径=无" not in compact.plain
+    assert "source_id=input-1" not in compact.plain
+    assert "entity_ids=turn-1" not in compact.plain
+    assert "类型=runtime" in audit
+    assert "路径=无" in audit
+    assert "source_id=input-1" in audit
+    assert "entity_ids=turn-1" in audit
     assert "entity_ids=来源关联的实体 UUID/标识，不是聊天顺序编号" in compact.plain
     assert "trusted_metadata=可信元数据" in compact.plain
     assert compact.spans == []
@@ -141,12 +145,14 @@ async def test_whitespace_parts_are_hidden_by_default_expandable_and_copy_lossle
         expanded = app.query_one("#trace").render().plain
         assert separator_part_id in expanded
         assert separator_source_id in expanded
+        assert "source_id=input-1" in expanded
         assert "\\n" in expanded
         await pilot.press("w")
         await pilot.pause()
         collapsed_again = app.query_one("#trace").render().plain
         assert separator_part_id not in collapsed_again
         assert separator_source_id not in collapsed_again
+        assert "source_id=input-1" not in collapsed_again
         await pilot.press("c")
         assert app._clipboard == audit
 

@@ -172,7 +172,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
     BINDINGS = [
         Binding("a", "approve", "批准并发送", priority=True),
         Binding("c", "copy_trace", "复制框内全部内容", priority=True),
-        Binding("w", "toggle_whitespace", "展开/折叠空白片段", priority=True),
+        Binding("w", "toggle_whitespace", "展开/折叠空白片段与来源", priority=True),
         Binding("r", "reject", "拒绝并撤销整轮", priority=True),
         Binding("escape", "reject", "拒绝", priority=True),
         Binding("ctrl+c", "interrupt", "拒绝并退出", priority=True),
@@ -292,7 +292,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
         record_ordinals = record_ordinals_for_parts(self.request.parts)
         for part in self.request.parts:
             whitespace_only = bool(part.content) and part.content.isspace()
-            # [2026-07-21] 折叠模式隐藏整个空白 part（含来源）；展开/复制仍保留完整审计块。
+            # [2026-07-21] 折叠模式隐藏整个空白 part，并隐藏其余 part 的来源明细；
+            # 展开/复制仍保留完整审计块。
             if whitespace_only and not expanded:
                 continue
             message_index = message_index_for_part(part)
@@ -308,22 +309,23 @@ class PromptApprovalApp(App[ApprovalDecision]):
             else:
                 visible_content = safe_terminal_text(part.content)
             rendered.append(visible_content, style=part_style)
-            for source_index, source in enumerate(part.sources, start=1):
-                location = source.project_relative_path or "无"
-                entity_ids = ",".join(source.entity_ids) or "无"
-                digest = source.content_sha256 or "无"
-                revision = source.revision or "无"
-                rendered.append(
-                    f"\n  来源 {source_index}\n"
-                    f"    类型={source.source_kind.value}\n"
-                    f"    路径={location}\n"
-                    f"    source_id={safe_terminal_text(source.source_id)}\n"
-                    f"    producer={safe_terminal_text(source.producer)}\n"
-                    f"    entity_ids={safe_terminal_text(entity_ids)}\n"
-                    f"    sha256={safe_terminal_text(digest)}\n"
-                    f"    revision={safe_terminal_text(revision)}",
-                    style=(f"dim {SOURCE_PALETTE[source.source_kind.value]}" if color_enabled else None),
-                )
+            if expanded:
+                for source_index, source in enumerate(part.sources, start=1):
+                    location = source.project_relative_path or "无"
+                    entity_ids = ",".join(source.entity_ids) or "无"
+                    digest = source.content_sha256 or "无"
+                    revision = source.revision or "无"
+                    rendered.append(
+                        f"\n  来源 {source_index}\n"
+                        f"    类型={source.source_kind.value}\n"
+                        f"    路径={location}\n"
+                        f"    source_id={safe_terminal_text(source.source_id)}\n"
+                        f"    producer={safe_terminal_text(source.producer)}\n"
+                        f"    entity_ids={safe_terminal_text(entity_ids)}\n"
+                        f"    sha256={safe_terminal_text(digest)}\n"
+                        f"    revision={safe_terminal_text(revision)}",
+                        style=(f"dim {SOURCE_PALETTE[source.source_kind.value]}" if color_enabled else None),
+                    )
             if part.exclusion_reason:
                 rendered.append(f"\n  原因 {part.exclusion_reason}")
         rendered.append("\n\n[上下文分段估算]\n", style=header_style)
@@ -368,7 +370,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.expand_whitespace = not self.expand_whitespace
         self.query_one("#trace", Static).update(self._trace_renderable())
         state = "已展开" if self.expand_whitespace else "已折叠"
-        self.notify(f"空白片段{state}", timeout=2)
+        self.notify(f"空白片段与来源{state}", timeout=2)
 
     def action_interrupt(self) -> None:
         self.interrupted = True
