@@ -77,11 +77,19 @@ class AgentApplication:
         self.config_dir = config_dir
         self.managed_provider = managed_provider
         self.debug_prompts = debug_prompts
+        self._config_reload_required = False
 
     def _reload_config(self) -> None:
-        fresh = load_config(self.config_dir, require_credentials=self.managed_provider)
-        if fresh.revision == self.snapshot.revision:
+        try:
+            fresh = load_config(self.config_dir, require_credentials=self.managed_provider)
+        except Exception:
+            self._config_reload_required = True
+            raise
+        if fresh.revision == self.snapshot.revision and not self._config_reload_required:
             return
+        # [2026-08-01] A failed reload must rebuild once after repair, even when
+        # the repaired files exactly match the last published revision.
+        self._config_reload_required = True
         settings = fresh.settings
         states_doc = settings["states.toml"]
         states = {
@@ -231,6 +239,7 @@ class AgentApplication:
         )
         self.controller = controller
         self.snapshot = fresh
+        self._config_reload_required = False
 
     async def run_turn(self, content: str, *, resume_pending: bool = False, turn_id: str | None = None) -> str:
         self._reload_config()

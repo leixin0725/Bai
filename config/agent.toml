@@ -29,7 +29,7 @@ segment_max_bytes = 1048576
 max_record_bytes = 262144
 
 [short_term]
-max_records = 48
+max_records = 24
 reserved_records = 8
 curation_batch_min_records = 8
 curation_batch_max_records = 24

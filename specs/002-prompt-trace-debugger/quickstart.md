@@ -16,7 +16,7 @@ python -m pip install -e ".[dev]"
 Windows 次要兼容环境：
 
 ```powershell
-Set-Location D:\SchoolWork\Self\Bai
+Set-Location D:\_Dev\Bai
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
