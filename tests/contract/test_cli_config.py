@@ -25,8 +25,12 @@ def test_config_validate_reports_complete_reference_graph(
     assert "你是 Bai" not in output
 
 
-def test_doctor_is_offline_and_actionable(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["--config-dir", "config", "--data-dir", "data/doctor-test", "doctor"]) == 0
+def test_doctor_is_offline_and_actionable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(
+        ["--config-dir", "config", "--data-dir", str(tmp_path / "doctor-data"), "doctor"]
+    ) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["network_probe"] is False
     assert payload["state"] == "default"

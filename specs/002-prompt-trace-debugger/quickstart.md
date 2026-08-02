@@ -4,19 +4,18 @@
 
 ## 1. 安装开发环境
 
-主要验收环境为原生 Ubuntu 24.04、Python 3.13/3.14；性能门禁固定使用 Python 3.13。Windows 11/PowerShell 仅做次要功能兼容验收，macOS 不在本功能范围内。
+主要验收环境为原生 Ubuntu 24.04、Python 3.12/3.13/3.14；性能门禁固定使用 Python 3.13。Windows 11/PowerShell 仅做次要功能兼容验收，macOS 不在本功能范围内。
 
 ```bash
-cd /path/to/Bai
-python3.13 -m venv .venv
+cd /path/to/bai-agent
+bash scripts/bootstrap-ubuntu.sh --dev
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
 ```
 
 Windows 次要兼容环境：
 
 ```powershell
-Set-Location D:\_Dev\Bai
+Set-Location path\to\bai-agent
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
@@ -25,7 +24,7 @@ python -m pip install -e ".[dev]"
 确认配置和 CLI 可加载：
 
 ```bash
-python -m bai_agent --config-dir config --data-dir data config validate
+DEEPSEEK_API_KEY=invalid-placeholder-only python -m bai_agent --config-dir config --data-dir data config validate
 python -m bai_agent --help
 python -m bai_agent chat --help
 ```
@@ -34,12 +33,12 @@ python -m bai_agent chat --help
 
 ## 2. 安全注入凭据并启动
 
-Linux 主要环境通过受控环境变量注入凭据并显式传递调试开关。以下代码块仅说明启动语法，使用明确无效占位符，不属于自动验收且不得向真实 DeepSeek API 发起请求；实际验收使用后续 fake provider 测试：
+Linux 主要环境可由 `start.sh` 隐藏读取凭据并显式传递调试开关。实际验收使用后续 fake provider 测试，不向真实 DeepSeek API 发起请求：
 
 ```bash
-export DEEPSEEK_API_KEY='invalid-example-only'
-python -m bai_agent --config-dir config --data-dir /tmp/bai-debug-acceptance chat --debug-prompts
-unset DEEPSEEK_API_KEY
+bash start.sh --debug-prompts
+bash start.sh --discard-pending
+bash start.sh --resume-pending --debug-prompts
 ```
 
 Windows 次要环境推荐沿用项目启动脚本的隐藏输入能力：

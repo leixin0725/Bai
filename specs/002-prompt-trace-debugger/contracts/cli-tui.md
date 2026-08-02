@@ -2,7 +2,7 @@
 
 ## 启动命令
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 python -m bai_agent --config-dir config --data-dir data chat --discard-pending
 python -m bai_agent --config-dir config --data-dir data chat --resume-pending --debug-prompts
@@ -11,8 +11,8 @@ python -m bai_agent --config-dir config --data-dir data chat --resume-pending --
 - `--debug-prompts` 仅属于 `chat` 子命令，只对当前进程有效。
 - 未提供参数时调试关闭；配置文件不得启用或记住该状态。
 - 进程运行中不提供切换命令；重启时必须重新显式传参。
-- `start.ps1` 若提供对应参数，只做安全透传，不把状态写入环境持久区或配置。
-- `--resume-pending` 与 `--discard-pending` 在 CLI 解析阶段互斥；`-ResumePending` 与 `-DiscardPending` 在 PowerShell 参数绑定阶段互斥。四个显式 pending 参数都可分别与对应 debug 参数组合。
+- Linux `start.sh` 和 Windows `start.ps1` 只做安全透传，不把状态写入环境持久区或配置。
+- `--resume-pending` 与 `--discard-pending` 在 CLI 解析阶段及 Bash 启动脚本中互斥；`-ResumePending` 与 `-DiscardPending` 在 PowerShell 参数绑定阶段互斥。显式 pending 参数都可分别与对应 debug 参数组合。
 
 ## Pending 启动策略
 

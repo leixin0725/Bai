@@ -7,7 +7,7 @@ name = "bai-agent"
 version = "0.1.0"
 description = "跨启动维护连续记忆的可扩展聊天 Agent"
 readme = "README.md"
-requires-python = ">=3.13,<3.15"
+requires-python = ">=3.12,<3.15"
 dependencies = [
   "filelock>=3.18,<4",
   "openai>=1.97,<3",

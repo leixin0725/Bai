@@ -20,7 +20,7 @@
 
 **Purpose**: 建立 Python 包、测试目录和仓库忽略边界，不实现业务行为。
 
-- [X] T001 在 `pyproject.toml` 定义 Python 3.13/3.14、`bai_agent` CLI 入口、运行依赖 `openai/pydantic/ruamel.yaml/filelock`、开发依赖 `pytest/pytest-asyncio/hypothesis/respx` 及 pytest markers
+- [X] T001 在 `pyproject.toml` 定义 Python 3.12/3.13/3.14、`bai_agent` CLI 入口、运行依赖 `openai/pydantic/ruamel.yaml/filelock`、开发依赖 `pytest/pytest-asyncio/hypothesis/respx` 及 pytest markers
 - [X] T002 [P] 按计划创建 `src/bai_agent/__init__.py`、`src/bai_agent/__main__.py` 与 `src/bai_agent/{domain,config,memory,prompting,providers,tools,states,runtime,security}/__init__.py`
 - [X] T003 [P] 在 `.gitignore` 忽略 `.env`、虚拟环境、`data/`、运行日志、临时原子写文件、覆盖率产物和 Python 缓存，同时保留 `config/` 可提交
 
@@ -229,7 +229,7 @@
 
 - [X] T099 [P] 在 `tests/performance/test_startup.py`、`tests/fixtures/performance.py` 与 `tests/performance/baselines/windows-reference.json` 生成 10,000 条永久原始记录（近期直接窗口保持配置上限）和 1,000 条长期记忆，在指定 Windows 参考环境执行至少 100 次全新进程启动；从进程创建计时到配置、原始索引、长期 YAML 与 MemoryCoverageOverview 可供首轮组装，记录 OS/CPU/内存/存储/Python/缓存策略并按 nearest-rank 计算 p95，断言不超过 3 秒且网络调用为 0
 - [X] T100 [P] 在 `tests/integration/test_full_acceptance.py` 汇总 SC-001—SC-017，明确覆盖 SC-003 中每条原始记录属于 coverage span 或近期直接窗口、SC-005 中 FakeProvider 捕获两份人格稳定标记、SC-009 中全部 tracked files/可达 Git 历史/生成制品/运行数据零凭据、SC-014 中 1,000 条长期记忆来源完整性，以及 100 轮/10 重启、窗口整理、人工维护、来源查询、状态和扩展端到端验收
-- [X] T101 [P] 在 `tests/integration/test_packaging.py` 与 `.github/workflows/compatibility.yml` 建立 Windows/Ubuntu/macOS × Python 3.13/3.14 的真实运行矩阵，逐项验证可安装包、`python -m bai_agent` 入口、权限结果归一化、本地路径/原子替换、UTF-8 行为和非 Windows 平台功能回归；3 秒性能门槛只在 T004 指定的 Windows 参考环境判定
+- [X] T101 [P] 在 `tests/integration/test_packaging.py` 与 `.github/workflows/compatibility.yml` 建立 Ubuntu/Windows × Python 3.12/3.13/3.14 的真实运行矩阵，逐项验证可安装包、`python -m bai_agent` 入口、权限结果归一化、本地路径/原子替换、UTF-8 行为和非 Windows 平台功能回归；3 秒性能门槛只在 T004 指定的 Windows 参考环境判定，macOS 不在支持范围
 - [X] T102 根据实际命令和结果更新 `README.md` 与 `specs/001-persistent-memory-agent/quickstart.md`，包含配置、外部凭据注入、聊天、pending 恢复、人工维护、MemoryCoverageOverview/近期窗口完整覆盖、来源查询、备份、权限判定、性能复现实验和三平台矩阵，并链接 `docs/security-incident-response.md` 的全仓库泄露处置流程
 - [X] T103 审计 `src/bai_agent/` 中模块边界、持久化不变量、安全门禁、MemoryCoverageOverview 和非直观恢复分支的简体中文注释，补充 `[2026-07-19]` 或当前版本痕迹且不改写仍准确的既有注释
 - [X] T104 运行完整 `pytest`、T099 的 Windows 参考性能 marker、`.github/workflows/compatibility.yml` 三平台矩阵、`python -m bai_agent config validate --config-dir config`、隔离数据上的 `memory validate`、`tests/integration/test_repository_secret_safety.py` 与 `python -m bai_agent security incident check`；仅暂存 `src/bai_agent/`、`config/`、`tests/`、`.github/workflows/compatibility.yml`、`docs/`、`README.md`、`pyproject.toml` 与本功能文档，执行 `git diff --cached --check`，复核新增/更新注释均为简体中文且带日期/版本痕迹，并用 `git diff --cached --name-only` 与 `git status --short` 排除无关文件且安全门禁未处于阻塞状态后创建最终原子提交

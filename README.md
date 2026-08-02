@@ -14,44 +14,45 @@ Bai Agent 是一个 Python 单用户聊天 Agent。它不创建或切换“对�
 
 ## 安装
 
-需要 Python 3.13 或 3.14：
+主要开发和部署环境是 Ubuntu 24.04，支持 Python 3.12、3.13 或 3.14。Ubuntu 24.04 的系统 Python 3.12 可以直接使用：
 
-```powershell
-py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+```bash
+sudo apt-get update
+sudo apt-get install -y python3 python3-venv git
+bash scripts/bootstrap-ubuntu.sh --dev
 ```
 
-所有提示词和可变参数都在 `config/`。DeepSeek 凭据只通过外部秘密管理器或进程环境变量 `DEEPSEEK_API_KEY` 注入，不要写入配置、命令历史、人格或记忆文件。
+不需要开发/测试依赖的运行机器可省略 `--dev`。完整的 Ubuntu 迁移、部署、升级和备份方法见 [Ubuntu 部署手册](docs/ubuntu-deployment.md)。所有提示词和可变参数都在 `config/`。DeepSeek 凭据只通过外部秘密管理器、进程环境变量 `DEEPSEEK_API_KEY` 或启动脚本的隐藏输入注入，不要写入配置、命令历史、人格或记忆文件。
 
-```powershell
-python -m bai_agent config validate --config-dir config
-python -m bai_agent --config-dir config --data-dir data doctor
-python -m bai_agent --config-dir config --data-dir data chat
+```bash
+DEEPSEEK_API_KEY=invalid-placeholder-only .venv/bin/python -m bai_agent config validate --config-dir config
+.venv/bin/python -m bai_agent --config-dir config --data-dir data doctor
+bash start.sh
 ```
 
 普通启动发现合法尾部 USER pending 时，会只丢弃该未完成轮次并直接等待新输入；不会重发旧正文，也不会删除此前完整聊天或长期记忆。只有确认重试同一轮时显式执行：
 
-```powershell
-python -m bai_agent --config-dir config --data-dir data chat --resume-pending
+```bash
+bash start.sh --resume-pending
 ```
 
 也可显式表达丢弃意图；没有 pending 时三种启动方式都安全进入新输入：
 
-```powershell
-python -m bai_agent --config-dir config --data-dir data chat --discard-pending
-.\start.ps1 -ResumePending
-.\start.ps1 -DiscardPending -DebugPrompts
+```bash
+bash start.sh --discard-pending
+bash start.sh --resume-pending --debug-prompts
 ```
 
 resume 与 discard 参数互斥；`--resume-pending` 是唯一允许重发旧 pending 内容的方式。丢弃只允许原子截去 raw archive 最末尾的未配对 USER，完整 USER/ASSISTANT 轮次继续永久不可删除。
+
+Windows 仅作为次要兼容环境，仍可使用 `start.ps1`；新开发、测试和发布应在 Linux 文件系统内完成。
 
 ## 提示词调试批准
 
 仅在本地交互式 TTY 中按当前进程启用：
 
 ```bash
-python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
+.venv/bin/python -m bai_agent --config-dir config --data-dir data chat --debug-prompts
 ```
 
 每个聊天、记忆整理、工具续接与 provider retry 都通过唯一 `ModelCallGateway`，在 DeepSeek `prepare()` 和唯一 `materialize_sdk_kwargs()` 后展示最终模型可见字段、完整正文及 `[config_file]`、`[data_file]`、`[runtime]`、`[generated]` 来源。界面会提醒私人记忆只在本机临时显示；按 `C` 或点击“复制框内全部内容”可复制最终载荷、提示片段和来源，且不会作出批准决定；按 `A` 逐请求批准，按 `R`/`Esc` 明确拒绝并无痕撤销整轮。批准绑定 call、attempt 与物化载荷摘要，不修改请求；批准后、网络发送前 TUI 清除正文和来源，`send_once()` 无论成功或失败都在 `finally` 释放 sender 载荷。
@@ -90,12 +91,12 @@ TUI 的来源详情明确分列 `来源数`、`类型`、`路径`、`source_id`�
 
 运行数据默认位于 `data/memory/`：`raw/*.jsonl` 中已完成 USER/ASSISTANT 轮次不可变；唯一未配对的合法尾部 USER 是可放弃的未完成轮次。`long_term.yaml` 是可人工维护的长期记忆、来源索引、整理前沿和覆盖概览的共同事实来源。修改或恢复备份后先执行：
 
-```powershell
-python -m bai_agent --config-dir config --data-dir data memory validate
-python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
-python -m bai_agent --config-dir config --data-dir data memory reset long-term
-python -m bai_agent --config-dir config --data-dir data memory reset all
-python -m bai_agent --data-dir data security incident check
+```bash
+.venv/bin/python -m bai_agent --config-dir config --data-dir data memory validate
+.venv/bin/python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
+.venv/bin/python -m bai_agent --config-dir config --data-dir data memory reset long-term
+.venv/bin/python -m bai_agent --config-dir config --data-dir data memory reset all
+.venv/bin/python -m bai_agent --data-dir data security incident check
 ```
 
 `memory reset long-term` 保留永久原始聊天和近期窗口，只清空长期派生正文；`memory reset all` 清空全部聊天与长期记忆并恢复首次启动状态。两条命令立即执行且不可撤销，运行前必须先关闭聊天进程；安全事件状态不会随记忆重置而删除。
@@ -112,13 +113,13 @@ python -m bai_agent --data-dir data security incident check
 
 ## 验证
 
-```powershell
-pytest
-python -m bai_agent config validate --config-dir config
-python -m bai_agent --config-dir config --data-dir .tmp\validation memory validate
-python -m bai_agent --data-dir .tmp\validation security incident check
+```bash
+.venv/bin/python -m pytest
+.venv/bin/python -m bai_agent config validate --config-dir config
+.venv/bin/python -m bai_agent --config-dir config --data-dir .tmp/validation memory validate
+.venv/bin/python -m bai_agent --data-dir .tmp/validation security incident check
 ```
 
-Ubuntu 24.04 × Python 3.13/3.14 的主要功能矩阵和 Windows 次要兼容矩阵在 `.github/workflows/compatibility.yml`；macOS 不在支持范围。提示 TUI 的 500 ms 强制性能门禁只在 Ubuntu 24.04/Python 3.13 固定环境运行，Windows 仅做功能验收；详细安装、人工维护、备份、来源查询和性能复现实验见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
+Ubuntu 24.04 × Python 3.12/3.13/3.14 的主要功能矩阵和 Windows 次要兼容矩阵在 `.github/workflows/compatibility.yml`；macOS 不在支持范围。提示 TUI 的 500 ms 强制性能门禁只在 Ubuntu 24.04/Python 3.13 固定环境运行，Windows 仅做功能验收；详细安装、人工维护、备份、来源查询和性能复现实验见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
 
 > [2026-07-19] 本文与 `specs/001-persistent-memory-agent/` 的规格、计划、契约和验收任务同步。

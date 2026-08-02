@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.13', '3.14']
+        python: ['3.12', '3.13', '3.14']
     steps:
       # [2026-07-20] 原生 Ubuntu 24.04 是主要功能矩阵；完整历史供凭据扫描使用。
       - uses: actions/checkout@v7
@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.13', '3.14']
+        python: ['3.12', '3.13', '3.14']
     steps:
       # [2026-07-20] Windows 只承担次要功能兼容，不执行 500ms 强制性能门禁。
       - uses: actions/checkout@v7

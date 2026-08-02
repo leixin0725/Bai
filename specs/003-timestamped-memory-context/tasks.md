@@ -177,7 +177,7 @@ description: "智能历史时间段标注的依赖有序实现任务"
 - [X] T061 [P] 扩展 `tests/integration/test_repository_secret_safety.py` 与 `tests/security_scanner.py`，确认时间配置、marker 来源、错误、debug payload、测试夹具、工作树和可达 Git 历史不含可用凭据或新增持久 prompt trace
 - [X] T062 审核 `src/bai_agent/` 本功能新增/更新注释全部为带日期/版本的简体中文并说明模块边界、时间真实性、配置原子性和工具协议不变量；仅在失真时修改既有注释，并在 `specs/003-timestamped-memory-context/tasks.md` 记录修正或 N/A 理由
 - [X] T063 为 DR-001—DR-005/SC-009 逐项核对 `README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/configuration.md,contracts/model-and-tools.md,contracts/storage.md}`、`specs/002-prompt-trace-debugger/{quickstart.md,contracts/model-call.md}` 与 `specs/003-timestamped-memory-context/{spec.md,plan.md,research.md,data-model.md,contracts/,quickstart.md,tasks.md}` 的默认值、八 block、示例、链接、UTC/迁移、来源工具排除和验证命令一致性
-- [X] T064 检查 `.github/workflows/compatibility.yml` 是否已在 Ubuntu 24.04/Python 3.13/3.14 与 Windows 功能矩阵运行新增非性能测试；缺失时在该文件补齐，已覆盖时在 `specs/003-timestamped-memory-context/tasks.md` 记录 `N/A` 理由，不把 1 秒强制性能门禁迁移到 Windows
+- [X] T064 检查 `.github/workflows/compatibility.yml` 是否已在 Ubuntu 24.04/Python 3.12/3.13/3.14 与 Windows 功能矩阵运行新增非性能测试；缺失时在该文件补齐，已覆盖时在 `specs/003-timestamped-memory-context/tasks.md` 记录 `N/A` 理由，不把 1 秒强制性能门禁迁移到 Windows
 - [X] T065 按 `specs/003-timestamped-memory-context/quickstart.md` 执行全部定向命令、`pytest -m "not performance" -q`、`pytest tests/performance/test_temporal_annotation_scale.py -q -s`、适用现有 performance/fault-injection 回归、配置/文档链接/占位符/凭据扫描和 `git diff --check`；在 `specs/003-timestamped-memory-context/tasks.md` 记录 FR-001—FR-026、BR-001—BR-010、DR-001—DR-005、SC-001—SC-009 闭环并通过 Git 扩展原子提交最终测试、注释、workflow（如需）和文档审计变更
 
 ---

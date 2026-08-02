@@ -27,7 +27,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "compatibility.yml"
 
 def test_installed_package_metadata_and_module_entry(tmp_path: Path) -> None:
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert metadata["project"]["requires-python"] == ">=3.13,<3.15"
+    assert metadata["project"]["requires-python"] == ">=3.12,<3.15"
     assert version("bai-agent") == metadata["project"]["version"]
     help_result = subprocess.run(
         [sys.executable, "-m", "bai_agent", "--help"],
@@ -95,6 +95,7 @@ def test_compatibility_workflow_covers_supported_matrix() -> None:
     assert "macos-latest" not in workflow
     assert "'3.13'" in workflow
     assert "'3.14'" in workflow
+    assert "'3.12'" in workflow
     assert "actions/checkout@v7" in workflow
     assert "actions/setup-python@v6" in workflow
     assert 'pytest -m "not performance"' in workflow

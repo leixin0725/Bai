@@ -24,7 +24,7 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 
 **Purpose**: 引入唯一的新运行时依赖并建立模块目录；与 Phase 2 合并为第一个重大修改提交。
 
-- [X] T001 在 `pyproject.toml` 增加 Textual `>=8.2,<9` 兼容范围，确认 Python 3.13/3.14 支持且不引入第二套 TUI 框架；若要求可复现锁定则在同文件记录项目采用范围约束而非虚构 lockfile
+- [X] T001 在 `pyproject.toml` 增加 Textual `>=8.2,<9` 兼容范围，确认 Python 3.12/3.13/3.14 支持且不引入第二套 TUI 框架；若要求可复现锁定则在同文件记录项目采用范围约束而非虚构 lockfile
 - [X] T002 [P] 创建 `src/bai_agent/model_calls/__init__.py` 与 `src/bai_agent/debug/__init__.py`，只导出稳定公共入口并以 `[2026-07-20]` zh-CN 模块注释说明职责边界
 
 ---

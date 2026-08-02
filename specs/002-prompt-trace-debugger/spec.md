@@ -177,7 +177,7 @@
 - **FR-032**: 已批准请求发生普通 provider 或网络失败且不再重试时，系统 MUST 将当前事务持久转换为 `READY_PENDING`，幂等发布且仅发布一条 USER pending；只有显式 `--resume-pending` 才允许恢复并重发该内容，下一次未指定恢复参数的默认启动或显式 `--discard-pending` MUST 原子丢弃该合法尾部 pending 后进入新输入；维护者明确拒绝 MUST NOT 形成 pending。
 - **FR-033**: 当前工具注册表 MUST 只声明并执行只读工具；未来具有写副作用的工具在可拒绝轮次中 MUST 提供可持久恢复的 `prepare/commit/rollback` 或明确补偿契约，否则系统 MUST 在任何副作用发生前拒绝执行。
 - **FR-034**: chat 与 memory curator profile MUST 从 `deepseek-chat` 迁移到 `deepseek-v4-flash`，保持 `thinking_enabled=false`、`max_output_tokens=8192` 及各 profile 现有 temperature、tools、structured-output 等生成参数不变；每个初始、重试和工具续接请求 MUST 在唯一物化载荷中显式发送 `thinking.type=disabled`，不得依赖 V4 默认思考模式；provider 能力元数据 MUST 记录 1,000,000 token context 和 384,000 token 输出上限。
-- **FR-035**: `chat` MUST 提供互斥的 `--resume-pending` 与 `--discard-pending`；`start.ps1` MUST 提供互斥的 `-ResumePending` 与 `-DiscardPending`，且两者均可与 `-DebugPrompts` 组合。无 pending 时三种启动模式均 MUST 安全进入新输入，不得调用恢复发送。
+- **FR-035**: `chat` MUST 提供互斥的 `--resume-pending` 与 `--discard-pending`；Linux `start.sh` MUST 透传对应长参数，Windows `start.ps1` MUST 提供互斥的 `-ResumePending` 与 `-DiscardPending`，且两种入口均可与各自 debug 参数组合。无 pending 时三种启动模式均 MUST 安全进入新输入，不得调用恢复发送。
 - **FR-036**: pending 丢弃 MUST 只允许删除 raw archive 最末尾、角色为 USER、无对应 ASSISTANT 且未进入长期记忆、来源索引、coverage 或 curation frontier 的未完成轮次；MUST 保持此前完整轮次、全局 sequence 连续性、分段 JSONL、内容哈希和其他用户数据不变，并使用现有 WriterLease、私有权限与原子替换机制使崩溃后只可能保留完整旧状态或完整新状态。
 - **FR-037**: fresh 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C MUST 丢弃 PREPARED；恢复既有 pending 的调试轮次遇到相同明确拒绝时 MUST 通过受保护的尾部丢弃删除 raw pending。R、Esc 和拒绝按钮返回输入界面，Ctrl+C 完成丢弃后 MUST 以 130 退出；EOF、终端丢失或 presentation failure MUST 保持零发送且不得伪装成批准。
 - **FR-038**: 等待批准的 TUI MUST 提供“复制框内全部内容”按钮和 `C` 快捷键，把最终 provider 载荷、全部提示片段及来源按当前安全可见文本完整复制到终端剪贴板；复制 MUST NOT 批准、拒绝、发送、关闭界面、改变请求或在应用内创建持久 trace，完成通知 MUST NOT 回显正文。

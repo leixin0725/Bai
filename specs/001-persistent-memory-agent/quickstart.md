@@ -4,25 +4,23 @@
 
 ## 1. 开发环境
 
-Python 3.13/3.14 均受支持。PowerShell：
-
-```powershell
-py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-```
-
-原生 Linux（主要支持环境；macOS 不在范围）：
+Ubuntu 24.04 是主要环境，Python 3.12/3.13/3.14 均受支持。推荐使用仓库内引导脚本：
 
 ```bash
-python3.13 -m venv .venv
+sudo apt-get install -y python3 python3-venv git
+bash scripts/bootstrap-ubuntu.sh --dev
+```
+
+等价的手动安装方式：
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 ```
 
-依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。
+Windows/PowerShell 只承担次要兼容验收；macOS 不在支持范围。依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。跨 Ubuntu 机器部署和升级见[部署手册](../../docs/ubuntu-deployment.md)。
 
 ## 2. 配置与外部凭据
 
@@ -44,7 +42,7 @@ config/prompts/*.md               # 带变量声明的提示模板
 
 注入后验证引用图：
 
-```powershell
+```bash
 python -m bai_agent config validate --config-dir config
 python -m bai_agent --config-dir config --data-dir data doctor
 ```
@@ -53,7 +51,7 @@ python -m bai_agent --config-dir config --data-dir data doctor
 
 ## 3. 聊天与 pending 恢复
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data chat
 ```
 
@@ -61,13 +59,13 @@ python -m bai_agent --config-dir config --data-dir data chat
 
 模型失败时，用户输入仍保留为单条 pending turn。普通启动会原子丢弃该尾部 pending 并进入新输入；确认再次调用模型时显式执行：
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data chat --resume-pending
 ```
 
 该命令复用原 `turn_id`，不会重复追加用户记录。也可显式丢弃后进入新输入：
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data chat --discard-pending
 ```
 
@@ -124,13 +122,12 @@ pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_tem
 
 若 reload 报错，先保留当前进程与记忆文件，修复错误中点名的 `history_timestamps.toml` 字段，再离线验证并重试下一轮；不需要重置或迁移 raw/YAML。验证只检查凭据环境变量是否存在，可使用明确无效的测试占位值，不会发起网络请求：
 
-```powershell
-$env:DEEPSEEK_API_KEY = "invalid-placeholder-only"
-python -m bai_agent config validate --config-dir config
+```bash
+DEEPSEEK_API_KEY=invalid-placeholder-only python -m bai_agent config validate --config-dir config
 pytest tests/integration/test_temporal_config_reload.py tests/integration/test_packaging.py -q
 ```
 
-POSIX shell 对应使用 `DEEPSEEK_API_KEY=invalid-placeholder-only python -m bai_agent config validate --config-dir config`。项目依赖 `tzdata>=2026.3`，Windows 无系统 IANA 数据库时也必须把固定 UTC instant 转成与 Ubuntu 相同的 `Asia/Shanghai` 日期、分钟和 `+08:00`。
+项目依赖 `tzdata>=2026.3`，Windows 无系统 IANA 数据库时也必须把固定 UTC instant 转成与 Ubuntu 相同的 `Asia/Shanghai` 日期、分钟和 `+08:00`。
 
 ## 4. 记忆组织与完整覆盖
 
@@ -145,7 +142,7 @@ POSIX shell 对应使用 `DEEPSEEK_API_KEY=invalid-placeholder-only python -m ba
 
 检查权威记录、来源和覆盖：
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data memory validate
 ```
 
@@ -172,7 +169,7 @@ pytest tests/integration/test_temporal_chat_context.py tests/integration/test_lo
 
 `memory_curation_v2` 只接受根字段 `memory_candidates` 与 `overview`；每个候选只含五类 `kind`、忠实正文 `text` 和非空 `rN` 来源别名 `sources`。应用在本地严格校验别名并解析到真实 `record_id`，自动把整个批次附加到 overview coverage，再从 raw 快照计算来源 hash 和最终持久化索引。空候选仍必须给出简洁概览。旧 YAML 中 `fact/preference/constraint/task` 可继续读取，并在后续写入时规范为 `user/rule/else`，无需重置原始记忆。
 
-```powershell
+```bash
 pytest tests/integration/test_temporal_curation_context.py tests/integration/test_curation_workflow.py tests/integration/test_curation_transaction_proposal.py -q
 pytest tests/unit/test_prompt_provenance.py tests/unit/test_context_estimation.py tests/unit/test_context_estimation_properties.py -q
 ```
@@ -183,7 +180,7 @@ pytest tests/unit/test_prompt_provenance.py tests/unit/test_context_estimation.p
 
 工具调用批次使用成功模型响应的接受时刻，工具结果使用结果已可发送的完成时刻。运行时 metadata 不进入 DTO/canonical JSON；模型侧仍是相邻的 `assistant(tool_calls)`→`tool(tool_call_id)`，marker 只位于各自 `content` 前。多轮 continuation 每次整体重建同一个 `tool_history`，不会把上一轮已经标注的字符串再次标注。
 
-```powershell
+```bash
 pytest tests/contract/test_temporal_tool_protocol.py tests/integration/test_temporal_tool_continuation.py -q
 pytest tests/contract/test_deepseek_tool_calls.py tests/integration/test_prompt_debug_equivalence.py tests/unit/test_prompt_provenance.py -q
 pytest tests/contract/test_memory_source_tool.py tests/contract/test_prompt_temporal_context.py -q
@@ -195,7 +192,7 @@ pytest tests/contract/test_memory_source_tool.py tests/contract/test_prompt_temp
 
 从 `long_term.yaml` 选择 `memory_id`：
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
 ```
 
@@ -205,7 +202,7 @@ python -m bai_agent --config-dir config --data-dir data memory source mem-UUID
 
 重置命令不调用 Provider，也不需要 API Key。先停止 Agent，再按需要执行：
 
-```powershell
+```bash
 # [2026-07-19] 保留全部原始聊天和近期直接窗口，只清空长期派生记忆。
 python -m bai_agent --config-dir config --data-dir data memory reset long-term
 
@@ -230,7 +227,7 @@ python -m bai_agent --config-dir config --data-dir data memory reset all
 
 恢复备份时同样停止 Agent、整体恢复 `data/memory/`，并运行：
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data memory validate
 python -m bai_agent --config-dir config --data-dir data doctor
 ```
@@ -251,15 +248,15 @@ DeepSeek 通过 Provider-neutral DTO 接入。新增供应商时实现 `ModelPro
 
 默认本地门禁不需要真实 Provider 调用：
 
-```powershell
+```bash
 pytest
-pytest tests\unit tests\contract
-pytest tests\integration tests\fault_injection
-python -m bai_agent --data-dir .tmp\validation security incident check
+pytest tests/unit tests/contract
+pytest tests/integration tests/fault_injection
+python -m bai_agent --data-dir .tmp/validation security incident check
 git diff --check
 ```
 
-`.github/workflows/compatibility.yml` 在固定 Ubuntu 24.04 上以 Python 3.13/3.14 运行主要功能门禁，并在 Windows runner 上运行次要兼容门禁；macOS 不在范围。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
+`.github/workflows/compatibility.yml` 在固定 Ubuntu 24.04 上以 Python 3.12/3.13/3.14 运行主要功能门禁，并在 Windows runner 上运行次要兼容门禁；macOS 不在范围。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
 
 ## 10. Ubuntu 24.04 提示 TUI 性能复现
 

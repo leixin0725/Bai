@@ -28,7 +28,7 @@
 
 **Documentation Impact**: 更新 `README.md`（覆盖范围、默认稀疏规则、配置入口及来源工具不变）；更新 `specs/001-persistent-memory-agent/quickstart.md` 与 `contracts/{configuration,model-and-tools,storage}.md`（配置字段、提示合同、UTC/来源范围/无迁移语义）；更新 `specs/002-prompt-trace-debugger/quickstart.md` 与 `contracts/model-call.md`（marker/body span、预算和调试所见即所发）；维护本功能的 `research.md`、`data-model.md`、`contracts/`、`quickstart.md`。通过相对链接检查、默认值/消费者清单搜索、配置/合同/集成/性能测试验证，并与对应重大代码变更同一提交。`.github/workflows/compatibility.yml` 仅在新增命令未被现有 Ubuntu/Windows pytest 步骤覆盖时同步，否则在实现审计记录 N/A 理由。
 
-**Target Platform**: 原生 Ubuntu 24.04、Python 3.13/3.14 为主要支持与 1 秒性能门禁；Windows 11/PowerShell 为次要功能兼容平台并验证 `tzdata` 后备；macOS 延续现有项目范围，不纳入本功能支持。
+**Target Platform**: 原生 Ubuntu 24.04、Python 3.12/3.13/3.14 为主要支持环境，1 秒性能门禁固定在 Python 3.13；Windows 11/PowerShell 为次要功能兼容平台并验证 `tzdata` 后备；macOS 延续现有项目范围，不纳入本功能支持。
 
 **Project Type**: 单体 Python CLI 应用，沿用领域模型、应用编排、端口/适配器和文件存储分层。
 
