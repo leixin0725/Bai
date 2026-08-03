@@ -1,4 +1,4 @@
-# Bai WSL 迁移记录（2026-08-02）
+# Bai WSL 迁移记录（2026-08-03）
 
 本文记录 Bai Agent 迁移到 Ubuntu WSL 后的权威位置、数据完整性证据、Linux 适配内容和复验方法。后续开发以 Linux 工作树为准。
 
@@ -6,8 +6,9 @@
 
 | 项目 | 结果 |
 | --- | --- |
-| Linux 项目根目录 | `/home/leixin/Dev_project` |
-| Windows 文件管理器入口 | `\\wsl.localhost\Ubuntu\home\leixin\Dev_project` |
+| Linux 项目根目录 | `/home/leixin/Dev_project/Bai` |
+| Windows 文件管理器入口 | `\\wsl.localhost\Ubuntu\home\leixin\Dev_project\Bai` |
+| 父目录布局 | `Bai/` 与 `qqbot/` 并列，父目录没有散落的 Bai 文件 |
 | 运行用户 | `leixin` |
 | 操作系统 | Ubuntu 24.04.4 LTS |
 | Python | 3.12.3，项目支持 3.12/3.13/3.14 |
@@ -52,7 +53,7 @@ direct_range=21..34
 迁移后的 Ubuntu 原生 `.venv` 执行全量离线测试：
 
 ```text
-357 passed, 3 skipped in 40.83s
+357 passed, 3 skipped in 41.02s
 ```
 
 三项跳过均为预期平台门禁：Windows PowerShell 参数绑定、Ubuntu/Python 3.13 专属 TUI 性能门禁、显式启用的 Windows 启动性能参考。以下检查也已通过：
@@ -70,7 +71,7 @@ direct_range=21..34
 在 WSL 终端中：
 
 ```bash
-cd /home/leixin/Dev_project
+cd /home/leixin/Dev_project/Bai
 bash scripts/bootstrap-ubuntu.sh --dev
 DEEPSEEK_API_KEY=invalid-placeholder-only .venv/bin/python -m bai_agent config validate --config-dir config
 .venv/bin/python -m bai_agent --config-dir config --data-dir data doctor
