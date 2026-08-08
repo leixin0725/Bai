@@ -55,7 +55,7 @@ python -m bai_agent --config-dir config --data-dir data doctor
 python -m bai_agent --config-dir config --data-dir data chat
 ```
 
-逐行输入，使用 EOF 或 Ctrl+C 退出。再次运行同一命令会直接继承全部记忆，不会询问对话 ID。每轮持久化顺序是：用户输入落盘、模型调用、Assistant 输出落盘、向终端显示输出。
+逐行输入，使用 EOF 或 Ctrl+C 退出。输入经运行时外壳的统一串行消息管道处理，同一时刻只有一个对话动作，处理中到达的输入进入等待队列（2026-08-08）。EOF 正常退出；Ctrl+C 第一次等待当前轮完成后再退出（130），第二次立即中止。再次运行同一命令会直接继承全部记忆，不会询问对话 ID。每轮持久化顺序是：用户输入落盘、模型调用、Assistant 输出落盘、向终端显示输出。
 
 模型失败时，用户输入仍保留为单条 pending turn。普通启动会原子丢弃该尾部 pending 并进入新输入；确认再次调用模型时显式执行：
 

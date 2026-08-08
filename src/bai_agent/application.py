@@ -7,9 +7,15 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from bai_agent.config.loader import load_config
+from bai_agent.config.loader import describe_config_error, load_config
 from bai_agent.debug.tui import TextualApprovalPresenter
-from bai_agent.domain.models import SourceKind, SourceRef, TemporalSegmentationPolicy
+from bai_agent.domain.errors import BaiError
+from bai_agent.domain.models import (
+    ReloadStatus,
+    SourceKind,
+    SourceRef,
+    TemporalSegmentationPolicy,
+)
 from bai_agent.domain.ports import SystemClock
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.curation import CurationPolicy, CurationService
@@ -241,14 +247,32 @@ class AgentApplication:
         self.snapshot = fresh
         self._config_reload_required = False
 
-    async def run_turn(self, content: str, *, resume_pending: bool = False, turn_id: str | None = None) -> str:
-        self._reload_config()
+    async def run_turn(
+        self,
+        content: str,
+        *,
+        resume_pending: bool = False,
+        turn_id: str | None = None,
+        reload_config: bool = True,
+    ) -> str:
+        """[2026-08-08] reload_config=False 供运行时外壳在重载尝试后复用旧快照。"""
+        if reload_config:
+            self._reload_config()
         return await self.controller.run_turn(
             content,
             resume_pending=resume_pending,
             turn_id=turn_id,
             config_revision=self.snapshot.revision,
         )
+
+    def reload_config_with_status(self) -> ReloadStatus:
+        """[2026-08-08] 重载结果带分组/字段/原因定位，供外壳警告与状态快照使用。"""
+        revision = self.snapshot.revision
+        try:
+            self._reload_config()
+        except BaiError as exc:
+            return ReloadStatus(revision=revision, ok=False, error=describe_config_error(exc))
+        return ReloadStatus(revision=self.snapshot.revision, ok=True, error=None)
 
     def discard_pending(self, expected_turn_id: str | None = None) -> str | None:
         """[2026-07-20] CLI 只能通过统一控制器放弃已校验的 raw 尾部 pending。"""

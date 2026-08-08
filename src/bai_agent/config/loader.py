@@ -6,6 +6,7 @@ from hashlib import sha256
 from importlib.resources import files
 import os
 from pathlib import Path
+import re
 import tomllib
 from typing import Mapping
 
@@ -30,6 +31,49 @@ MANIFESTS = (
     "logging.toml",
     "history_timestamps.toml",
 )
+
+# [2026-08-08] 配置分组用于校验状态输出与错误定位；生效仍以整份快照原子切换。
+CONFIG_GROUPS = (
+    "agent",
+    "providers",
+    "states",
+    "tools",
+    "logging",
+    "history_timestamps",
+    "personas",
+    "prompts",
+)
+
+# [2026-08-08] 错误消息中的清单文件名 → 分组 ID，供重载失败警告与状态快照定位。
+CONFIG_GROUP_BY_FILE = {
+    "agent.toml": "agent",
+    "providers.toml": "providers",
+    "states.toml": "states",
+    "tools.toml": "tools",
+    "logging.toml": "logging",
+    "history_timestamps.toml": "history_timestamps",
+}
+
+
+def describe_config_error(exc: BaiError) -> dict[str, str]:
+    """[2026-08-08] 从稳定安全消息定位分组/字段/原因，禁止输出配置正文或凭据。"""
+    message = exc.safe_message
+    group = next(
+        (group for name, group in CONFIG_GROUP_BY_FILE.items() if name in message),
+        None,
+    )
+    field = ""
+    match = re.search(r"字段\s+([\w.]+)", message)
+    if match is not None:
+        field = match.group(1)
+    if group is None:
+        if "人格" in message:
+            group = "personas"
+        elif "提示" in message or "模板" in message:
+            group = "prompts"
+        else:
+            group = "config"
+    return {"group": group, "field": field, "reason": message}
 
 
 def default_config_dir() -> Path:

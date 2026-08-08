@@ -6,8 +6,9 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
+import signal
 import sys
-from typing import Sequence
+from typing import Any, Callable, Sequence
 
 from bai_agent.config.loader import load_config
 from bai_agent.domain.errors import BaiError
@@ -65,6 +66,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "config" and args.config_command == "validate":
             config_dir = args.command_config_dir or args.config_dir
             snapshot = load_config(config_dir)
+            from bai_agent.config.loader import CONFIG_GROUPS
+
             settings = snapshot.settings
             provider_document = settings["providers.toml"]
             providers_by_id = {item["id"]: item for item in provider_document["providers"]}
@@ -72,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     "ok": True,
                     "config_revision": snapshot.revision,
+                    "groups": {group: "ok" for group in CONFIG_GROUPS},
                     "personas": [item.persona_id for item in snapshot.personas],
                     "roles": sorted({item.role for item in snapshot.personas}),
                     "prompts": sorted(snapshot.prompts),
@@ -217,6 +221,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "chat":
             from bai_agent.application import build_application
             from bai_agent.debug.tui import preflight_debug_terminal
+            from bai_agent.runtime.input_reader import StdinInputSource
+            from bai_agent.runtime.shell import RuntimeShell
 
             if args.debug_prompts:
                 preflight_debug_terminal(sys.stdin, sys.stdout)
@@ -228,12 +234,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             try:
                 pending = app.archive.pending_turn()
+                resume = None
                 if pending and args.resume_pending:
-                    try:
-                        asyncio.run(app.run_turn(pending.content, resume_pending=True, turn_id=pending.turn_id))
-                    except BaiError as exc:
-                        if exc.code != "TURN_REJECTED":
-                            raise
+                    resume = (pending.content, pending.turn_id)
                 elif pending:
                     discarded_turn_id = app.discard_pending(pending.turn_id)
                     if discarded_turn_id is not None:
@@ -244,15 +247,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 "pending_turn_id": discarded_turn_id,
                             }
                         )
-                for line in sys.stdin:
-                    content = line.rstrip("\r\n")
-                    if content:
-                        try:
-                            asyncio.run(app.run_turn(content))
-                        except BaiError as exc:
-                            if exc.code != "TURN_REJECTED":
-                                raise
-                return 0
+                shell = RuntimeShell(
+                    app,
+                    on_output=print,
+                    on_warning=lambda text: print(text, file=sys.stderr),
+                )
+                return asyncio.run(_run_chat(shell, StdinInputSource(sys.stdin), resume))
             finally:
                 app.close()
     except BaiError as exc:
@@ -269,6 +269,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     return 2
+
+
+def _make_sigint_handler(shell: Any) -> Callable[[], None]:
+    """[2026-08-08] 第一次 Ctrl+C 优雅停止，第二次立即中止当前处理项。"""
+    armed = {"value": False}
+
+    def handler() -> None:
+        if armed["value"]:
+            shell.request_abort()
+        else:
+            armed["value"] = True
+            shell.request_stop("sigint")
+
+    return handler
+
+
+async def _run_chat(shell: Any, source: Any, resume: tuple[str, str] | None) -> int:
+    """[2026-08-08] 安装 POSIX 信号处理；Windows 保留 KeyboardInterrupt 兜底。"""
+    loop = asyncio.get_running_loop()
+    try:
+        loop.add_signal_handler(signal.SIGINT, _make_sigint_handler(shell))
+        loop.add_signal_handler(signal.SIGTERM, lambda: shell.request_stop("sigterm"))
+    except (NotImplementedError, RuntimeError):
+        pass
+    return await shell.run(source, resume=resume)
 
 
 if __name__ == "__main__":

@@ -14,8 +14,8 @@
 
 **Purpose**: 确认干净起点与配置分组基线
 
-- [ ] T001 运行全量回归 `python -m pytest`，确认当前基线通过并记录结果（tests/）
-- [ ] T002 [P] 核对 `config/` 六个 TOML 清单与 `personas/`、`prompts/` 到 `src/bai_agent/config/loader.py`、`validation.py` 现有校验函数的映射，产出配置分组清单基线（供 US2 使用）
+- [x] T001 运行全量回归 `python -m pytest`，确认当前基线通过并记录结果（tests/）
+- [x] T002 [P] 核对 `config/` 六个 TOML 清单与 `personas/`、`prompts/` 到 `src/bai_agent/config/loader.py`、`validation.py` 现有校验函数的映射，产出配置分组清单基线（供 US2 使用）
 
 ## Phase 2: Foundational（阻塞性前置）
 
@@ -23,9 +23,9 @@
 
 **⚠️ CRITICAL**: 本阶段未完成前不得开始任何用户故事
 
-- [ ] T003 [P] 在 `src/bai_agent/domain/models.py` 新增 `PipelineItemKind`、`PipelineItem`、`InputBoundary`、`ConversationAction`、`TaskStatus`、`BackgroundTaskRecord`、`SessionState`、`HealthState`、`ReloadStatus`、`RuntimeStatus`（沿用 `FrozenModel`，含校验与 `[2026-08-08]` 注释）
-- [ ] T004 [P] 新增 `tests/unit/test_runtime_models.py`：DTO 字段校验、TaskStatus/RuntimeStatus 状态转换不变式
-- [ ] T005 [P] 扩展 `tests/fakes.py`：`FakeInputSource`（可注入缓冲连片与 EOF）、事件处理记录器、`FakeApplication`、可注入时钟
+- [x] T003 [P] 在 `src/bai_agent/domain/models.py` 新增 `PipelineItemKind`、`PipelineItem`、`InputBoundary`、`ConversationAction`、`TaskStatus`、`BackgroundTaskRecord`、`SessionState`、`HealthState`、`ReloadStatus`、`RuntimeStatus`（沿用 `FrozenModel`，含校验与 `[2026-08-08]` 注释）
+- [x] T004 [P] 新增 `tests/unit/test_runtime_models.py`：DTO 字段校验、TaskStatus/RuntimeStatus 状态转换不变式
+- [x] T005 [P] 扩展 `tests/fakes.py`：`FakeInputSource`（可注入缓冲连片与 EOF）、事件处理记录器、`FakeApplication`、可注入时钟
 
 **Checkpoint**: Foundation ready - 用户故事实现可以开始
 
@@ -37,19 +37,19 @@
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T006 [P] [US1] BR-001/BR-002 单元测试 `tests/unit/test_pipeline.py`：串行、顺序、防重入、恰好一次、失败不中断
-- [ ] T007 [P] [US1] BR-005 契约测试 `tests/contract/test_chat_lifecycle.py`：队列非空/pending 存在时优雅停止、退出码 130/0、重启后数据完整且 pending 按既有策略处理
+- [x] T006 [P] [US1] BR-001/BR-002 单元测试 `tests/unit/test_pipeline.py`：串行、顺序、防重入、恰好一次、失败不中断
+- [x] T007 [P] [US1] BR-005 契约测试 `tests/contract/test_chat_lifecycle.py`：队列非空/pending 存在时优雅停止、退出码 130/0、重启后数据完整且 pending 按既有策略处理
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] 实现串行管道 `src/bai_agent/runtime/pipeline.py`：FIFO、单 worker、`submit(chat_input|timer_event|system_event)`、`stop()`、顺序可观测
-- [ ] T009 [US1] 实现运行时外壳 `src/bai_agent/runtime/shell.py`：生命周期（SIGINT/SIGTERM/二次 SIGINT）、释放写锁、最小状态快照
-- [ ] T010 [US1] 改造 `src/bai_agent/cli.py` 的 `chat` 切换为 shell 驱动，保留 `--resume-pending`/`--discard-pending`/`--debug-prompts` 语义
-- [ ] T011 [US1] 契约测试 `tests/contract/test_cli_chat_shell.py`：真实 CLI 启动、恢复/丢弃 pending、Ctrl+C 退出码
-- [ ] T012 [US1] 更新 `README.md`：统一消息处理管道、`chat` 循环与优雅停止行为
-- [ ] T013 [US1] 更新 `specs/001-persistent-memory-agent/contracts/cli.md` 的 `chat` 启动/退出码章节与 `specs/004-core-runtime-pipeline/contracts/cli.md` 第 1/3 节
-- [ ] T014 [US1] 更新 `specs/001-persistent-memory-agent/quickstart.md` 聊天章节与 `specs/004-core-runtime-pipeline/quickstart.md` 第 4 节
-- [ ] T015 [US1] 检查点（Milestone 1 原子提交）：全量回归通过，`README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/cli.md}` 与 `specs/004-core-runtime-pipeline/{quickstart.md,contracts/cli.md}` 一致，提交只含 US1 相关文件
+- [x] T008 [US1] 实现串行管道 `src/bai_agent/runtime/pipeline.py`：FIFO、单 worker、`submit(chat_input|timer_event|system_event)`、`stop()`、顺序可观测
+- [x] T009 [US1] 实现运行时外壳 `src/bai_agent/runtime/shell.py`：生命周期（SIGINT/SIGTERM/二次 SIGINT）、释放写锁、最小状态快照
+- [x] T010 [US1] 改造 `src/bai_agent/cli.py` 的 `chat` 切换为 shell 驱动，保留 `--resume-pending`/`--discard-pending`/`--debug-prompts` 语义
+- [x] T011 [US1] 契约测试 `tests/contract/test_cli_chat_shell.py`：真实 CLI 启动、恢复/丢弃 pending、Ctrl+C 退出码
+- [x] T012 [US1] 更新 `README.md`：统一消息处理管道、`chat` 循环与优雅停止行为
+- [x] T013 [US1] 更新 `specs/001-persistent-memory-agent/contracts/cli.md` 的 `chat` 启动/退出码章节与 `specs/004-core-runtime-pipeline/contracts/cli.md` 第 1/3 节
+- [x] T014 [US1] 更新 `specs/001-persistent-memory-agent/quickstart.md` 聊天章节与 `specs/004-core-runtime-pipeline/quickstart.md` 第 4 节
+- [x] T015 [US1] 检查点（Milestone 1 原子提交）：全量回归通过，`README.md`、`specs/001-persistent-memory-agent/{quickstart.md,contracts/cli.md}` 与 `specs/004-core-runtime-pipeline/{quickstart.md,contracts/cli.md}` 一致，提交只含 US1 相关文件
 
 ## Phase 4: User Story 2 - 不改配置就不必重启 (Priority: P1)
 
@@ -59,17 +59,17 @@
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T016 [P] [US2] BR-003 契约测试 `tests/contract/test_config_reload_visibility.py`：失败重载后捕获 stderr 输出断言包含"分组 + 字段 + 旧 revision"，shell 状态快照显示 `health=warning`、`last_reload.ok=false`，修复后恢复 `ok`（CLI `:status` 的一致性断言由 T037 覆盖）
-- [ ] T017 [P] [US2] 单元测试 `tests/unit/test_config_groups.py`：分组清单与校验函数映射、错误消息分组定位、整份快照保持
+- [x] T016 [P] [US2] BR-003 契约测试 `tests/contract/test_config_reload_visibility.py`：失败重载后捕获 stderr 输出断言包含"分组 + 字段 + 旧 revision"，shell 状态快照显示 `health=warning`、`last_reload.ok=false`，修复后恢复 `ok`（CLI `:status` 的一致性断言由 T037 覆盖）
+- [x] T017 [P] [US2] 单元测试 `tests/unit/test_config_groups.py`：分组清单与校验函数映射、错误消息分组定位、整份快照保持
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] 在 `src/bai_agent/config/loader.py` 增加分组状态输出，`config validate` 返回 `groups` 字段
-- [ ] T019 [US2] 在 `src/bai_agent/application.py` 记录每次重载结果（revision/ok/error/分组定位），供状态快照使用
-- [ ] T020 [US2] 在 `src/bai_agent/runtime/shell.py` 于动作开始前输出重载失败 stderr 警告，并同步 `RuntimeStatus.last_reload`
-- [ ] T021 [US2] 更新 `specs/004-core-runtime-pipeline/contracts/configuration.md` 第 2/3 节、`contracts/runtime-pipeline.md` 第 7 节、`contracts/cli.md` 警告行为
-- [ ] T022 [US2] 更新 `specs/004-core-runtime-pipeline/quickstart.md` 第 3 节与 `README.md` 配置章节
-- [ ] T023 [US2] 检查点（Milestone 2 原子提交）：BR-003 测试全绿，`contracts/configuration.md`、`contracts/runtime-pipeline.md`、`contracts/cli.md`、`quickstart.md`、`README.md` 一致，提交只含 US2 相关文件
+- [x] T018 [US2] 在 `src/bai_agent/config/loader.py` 增加分组状态输出，`config validate` 返回 `groups` 字段
+- [x] T019 [US2] 在 `src/bai_agent/application.py` 记录每次重载结果（revision/ok/error/分组定位），供状态快照使用
+- [x] T020 [US2] 在 `src/bai_agent/runtime/shell.py` 于动作开始前输出重载失败 stderr 警告，并同步 `RuntimeStatus.last_reload`
+- [x] T021 [US2] 更新 `specs/004-core-runtime-pipeline/contracts/configuration.md` 第 2/3 节、`contracts/runtime-pipeline.md` 第 7 节、`contracts/cli.md` 警告行为
+- [x] T022 [US2] 更新 `specs/004-core-runtime-pipeline/quickstart.md` 第 3 节与 `README.md` 配置章节
+- [x] T023 [US2] 检查点（Milestone 2 原子提交）：BR-003 测试全绿，`contracts/configuration.md`、`contracts/runtime-pipeline.md`、`contracts/cli.md`、`quickstart.md`、`README.md` 一致，提交只含 US2 相关文件
 
 ## Phase 5: User Story 3 - 一次粘贴不再拆成多轮 (Priority: P1)
 

@@ -1184,3 +1184,176 @@ class ConfigSnapshot:
 
 # [2026-07-20] PromptSegment 的精确片段类型在同模块后段声明，统一在模块加载完成后解析。
 PromptSegment.model_rebuild()
+
+
+class PipelineItemKind(StrEnum):
+    """[2026-08-08] 阶段 1 管道只接受三类处理项；未来阶段 7 调度器复用同一入口。"""
+
+    CHAT_INPUT = "chat_input"
+    TIMER_EVENT = "timer_event"
+    SYSTEM_EVENT = "system_event"
+
+
+class InputBoundary(StrEnum):
+    """[2026-08-08] 一次输入动作的来源边界：管道 EOF 或 TTY 缓冲区空。"""
+
+    PIPE_EOF = "pipe_eof"
+    BUFFER_EMPTY = "buffer_empty"
+
+
+class TaskStatus(StrEnum):
+    WAITING = "waiting"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+class SessionState(StrEnum):
+    IDLE = "idle"
+    PROCESSING = "processing"
+    STOPPING = "stopping"
+
+
+class HealthState(StrEnum):
+    OK = "ok"
+    WARNING = "warning"
+
+
+class PipelineItem(FrozenModel):
+    """[2026-08-08] 统一管道的最小工作单元；sequence 由管道单调分配。"""
+
+    item_id: str
+    kind: PipelineItemKind
+    payload: dict[str, JsonValue]
+    submitted_at: datetime
+    sequence: int = Field(ge=1)
+
+    @field_validator("item_id")
+    @classmethod
+    def validate_item_id(cls, value: str) -> str:
+        return _validate_prefixed_uuid(value, "item")
+
+    @field_validator("submitted_at")
+    @classmethod
+    def validate_submitted_at(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("时间必须包含 UTC 时区")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_chat_payload(self) -> "PipelineItem":
+        if self.kind is PipelineItemKind.CHAT_INPUT:
+            text = self.payload.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError("chat_input 必须携带非空 text")
+        return self
+
+
+class ConversationAction(FrozenModel):
+    """[2026-08-08] 一次输入动作；合并后正文不截断、不按行拆轮。"""
+
+    action_id: str
+    lines: tuple[str, ...] = Field(min_length=1)
+    source_boundary: InputBoundary
+
+    @field_validator("action_id")
+    @classmethod
+    def validate_action_id(cls, value: str) -> str:
+        return _validate_prefixed_uuid(value, "action")
+
+    @model_validator(mode="after")
+    def validate_lines(self) -> "ConversationAction":
+        if any(not line for line in self.lines):
+            raise ValueError("合并行不能为空")
+        return self
+
+    @property
+    def text(self) -> str:
+        return "\n".join(self.lines)
+
+
+class BackgroundTaskRecord(FrozenModel):
+    """[2026-08-08] 最小执行器状态记录；只允许 等待→执行→成功/失败。"""
+
+    task_id: str
+    name: str = Field(min_length=1)
+    status: TaskStatus = TaskStatus.WAITING
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error: str | None = None
+
+    @field_validator("task_id")
+    @classmethod
+    def validate_task_id(cls, value: str) -> str:
+        return _validate_prefixed_uuid(value, "task")
+
+    @field_validator("created_at", "started_at", "finished_at")
+    @classmethod
+    def validate_aware_time(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("时间必须包含 UTC 时区")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def validate_transition(self) -> "BackgroundTaskRecord":
+        if self.status is TaskStatus.WAITING:
+            if self.started_at is not None or self.finished_at is not None or self.error is not None:
+                raise ValueError("等待任务不能携带执行时间或错误")
+        elif self.status is TaskStatus.RUNNING:
+            if self.started_at is None or self.finished_at is not None or self.error is not None:
+                raise ValueError("执行中任务必须只有开始时间")
+        else:
+            if self.started_at is None or self.finished_at is None:
+                raise ValueError("完成/失败任务必须携带开始与结束时间")
+            if self.status is TaskStatus.SUCCESS and self.error is not None:
+                raise ValueError("成功任务不能携带错误")
+            if self.status is TaskStatus.FAILURE and not self.error:
+                raise ValueError("失败任务必须保留原因")
+        return self
+
+
+class ReloadStatus(FrozenModel):
+    """[2026-08-08] 最近一次配置重载结果；失败时必须携带分组/字段/原因定位。"""
+
+    revision: str = ""
+    ok: bool
+    error: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def validate_reload_result(self) -> "ReloadStatus":
+        if self.ok and self.error is not None:
+            raise ValueError("成功重载不能携带错误")
+        if not self.ok and (self.error is None or not self.error.get("reason")):
+            raise ValueError("失败重载必须携带错误原因")
+        return self
+
+
+class RuntimeStatus(FrozenModel):
+    """[2026-08-08] 会话内状态快照；不含正文、工具参数或凭据。"""
+
+    session_state: SessionState
+    queue_depth: int = Field(ge=0)
+    current_item_id: str | None = None
+    tasks: tuple[BackgroundTaskRecord, ...] = ()
+    health: HealthState
+    last_reload: ReloadStatus
+    pending_turn_id: str | None = None
+    counters: dict[str, int] = Field(default_factory=dict)
+    uptime_seconds: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_state_and_health(self) -> "RuntimeStatus":
+        if self.session_state is SessionState.PROCESSING and not self.current_item_id:
+            raise ValueError("处理中必须携带当前处理项")
+        if self.session_state is not SessionState.PROCESSING and self.current_item_id is not None:
+            raise ValueError("非处理中状态不能携带当前处理项")
+        failed = any(item.status is TaskStatus.FAILURE for item in self.tasks)
+        degraded = not self.last_reload.ok or failed
+        if self.health is HealthState.WARNING and not degraded:
+            raise ValueError("健康警告必须对应重载失败或任务失败")
+        if self.health is HealthState.OK and degraded:
+            raise ValueError("存在重载失败或任务失败时健康状态必须为 warning")
+        return self
