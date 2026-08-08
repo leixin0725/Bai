@@ -569,8 +569,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
 
 
 class TextualApprovalPresenter:
-    def __init__(self, *, color_policy: str = "auto") -> None:
+    def __init__(self, *, color_policy: str = "auto", input_source=None) -> None:
+        """[2026-08-08] input_source 提供 pause/resume 时，TUI 期间独占 stdin，
+        避免常驻 InputReader 与 Textual 驱动竞争同一文件描述符。"""
         self.color_policy = color_policy
+        self.input_source = input_source
         self.request: PreparedProviderRequest | None = None
         self.payload: MaterializedSendPayload | None = None
         self.estimate: ContextUsageEstimate | None = None
@@ -581,7 +584,14 @@ class TextualApprovalPresenter:
         self.app = PromptApprovalApp(
             request, payload, estimate, warning=warning, color_policy=self.color_policy
         )
-        decision = await self.app.run_async()
+        input_source = self.input_source
+        if input_source is not None:
+            await input_source.pause()
+        try:
+            decision = await self.app.run_async()
+        finally:
+            if input_source is not None:
+                await input_source.resume()
         if self.app.interrupted:
             raise TurnInterrupted()
         if decision is None:

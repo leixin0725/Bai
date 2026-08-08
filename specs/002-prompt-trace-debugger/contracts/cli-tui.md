@@ -52,12 +52,13 @@ debug TTY/Textual 预检仍先于应用构建和 pending 修改；因此 debug �
 每个物理模型 attempt 对应一个短生命周期 approval app：
 
 1. 进入全屏 application mode。
-2. frozen request、来源和估算已就绪后，在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 的 30 次同进程启动中，以 p95≤500 ms 完成标题、调用身份和上下文摘要 mounted；另以 300K 字符大载荷执行 30 次同进程 p95≤1000 ms、1M 字符执行 p95≤2000 ms 门禁；首次冷启动单独记录且不纳入门禁。
-3. 主体为两栏审计视图：左侧 part 大纲（虚拟化列表），右侧选中项详情（虚拟化 `TraceView`，只渲染可见行）；首帧展示身份/估算/操作区，初始选中“上下文分段估算”，正文按选择按需加载，超过阈值的内容在后台线程换行并显示占位符。大纲与初始详情渲染完成、载荷已验证后才启用批准操作。
-4. 用户 approve/reject。
-5. 退出 app，恢复进入前终端。
-6. approve 时在网络发送前清除 TUI 的正文/来源/PreparedProviderRequest 引用，再把同一个不可变 `MaterializedSendPayload` 交给 sender；reject 时触发整轮回滚且不形成 pending。
-7. sender 在 `send_once` 成功或失败后的 `finally` 释放 payload；普通 provider/网络失败若重试结束，由事务层发布一条 USER pending。
+2. 进入全屏前，会话 stdin 读取器暂停并移除事件循环上的 fd 监听，stdin 由 Textual 驱动独占（鼠标/键盘事件只送达 TUI，不会被聊天输入读取器抢走）；退出 app、恢复终端后读取器恢复（已缓冲字节保留）。
+3. frozen request、来源和估算已就绪后，在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 的 30 次同进程启动中，以 p95≤500 ms 完成标题、调用身份和上下文摘要 mounted；另以 300K 字符大载荷执行 30 次同进程 p95≤1000 ms、1M 字符执行 p95≤2000 ms 门禁；首次冷启动单独记录且不纳入门禁。
+4. 主体为两栏审计视图：左侧 part 大纲（虚拟化列表），右侧选中项详情（虚拟化 `TraceView`，只渲染可见行）；首帧展示身份/估算/操作区，初始选中“上下文分段估算”，正文按选择按需加载，超过阈值的内容在后台线程换行并显示占位符；大内容后台换行单任务串行合并，最新请求优先，避免并发换行争抢 CPU 卡顿。大纲与初始详情渲染完成、载荷已验证后才启用批准操作。
+5. 用户 approve/reject。
+6. 退出 app，恢复进入前终端。
+7. approve 时在网络发送前清除 TUI 的正文/来源/PreparedProviderRequest 引用，再把同一个不可变 `MaterializedSendPayload` 交给 sender；reject 时触发整轮回滚且不形成 pending。
+8. sender 在 `send_once` 成功或失败后的 `finally` 释放 payload；普通 provider/网络失败若重试结束，由事务层发布一条 USER pending。
 
 provider 响应后的实际用量使用不含原文的普通聊天输出摘要显示，不重新打开或重建已发送 prompt trace；`ActualUsageSummary` 不引用 prompt、payload、part、SourceRef 或 TUI 对象。
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import threading
+from typing import Any
 
 from rich.console import Console
 from rich.segment import Segment
@@ -68,8 +69,12 @@ class TraceView(ScrollView, can_focus=True):
         self._row_cache: dict[int, Strip] = {}
         self._source: Text | None = None
         self._placeholder = False
+        # [2026-08-08] 后台换行使用单 worker + 单槽请求：最多一个换行任务在跑、
+        # 最多一个最新请求排队，旧请求直接丢弃，避免并发线程争抢 GIL 饿死 UI 线程。
         self._build_worker: threading.Thread | None = None
         self._build_token = 0
+        self._pending_build: tuple[int, Text, int, Any] | None = None
+        self._build_cond = threading.Condition()
         self._ready_callback: Callable[[], None] | None = None
         self._last_width = 0
         self.virtual_size = Size(0, 0)
@@ -119,21 +124,32 @@ class TraceView(ScrollView, can_focus=True):
         token = self._build_token + 1
         self._build_token = token
         app = self.app
+        with self._build_cond:
+            self._pending_build = (token, renderable, width, app)
+            if self._build_worker is None or not self._build_worker.is_alive():
+                self._build_worker = threading.Thread(
+                    target=self._build_loop,
+                    name="trace-view-build",
+                    daemon=True,
+                )
+                self._build_worker.start()
 
-        def build() -> None:
+    def _build_loop(self) -> None:
+        """[2026-08-08] 单 worker 串行处理最新请求；排队请求在取走前会被替换丢弃。"""
+        while True:
+            with self._build_cond:
+                request = self._pending_build
+                self._pending_build = None
+                if request is None:
+                    self._build_worker = None
+                    return
+            token, renderable, width, app = request
             rows, styles = wrap_renderable(renderable, width)
             try:
                 app.call_from_thread(self._complete_build, token, rows, styles)
             except RuntimeError:
                 # [2026-08-08] 应用已退出/事件循环已关闭时丢弃结果。
                 pass
-
-        self._build_worker = threading.Thread(
-            target=build,
-            name="trace-view-build",
-            daemon=True,
-        )
-        self._build_worker.start()
 
     def clear_content(self) -> None:
         """取消后台构建并释放全部内容引用。"""
@@ -182,7 +198,6 @@ class TraceView(ScrollView, can_focus=True):
     ) -> None:
         if token != self._build_token:
             return
-        self._build_worker = None
         self._placeholder = False
         self._rows = rows
         self._row_styles = styles
@@ -197,4 +212,5 @@ class TraceView(ScrollView, can_focus=True):
 
     def _cancel_build(self) -> None:
         self._build_token += 1
-        self._build_worker = None
+        with self._build_cond:
+            self._pending_build = None

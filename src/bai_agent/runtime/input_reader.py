@@ -20,6 +20,9 @@ class StdinInputSource:
         self._fd: int | None = None
         self._buffer = bytearray()
         self._eof = False
+        self._paused = False
+        self._read_pending: asyncio.Future[bool] | None = None
+        self._resume_event: asyncio.Event | None = None
         try:
             fd = stream.fileno()
             self._fd = fd if isinstance(fd, int) and fd >= 0 else None
@@ -49,6 +52,20 @@ class StdinInputSource:
         except (OSError, ValueError):
             return False
 
+    async def pause(self) -> None:
+        """[2026-08-08] TUI 等独占终端期间暂停读取，把 stdin 让给 Textual 驱动。"""
+        self._paused = True
+        future = self._read_pending
+        if future is not None and not future.done():
+            future.set_result(False)
+
+    async def resume(self) -> None:
+        """[2026-08-08] 结束独占后恢复读取；已缓冲字节保留，不会误报 EOF。"""
+        self._paused = False
+        event = self._resume_event
+        if event is not None:
+            event.set()
+
     async def _read_fd_line(self) -> str | None:
         """[2026-08-08] add_reader 驱动分块读取；newline 完整才返回行，EOF 返回剩余缓冲。"""
         loop = asyncio.get_running_loop()
@@ -64,7 +81,15 @@ class StdinInputSource:
                 raw = bytes(self._buffer)
                 self._buffer.clear()
                 return raw.decode("utf-8", errors="replace")
+            if self._paused:
+                self._resume_event = asyncio.Event()
+                try:
+                    await self._resume_event.wait()
+                finally:
+                    self._resume_event = None
+                continue
             future = loop.create_future()
+            self._read_pending = future
 
             def on_readable() -> None:
                 if future.done():
@@ -93,6 +118,7 @@ class StdinInputSource:
             try:
                 await future
             finally:
+                self._read_pending = None
                 loop.remove_reader(self._fd)
 
 

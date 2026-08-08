@@ -17,6 +17,7 @@ python -m bai_agent --config-dir config --data-dir data chat [--resume-pending|-
 
 - stdin 非 TTY（管道）：整批内容（至 EOF）为一次输入动作，只产生一次处理与一条回复。
 - 交互式 TTY：缓冲区连片到达的多行合并为一次动作；缓冲区空时当前行独立成动作；零等待、无时间窗口。
+- 提示词调试 TUI 运行期间，stdin 由 Textual 驱动独占：shell 输入读取器暂停（移除 fd 监听、保留已缓冲字节），TUI 退出后恢复，禁止两个读取者并发读同一 stdin。
 - 精确输入 `:status` 被拦截为状态命令：不写入 raw 记录、不进入模型调用；输出 `RuntimeStatus` 稳定 JSON。
 - 以 `:` 开头的其他输入按普通对话内容处理（不预留命令空间）。
 - 每次对话动作开始前的配置重载失败：先向 stderr 输出明确警告（分组、字段、失败原因与继续使用的配置 revision），再按旧快照继续处理该动作；不得吞掉或仅被动记录（禁止静默回退）。

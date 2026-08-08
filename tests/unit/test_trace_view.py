@@ -1,5 +1,7 @@
 """[2026-08-08] 虚拟化 TraceView 的行换行、后台构建、取消与渲染缓存。"""
 
+import threading
+
 import pytest
 
 from rich.style import Style
@@ -102,3 +104,51 @@ async def test_trace_view_blank_lines_beyond_rows() -> None:
         view.set_content(Text("一行"), background=False)
         assert view.render_line(1).text.strip() == ""
         assert view.render_line(5).text.strip() == ""
+
+
+@pytest.mark.asyncio
+async def test_trace_view_background_builds_are_serialized_and_latest_wins(monkeypatch) -> None:
+    """[2026-08-08] 连续触发大内容后台构建时：同一时刻至多一个换行任务在跑，
+    排队的旧请求被丢弃，最终内容为最新请求（回归多线程 GIL 争抢卡顿）。"""
+    view = TraceView()
+    app = _TraceApp(view)
+    real_wrap = wrap_renderable
+    entered = threading.Event()
+    release = threading.Event()
+    active = 0
+    max_active = 0
+    calls: list[str] = []
+    state_lock = threading.Lock()
+
+    def instrumented(renderable, width):
+        nonlocal active, max_active
+        text = renderable.plain
+        with state_lock:
+            active += 1
+            max_active = max(max_active, active)
+            calls.append(text)
+        entered.set()
+        assert release.wait(2)
+        try:
+            return real_wrap(renderable, width)
+        finally:
+            with state_lock:
+                active -= 1
+
+    monkeypatch.setattr("bai_agent.debug.trace_view.wrap_renderable", instrumented)
+    async with app.run_test(size=(40, 10)) as pilot:
+        await pilot.pause()
+        view.set_content(Text("第一"), background=True)
+        assert entered.wait(2)
+        view.set_content(Text("第二"), background=True)
+        view.set_content(Text("第三"), background=True)
+        release.set()
+        for _ in range(200):
+            await pilot.pause()
+            if not view.is_loading:
+                break
+        assert not view.is_loading
+        assert max_active == 1
+        assert view.plain_text.startswith("第三")
+        with state_lock:
+            assert calls == ["第一", "第三"]

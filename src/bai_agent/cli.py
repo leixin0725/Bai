@@ -226,11 +226,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             if args.debug_prompts:
                 preflight_debug_terminal(sys.stdin, sys.stdout)
+            input_source = StdinInputSource(sys.stdin)
             app = build_application(
                 args.config_dir,
                 args.data_dir,
                 on_output=print,
                 debug_prompts=bool(args.debug_prompts),
+                input_source=input_source,
             )
             try:
                 pending = app.archive.pending_turn()
@@ -252,7 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     on_output=print,
                     on_warning=lambda text: print(text, file=sys.stderr),
                 )
-                return asyncio.run(_run_chat(shell, StdinInputSource(sys.stdin), resume))
+                return asyncio.run(_run_chat(shell, input_source, resume))
             finally:
                 app.close()
     except BaiError as exc:

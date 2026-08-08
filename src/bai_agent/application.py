@@ -74,6 +74,7 @@ class AgentApplication:
         config_dir: Path,
         managed_provider: bool,
         debug_prompts: bool,
+        input_source=None,
     ) -> None:
         self.snapshot = snapshot
         self.archive = archive
@@ -83,6 +84,7 @@ class AgentApplication:
         self.config_dir = config_dir
         self.managed_provider = managed_provider
         self.debug_prompts = debug_prompts
+        self._input_source = input_source
         self._config_reload_required = False
 
     def _reload_config(self) -> None:
@@ -137,7 +139,7 @@ class AgentApplication:
             chat_provider = ModelCallGateway(
                 chat_adapter,
                 debug_enabled=self.debug_prompts,
-                presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
+                presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"]), input_source=self._input_source) if self.debug_prompts else None),
                 max_attempts=int(chat_config.get("retry", {}).get("max_attempts", 1)),
                 identity_allocator=identity_allocator,
                 clock=self.controller.clock,
@@ -153,7 +155,7 @@ class AgentApplication:
             curator_provider = ModelCallGateway(
                 curator_adapter,
                 debug_enabled=self.debug_prompts,
-                presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"])) if self.debug_prompts else None),
+                presenter=(TextualApprovalPresenter(color_policy=str(settings["agent.toml"]["debug_prompt"]["color"]), input_source=self._input_source) if self.debug_prompts else None),
                 max_attempts=int(curator_config.get("retry", {}).get("max_attempts", 1)),
                 identity_allocator=identity_allocator,
                 clock=self.controller.clock,
@@ -292,6 +294,7 @@ def build_application(
     debug_prompts: bool = False,
     presenter=None,
     clock=None,
+    input_source=None,
 ) -> AgentApplication:
     snapshot = load_config(config_dir, require_credentials=provider is None)
     settings = snapshot.settings
@@ -365,8 +368,8 @@ def build_application(
         color_policy = str(settings["agent.toml"]["debug_prompt"]["color"])
         clock = clock or SystemClock()
         identity_allocator = CallIdentityAllocator()
-        chat_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
-        curator_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy) if debug_prompts else None)
+        chat_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy, input_source=input_source) if debug_prompts else None)
+        curator_presenter = presenter or (TextualApprovalPresenter(color_policy=color_policy, input_source=input_source) if debug_prompts else None)
         provider = ModelCallGateway(
             chat_adapter,
             debug_enabled=debug_prompts,
@@ -474,6 +477,7 @@ def build_application(
             config_dir=config_dir,
             managed_provider=managed_provider,
             debug_prompts=debug_prompts,
+            input_source=input_source,
         )
     except Exception:
         lease.release()
