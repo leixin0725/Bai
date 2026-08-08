@@ -24,7 +24,7 @@ hooks:
   before_clarify:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before clarification?
@@ -33,7 +33,7 @@ hooks:
   before_plan:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before planning?
@@ -42,7 +42,7 @@ hooks:
   before_tasks:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before task generation?
@@ -51,7 +51,7 @@ hooks:
   before_implement:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before implementation?
@@ -60,7 +60,7 @@ hooks:
   before_checklist:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before checklist?
@@ -69,7 +69,7 @@ hooks:
   before_analyze:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before analysis?
@@ -78,7 +78,7 @@ hooks:
   before_taskstoissues:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before issue sync?
@@ -87,7 +87,7 @@ hooks:
   after_constitution:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit constitution changes?
@@ -96,7 +96,7 @@ hooks:
   after_specify:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit specification changes?
@@ -105,7 +105,7 @@ hooks:
   after_clarify:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit clarification changes?
@@ -114,7 +114,7 @@ hooks:
   after_plan:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit plan changes?
@@ -123,7 +123,7 @@ hooks:
   after_tasks:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit task changes?
@@ -132,7 +132,7 @@ hooks:
   after_implement:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit implementation changes?
@@ -141,7 +141,7 @@ hooks:
   after_checklist:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit checklist changes?
@@ -150,7 +150,7 @@ hooks:
   after_analyze:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit analysis results?
@@ -159,7 +159,7 @@ hooks:
   after_taskstoissues:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit after syncing issues?
