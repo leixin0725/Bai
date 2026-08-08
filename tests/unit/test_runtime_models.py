@@ -67,19 +67,19 @@ def test_conversation_action_joins_lines_without_truncation() -> None:
     assert action.text == "第一行\n第二行\n第三行"
 
 
-def test_conversation_action_rejects_empty_or_blank_lines() -> None:
+def test_conversation_action_requires_at_least_one_line_but_keeps_blank_lines() -> None:
     with pytest.raises(ValidationError):
         ConversationAction(
             action_id="action-00000000-0000-0000-0000-000000000003",
             lines=(),
             source_boundary=InputBoundary.PIPE_EOF,
         )
-    with pytest.raises(ValidationError):
-        ConversationAction(
-            action_id="action-00000000-0000-0000-0000-000000000004",
-            lines=("正常", ""),
-            source_boundary=InputBoundary.PIPE_EOF,
-        )
+    action = ConversationAction(
+        action_id="action-00000000-0000-0000-0000-000000000004",
+        lines=("第一段", "", "第二段"),
+        source_boundary=InputBoundary.PIPE_EOF,
+    )
+    assert action.text == "第一段\n\n第二段"
 
 
 def task_record(status: TaskStatus, **overrides: object) -> BackgroundTaskRecord:

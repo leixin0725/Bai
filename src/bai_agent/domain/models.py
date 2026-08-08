@@ -1261,12 +1261,6 @@ class ConversationAction(FrozenModel):
     def validate_action_id(cls, value: str) -> str:
         return _validate_prefixed_uuid(value, "action")
 
-    @model_validator(mode="after")
-    def validate_lines(self) -> "ConversationAction":
-        if any(not line for line in self.lines):
-            raise ValueError("合并行不能为空")
-        return self
-
     @property
     def text(self) -> str:
         return "\n".join(self.lines)

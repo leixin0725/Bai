@@ -79,15 +79,15 @@
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [ ] T024 [P] [US3] BR-006 单元测试 `tests/unit/test_input_reader.py`：管道 EOF 整批、TTY 缓冲连片、逐行、不截断、零等待（无 sleep/时间阈值）
-- [ ] T025 [P] [US3] 契约测试 `tests/contract/test_cli_chat_input_merge.py`：`printf` 多行管道输入后 `memory validate` 的 `raw_records` 增量恰为 2
+- [x] T024 [P] [US3] BR-006 单元测试 `tests/unit/test_input_reader.py`：管道 EOF 整批、TTY 缓冲连片、逐行、不截断、零等待（无 sleep/时间阈值）
+- [x] T025 [P] [US3] 契约测试 `tests/contract/test_cli_chat_input_merge.py`：`printf` 多行管道输入后 `memory validate` 的 `raw_records` 增量恰为 2
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] 实现输入读取器 `src/bai_agent/runtime/input_reader.py`：零等待缓冲非空判定；Windows 无等效路径时按契约降级为逐行并注释说明
-- [ ] T027 [US3] 在 `src/bai_agent/runtime/shell.py` 接入输入读取器，把动作提交为 `chat_input` 处理项
-- [ ] T028 [US3] 更新 `specs/004-core-runtime-pipeline/contracts/cli.md` 第 2 节、`quickstart.md` 第 1 节与 `README.md` 输入章节
-- [ ] T029 [US3] 检查点（Milestone 3 原子提交）：BR-006 测试全绿，`contracts/cli.md`、`quickstart.md`、`README.md` 一致，提交只含 US3 相关文件
+- [x] T026 [US3] 实现输入读取器 `src/bai_agent/runtime/input_reader.py`：零等待缓冲非空判定；Windows 无等效路径时按契约降级为逐行并注释说明
+- [x] T027 [US3] 在 `src/bai_agent/runtime/shell.py` 接入输入读取器，把动作提交为 `chat_input` 处理项
+- [x] T028 [US3] 更新 `specs/004-core-runtime-pipeline/contracts/cli.md` 第 2 节、`quickstart.md` 第 1 节与 `README.md` 输入章节
+- [x] T029 [US3] 检查点（Milestone 3 原子提交）：BR-006 测试全绿，`contracts/cli.md`、`quickstart.md`、`README.md` 一致，提交只含 US3 相关文件
 
 ## Phase 6: User Story 4 - 后台任务看得见、排得上 (Priority: P2)
 
@@ -97,15 +97,15 @@
 
 ### Tests for User Story 4 (REQUIRED) ⚠️
 
-- [ ] T030 [P] [US4] BR-004 单元测试 `tests/unit/test_executor.py`：等待→执行→成功/失败状态机、串行、失败保留原因、进程内积压
-- [ ] T031 [P] [US4] 契约测试 `tests/contract/test_runtime_events.py`：timer/system 事件经管道按序投递、事件失败不中断后续处理
+- [x] T030 [P] [US4] BR-004 单元测试 `tests/unit/test_executor.py`：等待→执行→成功/失败状态机、串行、失败保留原因、进程内积压
+- [x] T031 [P] [US4] 契约测试 `tests/contract/test_runtime_events.py`：timer/system 事件经管道按序投递、事件失败不中断后续处理
 
 ### Implementation for User Story 4
 
-- [ ] T032 [US4] 实现最小执行器 `src/bai_agent/runtime/executor.py`：`submit(name, coro)`、串行执行、`BackgroundTaskRecord` 记录
-- [ ] T033 [US4] 在 `src/bai_agent/runtime/shell.py` 接入执行器与事件处理注册入口（默认空，供阶段 7 使用）
-- [ ] T034 [US4] 更新 `specs/004-core-runtime-pipeline/contracts/runtime-pipeline.md` 第 3/4 节与 `data-model.md` 第 3 节
-- [ ] T035 [US4] 检查点（Milestone 4 原子提交）：BR-004 测试全绿，`contracts/runtime-pipeline.md`、`data-model.md` 一致，提交只含 US4 相关文件
+- [x] T032 [US4] 实现最小执行器 `src/bai_agent/runtime/executor.py`：`submit(name, coro)`、串行执行、`BackgroundTaskRecord` 记录
+- [x] T033 [US4] 在 `src/bai_agent/runtime/shell.py` 接入执行器与事件处理注册入口（默认空，供阶段 7 使用）
+- [x] T034 [US4] 更新 `specs/004-core-runtime-pipeline/contracts/runtime-pipeline.md` 第 3/4 节与 `data-model.md` 第 3 节
+- [x] T035 [US4] 检查点（Milestone 4 原子提交）：BR-004 测试全绿，`contracts/runtime-pipeline.md`、`data-model.md` 一致，提交只含 US4 相关文件
 
 ## Phase 7: User Story 5 - 系统健康一眼可知 (Priority: P3)
 
@@ -115,14 +115,14 @@
 
 ### Tests for User Story 5 (REQUIRED) ⚠️
 
-- [ ] T036 [P] [US5] BR-007 单元测试 `tests/unit/test_status_snapshot.py`：快照与真实状态一致、统计在事件完成后更新、无重复计数
-- [ ] T037 [P] [US5] 契约测试 `tests/contract/test_cli_status.py`：`:status` 字段完整性、不写 raw、输出排序稳定 JSON；复用 US2 的重载失败注入场景，验证 CLI 输出与 `last_reload`/`health` 及终端警告一致
+- [x] T036 [P] [US5] BR-007 单元测试 `tests/unit/test_status_snapshot.py`：快照与真实状态一致、统计在事件完成后更新、无重复计数
+- [x] T037 [P] [US5] 契约测试 `tests/contract/test_cli_status.py`：`:status` 字段完整性、不写 raw、输出排序稳定 JSON；复用 US2 的重载失败注入场景，验证 CLI 输出与 `last_reload`/`health` 及终端警告一致
 
 ### Implementation for User Story 5
 
-- [ ] T038 [US5] 实现 `:status` 拦截与输出（`src/bai_agent/cli.py`/`src/bai_agent/runtime/shell.py`），精确匹配、其余 `:` 开头输入按正文处理
-- [ ] T039 [US5] 更新 `specs/004-core-runtime-pipeline/contracts/cli.md` 第 4 节、`quickstart.md` 第 2 节与 `README.md`
-- [ ] T040 [US5] 检查点（Milestone 5 原子提交）：BR-007 测试全绿，`contracts/cli.md`、`quickstart.md`、`README.md` 一致，提交只含 US5 相关文件
+- [x] T038 [US5] 实现 `:status` 拦截与输出（`src/bai_agent/cli.py`/`src/bai_agent/runtime/shell.py`），精确匹配、其余 `:` 开头输入按正文处理
+- [x] T039 [US5] 更新 `specs/004-core-runtime-pipeline/contracts/cli.md` 第 4 节、`quickstart.md` 第 2 节与 `README.md`
+- [x] T040 [US5] 检查点（Milestone 5 原子提交）：BR-007 测试全绿，`contracts/cli.md`、`quickstart.md`、`README.md` 一致，提交只含 US5 相关文件
 
 ## Phase 8: User Story 6 - 迁移准备状态可核对 (Priority: P3)
 
@@ -130,7 +130,7 @@
 
 **Independent Test**: 对照 `Scriptor_to_Bai_migration/archived/feature-checklist.md` 第 4/12 节与 `archived/future-and-discarded.md` 第 4 节原文。
 
-- [ ] T041 [US6] 核对两处标记并更新 `specs/004-core-runtime-pipeline/quickstart.md` 与 `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0 核对记录
+- [x] T041 [US6] 核对两处标记并更新 `specs/004-core-runtime-pipeline/quickstart.md` 与 `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0 核对记录
 - [ ] T042 [US6] 检查点：`quickstart.md` 与 `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0 核对记录一致，与 Polish 阶段共同原子提交（Milestone 6 包含）
 
 ## Phase 9: Polish & Cross-Cutting Concerns

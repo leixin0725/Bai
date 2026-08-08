@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 import os
 import select
 import sys
 from typing import Any
+
+from bai_agent.domain.models import ConversationAction, InputBoundary, new_id
 
 
 class StdinInputSource:
@@ -91,3 +94,49 @@ class StdinInputSource:
                 await future
             finally:
                 loop.remove_reader(self._fd)
+
+
+class InputReader:
+    """[2026-08-08] 一次输入动作：管道以 EOF 为整批边界；TTY 按缓冲区连片合并，零等待无时间阈值。"""
+
+    def __init__(
+        self,
+        source: Any,
+        *,
+        on_action: Callable[[ConversationAction], Awaitable[None]],
+        on_eof: Callable[[], None] | None = None,
+    ) -> None:
+        self._source = source
+        self._on_action = on_action
+        self._on_eof = on_eof
+
+    async def run(self) -> None:
+        try:
+            lines: list[str] = []
+            while True:
+                line = await self._source.read_line()
+                if line is None:
+                    if lines and "".join(lines).strip():
+                        boundary = (
+                            InputBoundary.PIPE_EOF
+                            if not self._source.is_tty
+                            else InputBoundary.BUFFER_EMPTY
+                        )
+                        await self._emit(lines, boundary)
+                    return
+                lines.append(line.rstrip("\r\n"))
+                if self._source.is_tty and not await self._source.buffered():
+                    if "".join(lines).strip():
+                        await self._emit(lines, InputBoundary.BUFFER_EMPTY)
+                    lines = []
+        finally:
+            if self._on_eof is not None:
+                self._on_eof()
+
+    async def _emit(self, lines: list[str], boundary: InputBoundary) -> None:
+        action = ConversationAction(
+            action_id=new_id("action"),
+            lines=tuple(lines),
+            source_boundary=boundary,
+        )
+        await self._on_action(action)

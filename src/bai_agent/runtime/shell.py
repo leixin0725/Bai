@@ -11,7 +11,9 @@ from typing import Any
 
 from bai_agent.domain.errors import BaiError, TurnInterrupted, TurnRejected
 from bai_agent.domain.models import (
+    ConversationAction,
     HealthState,
+    InputBoundary,
     PipelineItem,
     PipelineItemKind,
     ReloadStatus,
@@ -20,6 +22,8 @@ from bai_agent.domain.models import (
     TaskStatus,
 )
 from bai_agent.domain.ports import SystemClock
+from bai_agent.runtime.executor import BackgroundExecutor
+from bai_agent.runtime.input_reader import InputReader
 from bai_agent.runtime.pipeline import ProcessingPipeline
 
 
@@ -39,6 +43,7 @@ class RuntimeShell:
         self._on_warning = on_warning or (lambda text: None)
         self._clock = clock or SystemClock()
         self._pipeline = ProcessingPipeline(self._handle_item, clock=self._clock)
+        self._executor = BackgroundExecutor(clock=self._clock)
         self._session_state = SessionState.IDLE
         self._started_at = monotonic()
         self._last_reload = ReloadStatus(revision="", ok=True, error=None)
@@ -63,6 +68,10 @@ class RuntimeShell:
     def pipeline(self) -> ProcessingPipeline:
         return self._pipeline
 
+    @property
+    def executor(self) -> BackgroundExecutor:
+        return self._executor
+
     def request_stop(self, reason: str) -> None:
         """[2026-08-08] 第一次停止信号：不再接收新工作，当前处理项结束后优雅退出。"""
         self._stop_reason = reason
@@ -82,16 +91,24 @@ class RuntimeShell:
     ) -> None:
         self._event_handlers[event_kind] = handler
 
+    def submit_task(
+        self,
+        name: str,
+        coro_factory: Callable[[], Awaitable[Any]],
+    ) -> str:
+        return self._executor.submit(name, coro_factory)
+
     async def submit_chat(
         self,
         text: str,
         *,
         resume_pending: bool = False,
         turn_id: str | None = None,
+        source_boundary: InputBoundary = InputBoundary.BUFFER_EMPTY,
     ) -> None:
         payload: dict[str, Any] = {
             "text": text,
-            "source_boundary": "buffer_empty",
+            "source_boundary": source_boundary.value,
             "resume_pending": resume_pending,
             "turn_id": turn_id,
         }
@@ -109,21 +126,29 @@ class RuntimeShell:
             if self._session_state is SessionState.PROCESSING
             else None
         )
-        failed_tasks = False
+        tasks = self._executor.records
+        failed_tasks = any(item.status is TaskStatus.FAILURE for item in tasks)
         health = (
             HealthState.WARNING
             if (not self._last_reload.ok or failed_tasks)
             else HealthState.OK
         )
+        counters = dict(self._counters)
+        counters["tasks_succeeded"] = sum(
+            1 for item in tasks if item.status is TaskStatus.SUCCESS
+        )
+        counters["tasks_failed"] = sum(
+            1 for item in tasks if item.status is TaskStatus.FAILURE
+        )
         return RuntimeStatus(
             session_state=self._session_state,
             queue_depth=self._pipeline.queue_depth,
             current_item_id=current,
-            tasks=(),
+            tasks=tasks,
             health=health,
             last_reload=self._last_reload,
             pending_turn_id=pending_id,
-            counters=dict(self._counters),
+            counters=counters,
             uptime_seconds=monotonic() - self._started_at,
         )
 
@@ -135,6 +160,7 @@ class RuntimeShell:
     ) -> int:
         """[2026-08-08] 运行外壳直到 EOF 或停止信号；返回退出码（130=中断，0=正常）。"""
         self._worker_task = asyncio.create_task(self._pipeline.run())
+        executor_task = asyncio.create_task(self._executor.run())
         watcher = asyncio.create_task(self._watch_worker())
         if resume is not None:
             content, turn_id = resume
@@ -148,6 +174,8 @@ class RuntimeShell:
             with suppress(asyncio.CancelledError):
                 await reader
             await self._pipeline.stop()
+            await self._executor.stop()
+            await executor_task
             await watcher
         if self._worker_error is not None:
             raise self._worker_error
@@ -164,18 +192,23 @@ class RuntimeShell:
             self._stop_event.set()
 
     async def _read_source(self, source: Any) -> None:
-        """[2026-08-08] 阶段 1 基线逐行读取；US3 将替换为带合并的 InputReader。"""
-        try:
-            while True:
-                line = await source.read_line()
-                if line is None:
-                    return
-                line = line.rstrip("\r\n")
-                if line:
-                    await self.submit_chat(line)
-        finally:
-            if not self._stop_event.is_set():
-                self.request_stop("eof")
+        """[2026-08-08] 输入读取器按一次输入动作合并后提交；EOF 触发优雅停止。"""
+        reader = InputReader(
+            source,
+            on_action=self._on_input_action,
+            on_eof=self._on_input_eof,
+        )
+        await reader.run()
+
+    async def _on_input_action(self, action: ConversationAction) -> None:
+        await self.submit_chat(
+            action.text,
+            source_boundary=action.source_boundary,
+        )
+
+    def _on_input_eof(self) -> None:
+        if not self._stop_event.is_set():
+            self.request_stop("eof")
 
     async def _handle_item(self, item: PipelineItem) -> None:
         if item.kind is PipelineItemKind.CHAT_INPUT:

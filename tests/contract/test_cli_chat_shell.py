@@ -11,7 +11,7 @@ from bai_agent.cli import main
 from tests.fakes import FakeApplication
 
 
-def test_cli_chat_processes_lines_through_shell(
+def test_cli_chat_pipe_input_is_processed_as_one_action(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = FakeApplication()
@@ -19,8 +19,7 @@ def test_cli_chat_processes_lines_through_shell(
     monkeypatch.setattr("sys.stdin", io.StringIO("第一行\n第二行\n"))
     assert main(["chat"]) == 0
     assert app.calls == [
-        ("第一行", {"reload_config": False}),
-        ("第二行", {"reload_config": False}),
+        ("第一行\n第二行", {"reload_config": False}),
     ]
     assert app.closed
 

@@ -56,7 +56,8 @@ class FakeInputSource:
         return line
 
     async def buffered(self) -> bool:
-        return self._index in self.buffered_indexes
+        # [2026-08-08] buffered_indexes 记录"读完该行后缓冲区仍有更多数据"的行下标。
+        return (self._index - 1) in self.buffered_indexes
 
 
 @dataclass
