@@ -2,6 +2,8 @@
 
 import pytest
 
+from textual.widgets import RichLog
+
 from bai_agent.debug.tui import PromptApprovalApp
 from bai_agent.domain.models import (
     ContextUsageEstimate,
@@ -13,6 +15,12 @@ from bai_agent.domain.models import (
     TrustLevel,
 )
 from tests.prompt_debug_fakes import FakeAdapter, make_draft
+
+
+def _trace_plain(app: PromptApprovalApp) -> str:
+    """[2026-08-08] 读取 RichLog 实际持有的全部行文本，等价于旧 Static 的 render().plain。"""
+    log = app.query_one("#trace", RichLog)
+    return "\n".join(strip.text for strip in log.lines)
 
 
 @pytest.mark.asyncio
@@ -54,11 +62,11 @@ async def test_many_usage_parts_stay_inside_scroll_box_at_80x24() -> None:
         await pilot.pause()
 
         usage = app.query_one("#usage")
-        trace_scroll = app.query_one("#trace-scroll")
+        trace = app.query_one("#trace", RichLog)
         actions = app.query_one("#actions")
         assert usage.region.height <= 4
-        assert trace_scroll.region.height > 0
-        assert trace_scroll.max_scroll_y > 0
+        assert trace.region.height > 0
+        assert trace.max_scroll_y > 0
         assert actions.region.bottom <= app.screen.region.bottom
         assert not app.query_one("#approve").disabled
 
@@ -138,18 +146,18 @@ async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_
 
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
-        assert app.query_one("#trace-scroll").region.height > 0
+        assert app.query_one("#trace", RichLog).region.height > 0
         assert not app.query_one("#approve").disabled
         await pilot.press("w")
         await pilot.pause()
-        expanded = app.query_one("#trace").render().plain
+        expanded = _trace_plain(app)
         assert separator_part_id in expanded
         assert separator_source_id in expanded
         assert "source_id=input-1" in expanded
         assert "\\n" in expanded
         await pilot.press("w")
         await pilot.pause()
-        collapsed_again = app.query_one("#trace").render().plain
+        collapsed_again = _trace_plain(app)
         assert separator_part_id not in collapsed_again
         assert separator_source_id not in collapsed_again
         assert "source_id=input-1" not in collapsed_again

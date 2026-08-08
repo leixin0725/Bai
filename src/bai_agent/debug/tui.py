@@ -11,8 +11,8 @@ from rich.text import Text
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, ScrollableContainer
-from textual.widgets import Button, Footer, Static
+from textual.containers import Horizontal
+from textual.widgets import Button, Footer, RichLog, Static
 
 from bai_agent.domain.errors import DebugPresentationError, TurnInterrupted
 from bai_agent.domain.models import (
@@ -49,6 +49,9 @@ _MESSAGE_PART_ID = re.compile(r"(?:^|:)message:(\d+)(?::|$)")
 _RECORD_ID = re.compile(
     r"rec-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
+# [2026-08-08] 除保留的换行/制表符外，其余控制字符均需转为可见转义；
+# 使用 C 级 re.sub 替代逐字符 Python 循环，大载荷下避免纯 Python 开销。
+_CONTROL_ESCAPE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 def message_index_for_part(part) -> int | None:
@@ -148,24 +151,14 @@ def resolve_color_enabled(
 
 def safe_terminal_text(value: str) -> str:
     """[2026-07-20] 控制字符变为可见文本，不能伪造边界、颜色或操作标签。"""
-    output: list[str] = []
-    for character in value:
-        code = ord(character)
-        if character in {"\n", "\t"}:
-            output.append(character)
-        elif code < 32 or code == 127:
-            output.append(f"\\x{code:02x}")
-        else:
-            output.append(character)
-    return "".join(output)
+    return _CONTROL_ESCAPE.sub(lambda match: f"\\x{ord(match.group()):02x}", value)
 
 
 class PromptApprovalApp(App[ApprovalDecision]):
     CSS = """
     Screen { layout: vertical; }
     #identity, #usage, #warning { height: auto; padding: 0 1; }
-    #trace-scroll { height: 1fr; border: solid $accent; }
-    #trace { width: 100%; height: auto; padding: 0 1; }
+    #trace { height: 1fr; border: solid $accent; }
     #actions { height: 3; align: center middle; }
     Button { margin: 0 2; }
     """
@@ -197,6 +190,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.display_ready = False
         self.interrupted = False
         self.expand_whitespace = False
+        # [2026-08-08] 缓存 payload JSON 与折叠/展开两种 trace 渲染结果，
+        # 避免每次布局、切换或复制都重建整段大文本。
+        self._payload_json: str | None = None
+        self._trace_collapsed: Text | None = None
+        self._trace_expanded: Text | None = None
 
     def compose(self) -> ComposeResult:
         assert self.request is not None and self.payload is not None and self.estimate is not None
@@ -211,8 +209,15 @@ class PromptApprovalApp(App[ApprovalDecision]):
         )
         yield Static(self.warning, id="warning", markup=False)
         yield Static(self._usage_text(), id="usage", markup=False)
-        with ScrollableContainer(id="trace-scroll"):
-            yield Static(self._trace_renderable(), id="trace", markup=False)
+        # [2026-08-08] RichLog 只渲染可见行并缓存行结果，替代会把整段大文本
+        # 在每次布局时全量换行/格式化的 Static + ScrollableContainer。
+        yield RichLog(
+            id="trace",
+            highlight=False,
+            markup=False,
+            wrap=True,
+            auto_scroll=False,
+        )
         with Horizontal(id="actions"):
             yield Button("批准并发送 [A]", id="approve", variant="success", disabled=True)
             yield Button("复制框内全部内容 [C]", id="copy")
@@ -220,11 +225,28 @@ class PromptApprovalApp(App[ApprovalDecision]):
         yield Footer()
 
     def on_mount(self) -> None:
+        # [2026-08-08] 首帧先展示身份/估算/操作区，trace 在首帧后异步填充，
+        # 大载荷下界面不再等到整段渲染完成才出现。
+        self.call_after_refresh(self._populate_trace)
+
+    def _populate_trace(self) -> None:
+        self._refresh_trace()
         self.call_after_refresh(self._mark_display_ready)
+
+    def _refresh_trace(self) -> None:
+        trace = self.query_one("#trace", RichLog)
+        trace.clear()
+        trace.write(self._trace_renderable())
 
     def _mark_display_ready(self) -> None:
         self.display_ready = True
         self.query_one("#approve", Button).disabled = False
+
+    def _payload_json_text(self) -> str:
+        if self._payload_json is None:
+            assert self.payload is not None
+            self._payload_json = canonical_json(thaw_json(self.payload.sdk_kwargs))
+        return self._payload_json
 
     def _usage_text(self) -> str:
         assert self.estimate is not None
@@ -269,6 +291,9 @@ class PromptApprovalApp(App[ApprovalDecision]):
     def _trace_renderable(self, *, expand_whitespace: bool | None = None) -> Text:
         assert self.request is not None and self.payload is not None and self.estimate is not None
         expanded = self.expand_whitespace if expand_whitespace is None else expand_whitespace
+        cached = self._trace_expanded if expanded else self._trace_collapsed
+        if cached is not None:
+            return cached
         color_enabled = resolve_color_enabled(
             self.color_policy,
             environ=os.environ,
@@ -277,7 +302,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         header_style = "bold" if color_enabled else None
         rendered = Text()
         rendered.append("[最终 provider 载荷]\n", style=header_style)
-        rendered.append(safe_terminal_text(canonical_json(thaw_json(self.payload.sdk_kwargs))))
+        rendered.append(safe_terminal_text(self._payload_json_text()))
         rendered.append(
             "\n\n[图例]\n"
             "状态：included=进入最终载荷；excluded=明确排除；empty=空片段；"
@@ -330,6 +355,10 @@ class PromptApprovalApp(App[ApprovalDecision]):
                 rendered.append(f"\n  原因 {part.exclusion_reason}")
         rendered.append("\n\n[上下文分段估算]\n", style=header_style)
         rendered.append(self._usage_details_text())
+        if expanded:
+            self._trace_expanded = rendered
+        else:
+            self._trace_collapsed = rendered
         return rendered
 
     def _trace_text(self) -> str:
@@ -348,8 +377,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.request = None
         self.payload = None
         self.estimate = None
-        trace = self.query_one("#trace", Static)
-        trace.update("")
+        self._payload_json = None
+        self._trace_collapsed = None
+        self._trace_expanded = None
+        trace = self.query_one("#trace", RichLog)
+        trace.clear()
         self.exit(self.decision)
 
     def action_approve(self) -> None:
@@ -368,7 +400,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         if self.request is None or self.payload is None:
             return
         self.expand_whitespace = not self.expand_whitespace
-        self.query_one("#trace", Static).update(self._trace_renderable())
+        self._refresh_trace()
         state = "已展开" if self.expand_whitespace else "已折叠"
         self.notify(f"空白片段与来源{state}", timeout=2)
 

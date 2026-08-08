@@ -99,7 +99,7 @@ DeepSeek 首版采用官方公开字符比例、UTF-8/JSON/工具包装开销和
 
 ## 11. 测试与文档同步策略
 
-**Decision**: 单元测试覆盖摘要、来源校验、估算守恒和三态事务；合同测试覆盖 CLI/TUI/provider/gateway/写工具能力；集成测试覆盖多调用、调试开关等价、明确拒绝和普通失败 pending；故障注入覆盖每个 journal/fsync/replace/READY/raw/YAML/cleanup 点；性能测试在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 中从 frozen request、来源和估算就绪测到标题/身份/上下文摘要 mounted，记录首次冷启动并以 30 次同进程启动 p95≤500 ms 为门禁，同时覆盖 1,000 次释放。DeepSeek 估算 fixture 至少 40 项，记录模型 id、采集日期、官方 usage、payload hash 和刷新说明。README、001 合同/quickstart、002 产物和兼容性 workflow 随对应实现同提交更新。
+**Decision**: 单元测试覆盖摘要、来源校验、估算守恒和三态事务；合同测试覆盖 CLI/TUI/provider/gateway/写工具能力；集成测试覆盖多调用、调试开关等价、明确拒绝和普通失败 pending；故障注入覆盖每个 journal/fsync/replace/READY/raw/YAML/cleanup 点；性能测试在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 中从 frozen request、来源和估算就绪测到标题/身份/上下文摘要 mounted，记录首次冷启动并以 30 次同进程启动 p95≤500 ms 为小样本门禁、300K 字符大载荷 p95≤2000 ms 为门禁，同时覆盖 1,000 次释放。trace 区域使用虚拟化 `RichLog` 只渲染可见行，首帧后异步填充正文。DeepSeek 估算 fixture 至少 40 项，记录模型 id、采集日期、官方 usage、payload hash 和刷新说明。README、001 合同/quickstart、002 产物和兼容性 workflow 随对应实现同提交更新。
 
 **Rationale**: 该功能横跨安全边界、物理网络调用和多个持久化文件，仅 happy-path UI 测试无法证明真实性、无旁路、恢复和尾部丢弃语义。分层测试能直接对应 BR-001—BR-011，同时控制定位成本。
 

@@ -52,8 +52,8 @@ debug TTY/Textual 预检仍先于应用构建和 pending 修改；因此 debug �
 每个物理模型 attempt 对应一个短生命周期 approval app：
 
 1. 进入全屏 application mode。
-2. frozen request、来源和估算已就绪后，在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 的 30 次同进程启动中，以 p95≤500 ms 完成标题、调用身份和上下文摘要 mounted；首次冷启动单独记录且不纳入门禁。
-3. 正文与所有来源加载完成后才启用批准操作。
+2. frozen request、来源和估算已就绪后，在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 的 30 次同进程启动中，以 p95≤500 ms 完成标题、调用身份和上下文摘要 mounted；另以 300K 字符大载荷样本执行 30 次同进程 p95≤2000 ms 门禁；首次冷启动单独记录且不纳入门禁。
+3. trace 区域使用虚拟化 `RichLog` 只渲染可见行，首帧先展示身份/估算/操作区、正文随后异步填充；正文与所有来源加载完成后才启用批准操作。
 4. 用户 approve/reject。
 5. 退出 app，恢复进入前终端。
 6. approve 时在网络发送前清除 TUI 的正文/来源/PreparedProviderRequest 引用，再把同一个不可变 `MaterializedSendPayload` 交给 sender；reject 时触发整轮回滚且不形成 pending。

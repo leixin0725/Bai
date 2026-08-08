@@ -266,7 +266,7 @@ git diff --check
 TERM=xterm-256color pytest tests/performance/test_prompt_tui_latency.py -q -s
 ```
 
-计时从 frozen request、来源和估算就绪到标题、身份、上下文摘要完成 mounted；首次冷启动单独记录，强制门禁只计算随后 30 次同进程启动的 p95，要求不超过 500 ms。Python 3.14 进入 Ubuntu 主要功能矩阵但不承担该固定性能门禁；Windows 仅做次要功能兼容，macOS 不在范围。
+计时从 frozen request、来源和估算就绪到标题、身份、上下文摘要完成 mounted；首次冷启动单独记录，强制门禁只计算随后 30 次同进程启动的 p95：小样本不超过 500 ms，300K 字符大载荷样本不超过 2000 ms。Python 3.14 进入 Ubuntu 主要功能矩阵但不承担该固定性能门禁；Windows 仅做次要功能兼容，macOS 不在范围。
 
 ## 11. 凭据事件处置
 

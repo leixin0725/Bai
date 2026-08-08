@@ -78,3 +78,22 @@ def test_expanded_whitespace_form_is_deterministic_and_lossless() -> None:
 def test_control_characters_are_visible_not_structural() -> None:
     rendered = safe_terminal_text("正文\x1b[31m伪标签\x00")
     assert "\\x1b" in rendered and "\\x00" in rendered
+
+
+def test_control_escaping_matches_legacy_per_character_behavior() -> None:
+    """[2026-08-08] 正则实现必须与逐字符旧实现逐字节等价，防止转义集合漂移。"""
+
+    def legacy(value: str) -> str:
+        output: list[str] = []
+        for character in value:
+            code = ord(character)
+            if character in {"\n", "\t"}:
+                output.append(character)
+            elif code < 32 or code == 127:
+                output.append(f"\\x{code:02x}")
+            else:
+                output.append(character)
+        return "".join(output)
+
+    corpus = "".join(chr(code) for code in range(256)) + "\u3000🙂"
+    assert safe_terminal_text(corpus) == legacy(corpus)
