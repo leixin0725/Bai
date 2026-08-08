@@ -131,19 +131,19 @@
 **Independent Test**: 对照 `Scriptor_to_Bai_migration/archived/feature-checklist.md` 第 4/12 节与 `archived/future-and-discarded.md` 第 4 节原文。
 
 - [x] T041 [US6] 核对两处标记并更新 `specs/004-core-runtime-pipeline/quickstart.md` 与 `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0 核对记录
-- [ ] T042 [US6] 检查点：`quickstart.md` 与 `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0 核对记录一致，与 Polish 阶段共同原子提交（Milestone 6 包含）
+- [x] T042 [US6] 检查点：`quickstart.md` 与 `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0 核对记录一致，与 Polish 阶段共同原子提交（Milestone 6 包含）
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
 **Purpose**: 全量验收、文档一致性与安全/注释/平台审计
 
-- [ ] T043 [P] 全量回归与命令验证：`pytest`、`config validate`、`memory validate`、`doctor`（使用 `.tmp/` 隔离数据根）
-- [ ] T044 [P] 跨文档一致性校验：README、specs/001 quickstart 与 contracts、本功能 7 份文档、迁移计划中的命令/路径/链接/默认值
-- [ ] T045 [P] 凭据与安全审计：新增警告与状态输出不含正文/工具参数/凭据；不新增凭据流向
-- [ ] T046 [P] 注释审计：新增/更新 zh-CN 注释均带 `[2026-08-08]` 标记
-- [ ] T047 [P] Windows 次要兼容验收：输入读取降级路径与 `.github/workflows/compatibility.yml` 覆盖
-- [ ] T048 [P] 更新 `Scriptor_to_Bai_migration/migration-plan.md` 阶段 1 验收状态为可核对的完成记录并链接本规格（阶段 0 核对记录由 T041 完成）
-- [ ] T049 最终原子提交（Milestone 6 收尾）：包含 US6 核对记录与全部 Polish 文档（`README.md`、迁移计划、本功能全部文档与 `src/`、`tests/` 变更）
+- [x] T043 [P] 全量回归与命令验证：`pytest`、`config validate`、`memory validate`、`doctor`（使用 `.tmp/` 隔离数据根）
+- [x] T044 [P] 跨文档一致性校验：README、specs/001 quickstart 与 contracts、本功能 7 份文档、迁移计划中的命令/路径/链接/默认值
+- [x] T045 [P] 凭据与安全审计：新增警告与状态输出不含正文/工具参数/凭据；不新增凭据流向
+- [x] T046 [P] 注释审计：新增/更新 zh-CN 注释均带 `[2026-08-08]` 标记
+- [x] T047 [P] Windows 次要兼容验收：输入读取降级路径与 `.github/workflows/compatibility.yml` 覆盖（未新增 CLI 命令/CI 步骤，工作流无需变更，N/A 已记录）
+- [x] T048 [P] 更新 `Scriptor_to_Bai_migration/migration-plan.md` 阶段 1 验收状态为可核对的完成记录并链接本规格（阶段 0 核对记录由 T041 完成）
+- [x] T049 最终原子提交（Milestone 6 收尾）：包含 US6 核对记录与全部 Polish 文档（`README.md`、迁移计划、本功能全部文档与 `src/`、`tests/` 变更）
 
 ## Dependencies & Execution Order
 
