@@ -49,15 +49,18 @@ git diff --check
 bash start.sh
 ```
 
-脚本会从自身位置定位项目根目录，使用 `.venv/bin/python`，并在未设置 `DEEPSEEK_API_KEY` 时通过交互式终端隐藏读取。可用参数：
+脚本会从自身位置定位项目根目录，使用 `.venv/bin/python`。无参数时默认进入 `chat`，并在未设置 `DEEPSEEK_API_KEY` 时通过交互式终端隐藏读取；`chat` 之外的命令不需要 API Key，直接透传运行。`start.sh` 是 `bai-agent` 的透传壳，任何 `bai-agent` 参数都可以手动传入，例如：
 
 ```bash
 bash start.sh --debug-prompts
 bash start.sh --resume-pending
 bash start.sh --discard-pending
+bash start.sh doctor
+bash start.sh memory validate
+bash start.sh --config-dir custom --data-dir custom chat
 ```
 
-`--resume-pending` 与 `--discard-pending` 互斥。若由外部秘密管理器启动，也可直接向该进程注入 `DEEPSEEK_API_KEY`；不要把值写进脚本、配置或 shell 历史。
+没有显式命令时脚本会自动补 `chat`，所以 `bash start.sh --debug-prompts` 等价于 `bash start.sh chat --debug-prompts`；`bash start.sh --help` 显示 `bai-agent` 的完整帮助。`--resume-pending` 与 `--discard-pending` 互斥，且会在读取凭据前拒绝。若由外部秘密管理器启动，也可直接向该进程注入 `DEEPSEEK_API_KEY`；不要把值写进脚本、配置或 shell 历史。
 
 ## 4. 数据、权限与备份
 

@@ -38,6 +38,8 @@ DEEPSEEK_API_KEY=invalid-placeholder-only .venv/bin/python -m bai_agent config v
 bash start.sh
 ```
 
+`start.sh` 是 `bai-agent` 的透传壳：无参数时默认进入 `chat`，其它任何 `bai-agent` 参数都可以手动传入，例如 `bash start.sh doctor`、`bash start.sh memory validate`、`bash start.sh --config-dir custom --data-dir custom chat`。没有显式命令时脚本会自动补 `chat`，因此 `bash start.sh --debug-prompts` 等价于 `bash start.sh chat --debug-prompts`；`bash start.sh --help` 显示 `bai-agent` 的完整帮助。API Key 只在运行 `chat` 时由脚本隐藏提示，`doctor`、`memory validate` 等离线命令直接运行；需要凭据的 `config validate` 可沿用上方占位值注入方式。
+
 普通启动发现合法尾部 USER pending 时，会只丢弃该未完成轮次并直接等待新输入；不会重发旧正文，也不会删除此前完整聊天或长期记忆。只有确认重试同一轮时显式执行：
 
 ```bash
