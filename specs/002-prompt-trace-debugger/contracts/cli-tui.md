@@ -52,8 +52,8 @@ debug TTY/Textual 预检仍先于应用构建和 pending 修改；因此 debug �
 每个物理模型 attempt 对应一个短生命周期 approval app：
 
 1. 进入全屏 application mode。
-2. frozen request、来源和估算已就绪后，在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 的 30 次同进程启动中，以 p95≤500 ms 完成标题、调用身份和上下文摘要 mounted；另以 300K 字符大载荷样本执行 30 次同进程 p95≤2000 ms 门禁；首次冷启动单独记录且不纳入门禁。
-3. trace 区域使用虚拟化 `RichLog` 只渲染可见行，首帧先展示身份/估算/操作区、正文随后异步填充；正文与所有来源加载完成后才启用批准操作。
+2. frozen request、来源和估算已就绪后，在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 的 30 次同进程启动中，以 p95≤500 ms 完成标题、调用身份和上下文摘要 mounted；另以 300K 字符大载荷执行 30 次同进程 p95≤1000 ms、1M 字符执行 p95≤2000 ms 门禁；首次冷启动单独记录且不纳入门禁。
+3. 主体为两栏审计视图：左侧 part 大纲（虚拟化列表），右侧选中项详情（虚拟化 `TraceView`，只渲染可见行）；首帧展示身份/估算/操作区，初始选中“上下文分段估算”，正文按选择按需加载，超过阈值的内容在后台线程换行并显示占位符。大纲与初始详情渲染完成、载荷已验证后才启用批准操作。
 4. 用户 approve/reject。
 5. 退出 app，恢复进入前终端。
 6. approve 时在网络发送前清除 TUI 的正文/来源/PreparedProviderRequest 引用，再把同一个不可变 `MaterializedSendPayload` 交给 sender；reject 时触发整轮回滚且不形成 pending。
@@ -69,19 +69,19 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 │ ⚠ 本地界面可能显示私人记忆；不会保存原始追踪             │
 ├ 上下文 ────────────────────────────────────────────────────┤
 │ 输入≈... + 输出预留... = 峰值... / 容量... (...%) [状态]   │
-├ 最终请求 / 来源（可滚动）──────────────────────────────────┤
-│ [messages/0/system] [included] [trusted]                   │
-│   正文……                                                   │
-│   来源 config_file: config/personas/chat.md @ <revision>   │
-│ [messages/1/user] [included] [untrusted]                   │
-│   正文……                                                   │
-│   来源 runtime:user_input turn=<id> record=<id>            │
+├ 最终请求 / 来源 ────────────────────────────────────────────┤
+│ ┌ 大纲 ──────────────┐ ┌ 详情（选中项，可滚动）───────────┐ │
+│ │ [P] 最终载荷 JSON  │ │ [上下文分段估算]                 │ │
+│ │ [U] 估算明细(N项)  │ │ 输入≈... 峰值=... / 容量 ...     │ │
+│ │ m0 · included ...  │ │ ...                              │ │
+│ │ m1 · untrusted ... │ │                                  │ │
+│ └────────────────────┘ └──────────────────────────────────┘ │
 ├ 操作 ───────────────────────────────────────────────────────┤
 │ [A] 批准并发送  [C] 复制框内全部内容  [R] 拒绝并撤销整轮   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-实际控件可按终端宽度纵向重排。除下述 `W` 折叠模式外，不得隐藏以下字段：
+实际控件可按终端宽度纵向重排（窄于 100 列时大纲与详情上下堆叠）。大纲行展示 message 序号、part 状态、信任、来源数与大小；详情展示选中 part 的完整正文（安全转义）、来源明细与排除原因，或最终载荷完整 JSON、逐段估算明细。除下述 `W` 折叠模式外，不得隐藏以下字段：
 
 - turn/flow/call sequence/purpose/persona/state/provider/model/config revision/attempt/status；
 - 最终 provider payload 的全部提示承载字段；
@@ -94,9 +94,11 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 
 | Input | Semantic |
 |---|---|
-| `A` 或点击“批准并发送” | 仅在完整渲染/校验后 approve 当前 attempt |
+| `A` 或点击“批准并发送” | 仅在大纲与初始详情渲染完成、载荷校验后 approve 当前 attempt |
 | `C` 或点击“复制框内全部内容” | 将“最终请求 / 来源”的完整安全审计纯文本（包括当前折叠项）复制到终端剪贴板；不作决定、不发送、不关闭界面、不改变请求 |
 | `W` | 在折叠模式（隐藏来源明细及整个 whitespace-only part）与完整展开模式之间切换；不改变复制文本或请求 |
+| `↑`/`↓`、`j`/`k` | 大纲聚焦时移动选择并切换详情；详情聚焦时滚动详情正文 |
+| `Tab` | 在大纲与详情之间切换焦点 |
 | `R`、`Esc` 或点击“拒绝并撤销整轮” | reject 当前 attempt，provider 不发送；fresh PREPARED 丢弃，resumed raw pending 安全截尾，随后返回聊天输入 |
 | `Ctrl+C` | 等同 reject 当前 attempt；完成 fresh PREPARED 或 resumed pending 丢弃后退出进程，退出码 130 |
 | EOF/终端丢失 | 不 approve；按 presentation failure 安全阻断并使事务恢复可收敛 |
@@ -120,7 +122,7 @@ provider 响应后的实际用量使用不含原文的普通聊天输出摘要�
 
 ## TUI 合同测试
 
-- Textual Pilot 覆盖批准、复制快捷键、复制按钮、拒绝、Esc、Ctrl+C、滚动、80x24、窄宽度、resize、无色与控制字符。
+- Textual Pilot 覆盖批准、复制快捷键、复制按钮、拒绝、Esc、Ctrl+C、大纲导航、详情滚动、80x24、窄宽度、resize、无色与控制字符。
 - 快捷键和按钮复制结果必须与边框内完整纯文本逐字符一致；复制后 decision 仍为空，请求引用仍在，provider 发送和持久 trace 均为 0。
 - 在正文尚未完整 mounted/validated 时触发 A，发送次数必须为 0。
 - stdout/stdin 非 TTY、重定向及 app 初始化失败均安全失败。

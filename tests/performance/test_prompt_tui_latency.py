@@ -1,5 +1,5 @@
-"""[2026-07-20] Ubuntu/Python 3.13 以同进程 30 次 mounted p95 执行小样本 500ms
-与大载荷 300K 字符的强制门禁。"""
+"""[2026-07-20] Ubuntu/Python 3.13 以同进程 30 次 mounted p95 执行小样本、
+300K 与 1M 字符大载荷的强制门禁。"""
 
 import json
 from pathlib import Path
@@ -17,6 +17,7 @@ from tests.prompt_debug_fakes import FakeAdapter, make_draft
 pytestmark = pytest.mark.performance
 
 LARGE_PAYLOAD_CHARS = 300_000
+XLARGE_PAYLOAD_CHARS = 1_000_000
 
 
 @pytest.mark.asyncio
@@ -29,8 +30,12 @@ LARGE_PAYLOAD_CHARS = 300_000
             "中文提示词正文。" * (LARGE_PAYLOAD_CHARS // len("中文提示词正文。")),
             "large_payload_p95_milliseconds",
         ),
+        (
+            "中文提示词正文。" * (XLARGE_PAYLOAD_CHARS // len("中文提示词正文。")),
+            "xlarge_payload_p95_milliseconds",
+        ),
     ],
-    ids=["small", "large-300k"],
+    ids=["small", "large-300k", "xlarge-1m"],
 )
 async def test_prompt_tui_mounted_p95_under_budget(content: str, budget_key: str) -> None:
     baseline = json.loads(Path("tests/performance/baselines/ubuntu-24.04-python-3.13.json").read_text(encoding="utf-8"))

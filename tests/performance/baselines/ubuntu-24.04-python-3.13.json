@@ -6,7 +6,9 @@
   "warm_runs": 30,
   "p95_milliseconds": 500,
   "large_payload_chars": 300000,
-  "large_payload_p95_milliseconds": 2000,
+  "large_payload_p95_milliseconds": 1000,
+  "xlarge_payload_chars": 1000000,
+  "xlarge_payload_p95_milliseconds": 2000,
   "cold_start_recorded_separately": true,
   "updated_at": "2026-08-08"
 }

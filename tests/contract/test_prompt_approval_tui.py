@@ -1,9 +1,11 @@
-"""[2026-07-20] Textual Pilot 验证完整展示后才能批准，并支持明确拒绝。"""
+"""[2026-07-20] Textual Pilot 验证两栏大纲+详情审计界面：按需加载、
+折叠语义、复制完整审计文本，并支持明确拒绝。"""
 
 import pytest
 
-from textual.widgets import RichLog
+from textual.widgets import ListView
 
+from bai_agent.debug.trace_view import TraceView
 from bai_agent.debug.tui import PromptApprovalApp
 from bai_agent.domain.models import (
     ContextUsageEstimate,
@@ -17,10 +19,17 @@ from bai_agent.domain.models import (
 from tests.prompt_debug_fakes import FakeAdapter, make_draft
 
 
-def _trace_plain(app: PromptApprovalApp) -> str:
-    """[2026-08-08] 读取 RichLog 实际持有的全部行文本，等价于旧 Static 的 render().plain。"""
-    log = app.query_one("#trace", RichLog)
-    return "\n".join(strip.text for strip in log.lines)
+def _outline_keys(app: PromptApprovalApp) -> list[str]:
+    return list(app._outline_keys)
+
+
+def _detail_plain(app: PromptApprovalApp) -> str:
+    return app.query_one("#detail", TraceView).plain_text
+
+
+async def _select(app: PromptApprovalApp, pilot, key: str) -> None:
+    app.query_one("#outline", ListView).index = app._outline_keys.index(key)
+    await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -38,7 +47,7 @@ async def test_tui_approve_and_reject_buttons_at_80x24() -> None:
 
 
 @pytest.mark.asyncio
-async def test_many_usage_parts_stay_inside_scroll_box_at_80x24() -> None:
+async def test_many_usage_parts_stay_inside_outline_and_detail_at_80x24() -> None:
     adapter = FakeAdapter()
     prepared = adapter.prepare(make_draft("很长的提示词正文"), 1)
     payload = adapter.materialize_sdk_kwargs(prepared)
@@ -62,11 +71,13 @@ async def test_many_usage_parts_stay_inside_scroll_box_at_80x24() -> None:
         await pilot.pause()
 
         usage = app.query_one("#usage")
-        trace = app.query_one("#trace", RichLog)
+        outline = app.query_one("#outline", ListView)
+        detail = app.query_one("#detail", TraceView)
         actions = app.query_one("#actions")
         assert usage.region.height <= 4
-        assert trace.region.height > 0
-        assert trace.max_scroll_y > 0
+        assert outline.region.height > 0
+        assert detail.region.height > 0
+        assert detail.max_scroll_y > 0
         assert actions.region.bottom <= app.screen.region.bottom
         assert not app.query_one("#approve").disabled
 
@@ -77,6 +88,33 @@ async def test_many_usage_parts_stay_inside_scroll_box_at_80x24() -> None:
     assert trace_text.index("[上下文分段估算]") > trace_text.index("很长的提示词正文")
     assert "message:4:record-000:body≈1" in trace_text
     assert "message:4:record-299:body≈300" in trace_text
+
+
+@pytest.mark.asyncio
+async def test_outline_navigation_updates_detail_and_tab_switches_focus_at_80x24() -> None:
+    adapter = FakeAdapter()
+    draft = make_draft("第一段正文")
+    prepared = adapter.prepare(draft, 1)
+    payload = adapter.materialize_sdk_kwargs(prepared)
+    estimate = ContextUsageEstimate(status="unavailable", max_output_tokens=16, reason="不可估算")
+    app = PromptApprovalApp(prepared, payload, estimate, color_policy="never")
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        outline = app.query_one("#outline", ListView)
+        detail = app.query_one("#detail", TraceView)
+        assert app.focused is outline
+        assert app._selected_key == "usage"
+        await pilot.press("down")
+        await pilot.pause()
+        assert app._selected_key == "part:0"
+        assert "第一段正文" in _detail_plain(app)
+        await pilot.press("tab")
+        await pilot.pause()
+        assert app.focused is detail
+        await pilot.press("tab")
+        await pilot.pause()
+        assert app.focused is outline
 
 
 @pytest.mark.asyncio
@@ -146,28 +184,38 @@ async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_
 
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
-        assert app.query_one("#trace", RichLog).region.height > 0
+        outline = app.query_one("#outline", ListView)
+        assert outline.region.height > 0
         assert not app.query_one("#approve").disabled
+        # 折叠模式：大纲不含空白 part，选中普通 part 的详情不含来源明细
+        assert "part:1" not in _outline_keys(app)
+        await _select(app, pilot, "part:2")
+        await pilot.pause()
+        folded = _detail_plain(app)
+        assert "B" in folded
+        assert "类型=runtime" not in folded
+        assert "source_id=input-1" not in folded
+        # 展开：大纲出现空白 part，详情出现来源明细
         await pilot.press("w")
         await pilot.pause()
-        expanded = _trace_plain(app)
-        assert separator_part_id in expanded
-        assert separator_source_id in expanded
-        assert "source_id=input-1" in expanded
-        assert "\\n" in expanded
+        assert "part:1" in _outline_keys(app)
+        await _select(app, pilot, "part:1")
+        assert "\\n" in _detail_plain(app)
+        assert separator_source_id in _detail_plain(app)
+        await _select(app, pilot, "part:2")
+        assert "类型=runtime" in _detail_plain(app)
+        assert "source_id=input-1" in _detail_plain(app)
+        # 再次折叠
         await pilot.press("w")
         await pilot.pause()
-        collapsed_again = _trace_plain(app)
-        assert separator_part_id not in collapsed_again
-        assert separator_source_id not in collapsed_again
-        assert "source_id=input-1" not in collapsed_again
+        assert "part:1" not in _outline_keys(app)
         await pilot.press("c")
         assert app._clipboard == audit
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trigger", ["shortcut", "button"])
-async def test_tui_copies_the_entire_trace_box_without_deciding(trigger: str) -> None:
+async def test_tui_copies_the_entire_audit_text_without_deciding(trigger: str) -> None:
     adapter = FakeAdapter()
     prepared = adapter.prepare(make_draft("要复制的完整正文\n第二行"), 1)
     payload = adapter.materialize_sdk_kwargs(prepared)
@@ -205,3 +253,6 @@ async def test_tui_escape_and_ctrl_c_never_approve(key: str, interrupted: bool) 
     assert app.decision and app.decision.decision.value == "reject"
     assert app.interrupted is interrupted
     assert app.request is None and app.payload is None and app.estimate is None
+    assert app._outline_keys == []
+    assert app._selected_key is None
+    assert app._audit_text is None

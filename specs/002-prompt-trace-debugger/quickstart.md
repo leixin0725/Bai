@@ -148,7 +148,7 @@ $env:NO_COLOR = "1"
 Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
 ```
 
-预期：无 ANSI 颜色或 Rich 样式 span，但调用、included/excluded/empty/unknown_source、trusted_instruction/trusted_metadata/user_instruction/untrusted_data、`message:N`、来源字段、边界、缩进和操作含义仍完整。启用颜色时 message index 使用确定性的低饱和基础色，同一历史 message 内按结构化 record 顺序 A/B 交错；颜色不进入复制文本、日志或 provider payload。trace 区域使用虚拟化 `RichLog` 按可见行渲染，首帧先展示身份/估算/操作区、正文随后异步填充；80×24 下操作按钮、完整 trace 和滚动区域仍可访问。
+预期：无 ANSI 颜色或 Rich 样式 span，但调用、included/excluded/empty/unknown_source、trusted_instruction/trusted_metadata/user_instruction/untrusted_data、`message:N`、来源字段、边界、缩进和操作含义仍完整。启用颜色时 message index 使用确定性的低饱和基础色，同一历史 message 内按结构化 record 顺序 A/B 交错；颜色不进入复制文本、日志或 provider payload。主体为两栏审计视图：左侧 part 大纲、右侧选中项详情（虚拟化 `TraceView`），首帧展示身份/估算/操作区，正文按选择按需加载，超大内容后台换行并显示占位符；80×24 下操作按钮、大纲、详情与完整复制文本均可访问。
 
 稳定色板为 config_file=cyan、data_file=green、runtime=yellow、generated=magenta；颜色不是唯一语义。`NO_COLOR`/`never`/终端不支持颜色只适用于 stdin/stdout 都是 TTY 的交互环境，输出重定向必须 fail closed。
 
@@ -197,7 +197,7 @@ git diff --check
 python -m pytest tests/integration/test_repository_secret_safety.py -q
 ```
 
-性能测试从 frozen request、来源和估算全部就绪测到标题、身份和上下文摘要完成 mounted；记录首次冷启动，但强制门禁只计算随后 30 次同一进程启动的 p95：小样本不超过 500 ms，300K 字符大载荷样本不超过 2000 ms。
+性能测试从 frozen request、来源和估算全部就绪测到标题、身份和上下文摘要完成 mounted；记录首次冷启动，但强制门禁只计算随后 30 次同一进程启动的 p95：小样本不超过 500 ms，300K 字符大载荷样本不超过 1000 ms，1M 字符样本不超过 2000 ms。
 
 门禁基线为 `tests/performance/baselines/ubuntu-24.04-python-3.13.json`；Windows 只做功能兼容并跳过该强制时延断言。
 

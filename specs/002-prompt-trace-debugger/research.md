@@ -7,7 +7,7 @@
 
 **Decision**: 使用 Textual `>=8.2,<9`，每次待批模型调用启动一个短生命周期全屏应用；界面退出后恢复原终端内容。原生 Ubuntu 24.04 是主要支持与性能门禁平台，Windows 11/PowerShell 只承担次要功能兼容验收，macOS 不在范围内。
 
-**Rationale**: 需求包含超长正文滚动、固定操作区、交互式颜色/无色降级、终端尺寸变化、显式批准和可重复的无头交互测试。Textual 的 application mode、`RichLog` 与 Pilot 正好覆盖这些边界，单一依赖比自行维护 ANSI alternate-screen、键盘读取、重绘和 Windows 兼容代码更清晰；固定 Linux 门禁环境避免把 Windows runner 波动混入 500 ms 强制指标。
+**Rationale**: 需求包含超长正文按需查看、结构式审计、固定操作区、交互式颜色/无色降级、终端尺寸变化、显式批准和可重复的无头交互测试。Textual 的 application mode、虚拟化列表/滚动视图与 Pilot 正好覆盖这些边界，单一依赖比自行维护 ANSI alternate-screen、键盘读取、重绘和 Windows 兼容代码更清晰；固定 Linux 门禁环境避免把 Windows runner 波动混入性能强制指标。
 
 **Alternatives considered**: Rich 单独使用缺少完整输入/生命周期模型；`prompt_toolkit` 可行但长内容布局和测试需更多自定义代码；手写 ANSI/Win32 状态机会扩大安全清屏和兼容风险。
 
@@ -99,7 +99,7 @@ DeepSeek 首版采用官方公开字符比例、UTF-8/JSON/工具包装开销和
 
 ## 11. 测试与文档同步策略
 
-**Decision**: 单元测试覆盖摘要、来源校验、估算守恒和三态事务；合同测试覆盖 CLI/TUI/provider/gateway/写工具能力；集成测试覆盖多调用、调试开关等价、明确拒绝和普通失败 pending；故障注入覆盖每个 journal/fsync/replace/READY/raw/YAML/cleanup 点；性能测试在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 中从 frozen request、来源和估算就绪测到标题/身份/上下文摘要 mounted，记录首次冷启动并以 30 次同进程启动 p95≤500 ms 为小样本门禁、300K 字符大载荷 p95≤2000 ms 为门禁，同时覆盖 1,000 次释放。trace 区域使用虚拟化 `RichLog` 只渲染可见行，首帧后异步填充正文。DeepSeek 估算 fixture 至少 40 项，记录模型 id、采集日期、官方 usage、payload hash 和刷新说明。README、001 合同/quickstart、002 产物和兼容性 workflow 随对应实现同提交更新。
+**Decision**: 单元测试覆盖摘要、来源校验、估算守恒和三态事务；合同测试覆盖 CLI/TUI/provider/gateway/写工具能力；集成测试覆盖多调用、调试开关等价、明确拒绝和普通失败 pending；故障注入覆盖每个 journal/fsync/replace/READY/raw/YAML/cleanup 点；性能测试在 Ubuntu 24.04/Python 3.13/80×24 `xterm-256color` 中从 frozen request、来源和估算就绪测到标题/身份/上下文摘要 mounted，记录首次冷启动并以 30 次同进程启动 p95≤500 ms 为小样本门禁、300K 字符 p95≤1000 ms 与 1M 字符 p95≤2000 ms 为大载荷门禁，同时覆盖 1,000 次释放。主体为两栏审计视图：左侧 part 大纲、右侧选中项详情（虚拟化 `TraceView`），正文按选择按需加载，超大内容后台换行并显示占位符。DeepSeek 估算 fixture 至少 40 项，记录模型 id、采集日期、官方 usage、payload hash 和刷新说明。README、001 合同/quickstart、002 产物和兼容性 workflow 随对应实现同提交更新。
 
 **Rationale**: 该功能横跨安全边界、物理网络调用和多个持久化文件，仅 happy-path UI 测试无法证明真实性、无旁路、恢复和尾部丢弃语义。分层测试能直接对应 BR-001—BR-011，同时控制定位成本。
 

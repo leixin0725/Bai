@@ -1,4 +1,5 @@
-"""[2026-07-20] Textual 批准界面短生命周期展示完整载荷，并在发送前释放正文来源。"""
+"""[2026-07-20] Textual 批准界面以大纲+详情双栏审计提示词构建，
+并在发送前释放正文来源。"""
 
 from __future__ import annotations
 
@@ -12,8 +13,9 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Button, Footer, RichLog, Static
+from textual.widgets import Button, Footer, Label, ListItem, ListView, Static
 
+from bai_agent.debug.trace_view import TraceView
 from bai_agent.domain.errors import DebugPresentationError, TurnInterrupted
 from bai_agent.domain.models import (
     ApprovalDecision,
@@ -158,7 +160,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
     CSS = """
     Screen { layout: vertical; }
     #identity, #usage, #warning { height: auto; padding: 0 1; }
-    #trace { height: 1fr; border: solid $accent; }
+    #body { height: 1fr; }
+    #outline { width: 30; border: solid $accent; }
+    #outline ListItem { height: 1; }
+    #outline Label { overflow: hidden; }
+    #detail { width: 1fr; border: solid $accent; }
     #actions { height: 3; align: center middle; }
     Button { margin: 0 2; }
     """
@@ -169,7 +175,15 @@ class PromptApprovalApp(App[ApprovalDecision]):
         Binding("r", "reject", "拒绝并撤销整轮", priority=True),
         Binding("escape", "reject", "拒绝", priority=True),
         Binding("ctrl+c", "interrupt", "拒绝并退出", priority=True),
+        Binding("tab", "toggle_focus", "切换大纲/详情焦点", priority=True),
+        Binding("j", "cursor_down", "下移", priority=False),
+        Binding("k", "cursor_up", "上移", priority=False),
     ]
+
+    PAYLOAD_KEY = "payload"
+    USAGE_KEY = "usage"
+    # [2026-08-08] 详情超过该字符数时后台线程换行，界面先显示占位符。
+    DETAIL_BACKGROUND_THRESHOLD = 60_000
 
     def __init__(
         self,
@@ -190,11 +204,16 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.display_ready = False
         self.interrupted = False
         self.expand_whitespace = False
-        # [2026-08-08] 缓存 payload JSON 与折叠/展开两种 trace 渲染结果，
+        # [2026-08-08] 缓存 payload JSON、两种审计渲染结果与复制纯文本，
         # 避免每次布局、切换或复制都重建整段大文本。
         self._payload_json: str | None = None
         self._trace_collapsed: Text | None = None
         self._trace_expanded: Text | None = None
+        self._audit_text: str | None = None
+        self._ordinals_cache: dict[tuple[int, str], int] | None = None
+        self._parts_by_order: dict[int, Any] | None = None
+        self._outline_keys: list[str] = []
+        self._selected_key: str | None = None
 
     def compose(self) -> ComposeResult:
         assert self.request is not None and self.payload is not None and self.estimate is not None
@@ -209,15 +228,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
         )
         yield Static(self.warning, id="warning", markup=False)
         yield Static(self._usage_text(), id="usage", markup=False)
-        # [2026-08-08] RichLog 只渲染可见行并缓存行结果，替代会把整段大文本
-        # 在每次布局时全量换行/格式化的 Static + ScrollableContainer。
-        yield RichLog(
-            id="trace",
-            highlight=False,
-            markup=False,
-            wrap=True,
-            auto_scroll=False,
-        )
+        # [2026-08-08] 两栏审计视图：左侧 part 大纲，右侧选中项详情；
+        # 默认只渲染大纲与初始详情，正文按选择按需加载。
+        with Horizontal(id="body"):
+            yield ListView(id="outline")
+            yield TraceView(id="detail")
         with Horizontal(id="actions"):
             yield Button("批准并发送 [A]", id="approve", variant="success", disabled=True)
             yield Button("复制框内全部内容 [C]", id="copy")
@@ -225,22 +240,114 @@ class PromptApprovalApp(App[ApprovalDecision]):
         yield Footer()
 
     def on_mount(self) -> None:
-        # [2026-08-08] 首帧先展示身份/估算/操作区，trace 在首帧后异步填充，
-        # 大载荷下界面不再等到整段渲染完成才出现。
-        self.call_after_refresh(self._populate_trace)
+        # [2026-08-08] 首帧先展示身份/估算/操作区；首帧后构建大纲并选中
+        # 估算明细（小内容同步换行），批准按钮随其就绪启用。
+        self._rebuild_outline()
+        self.call_after_refresh(self._initial_select)
 
-    def _populate_trace(self) -> None:
-        self._refresh_trace()
+    def _initial_select(self) -> None:
+        self._select_outline(1, force_sync=True)
         self.call_after_refresh(self._mark_display_ready)
-
-    def _refresh_trace(self) -> None:
-        trace = self.query_one("#trace", RichLog)
-        trace.clear()
-        trace.write(self._trace_renderable())
+        self.query_one("#outline", ListView).focus()
 
     def _mark_display_ready(self) -> None:
         self.display_ready = True
         self.query_one("#approve", Button).disabled = False
+
+    def _rebuild_outline(self) -> None:
+        assert self.request is not None and self.estimate is not None
+        entries: list[tuple[str, str]] = [
+            (self.PAYLOAD_KEY, "[P] 最终 provider 载荷（完整 JSON）"),
+            (
+                self.USAGE_KEY,
+                f"[U] 上下文分段估算（{len(self.estimate.part_tokens)} 项）",
+            ),
+        ]
+        parts_by_order: dict[int, Any] = {}
+        for part in self.request.parts:
+            parts_by_order[part.order] = part
+            whitespace_only = bool(part.content) and part.content.isspace()
+            if whitespace_only and not self.expand_whitespace:
+                continue
+            message_index = message_index_for_part(part)
+            message_label = f"m{message_index}" if message_index is not None else "m?"
+            label = (
+                f"{message_label} · {part.participation.value} · {part.trust.value} · "
+                f"来源{len(part.sources)} · {len(part.content)}字符"
+            )
+            entries.append((f"part:{part.order}", label))
+        self._parts_by_order = parts_by_order
+        self._outline_keys = [key for key, _ in entries]
+        outline = self.query_one("#outline", ListView)
+        outline.clear()
+        for _, label in entries:
+            outline.append(ListItem(Label(label)))
+
+    def _select_outline(self, index: int, *, force_sync: bool = False) -> None:
+        if not self._outline_keys:
+            return
+        index = max(0, min(index, len(self._outline_keys) - 1))
+        key = self._outline_keys[index]
+        self._selected_key = key
+        self.query_one("#outline", ListView).index = index
+        renderable = self._detail_renderable(key)
+        if renderable is None:
+            return
+        background = (
+            not force_sync
+            and len(renderable.plain) > self.DETAIL_BACKGROUND_THRESHOLD
+        )
+        self.query_one("#detail", TraceView).set_content(
+            renderable,
+            background=background,
+        )
+
+    def _detail_renderable(self, key: str) -> Text | None:
+        color_enabled = self._color_enabled()
+        header_style = "bold" if color_enabled else None
+        if key == self.PAYLOAD_KEY:
+            rendered = Text()
+            rendered.append("[最终 provider 载荷]\n", style=header_style)
+            rendered.append(safe_terminal_text(self._payload_json_text()))
+            return rendered
+        if key == self.USAGE_KEY:
+            rendered = Text()
+            rendered.append("[上下文分段估算]\n", style=header_style)
+            rendered.append(self._usage_details_text())
+            return rendered
+        if key.startswith("part:"):
+            part = self._parts_by_order.get(int(key[len("part:") :]))
+            if part is not None:
+                rendered = Text()
+                self._append_part_block(
+                    rendered,
+                    part,
+                    expanded=self.expand_whitespace,
+                    color_enabled=color_enabled,
+                    record_ordinals=self._record_ordinals(),
+                )
+                return rendered
+        return None
+
+    def _color_enabled(self) -> bool:
+        return resolve_color_enabled(
+            self.color_policy,
+            environ=os.environ,
+            supports_color=getattr(self.console, "color_system", None) is not None,
+        )
+
+    def _record_ordinals(self) -> dict[tuple[int, str], int]:
+        if self._ordinals_cache is None:
+            assert self.request is not None
+            self._ordinals_cache = record_ordinals_for_parts(self.request.parts)
+        return self._ordinals_cache
+
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        if self.request is None:
+            return
+        index = self.query_one("#outline", ListView).index
+        if index is not None:
+            self._select_outline(index)
 
     def _payload_json_text(self) -> str:
         if self._payload_json is None:
@@ -294,11 +401,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
         cached = self._trace_expanded if expanded else self._trace_collapsed
         if cached is not None:
             return cached
-        color_enabled = resolve_color_enabled(
-            self.color_policy,
-            environ=os.environ,
-            supports_color=getattr(self.console, "color_system", None) is not None,
-        )
+        color_enabled = self._color_enabled()
         header_style = "bold" if color_enabled else None
         rendered = Text()
         rendered.append("[最终 provider 载荷]\n", style=header_style)
@@ -314,45 +417,19 @@ class PromptApprovalApp(App[ApprovalDecision]):
             "entity_ids=来源关联的实体 UUID/标识，不是聊天顺序编号。",
             style=header_style,
         )
-        record_ordinals = record_ordinals_for_parts(self.request.parts)
+        record_ordinals = self._record_ordinals()
         for part in self.request.parts:
-            whitespace_only = bool(part.content) and part.content.isspace()
             # [2026-07-21] 折叠模式隐藏整个空白 part，并隐藏其余 part 的来源明细；
             # 展开/复制仍保留完整审计块。
-            if whitespace_only and not expanded:
+            if (bool(part.content) and part.content.isspace()) and not expanded:
                 continue
-            message_index = message_index_for_part(part)
-            part_style = color_for_part(part, record_ordinals) if color_enabled else None
-            message_label = f"message={message_index}" if message_index is not None else "message=无"
-            rendered.append(
-                f"\n\n[{part.part_id}] 状态={part.participation.value} "
-                f"信任={part.trust.value} 来源数={len(part.sources)} {message_label}\n",
-                style=part_style,
+            self._append_part_block(
+                rendered,
+                part,
+                expanded=expanded,
+                color_enabled=color_enabled,
+                record_ordinals=record_ordinals,
             )
-            if whitespace_only:
-                visible_content = escaped_whitespace(part.content)
-            else:
-                visible_content = safe_terminal_text(part.content)
-            rendered.append(visible_content, style=part_style)
-            if expanded:
-                for source_index, source in enumerate(part.sources, start=1):
-                    location = source.project_relative_path or "无"
-                    entity_ids = ",".join(source.entity_ids) or "无"
-                    digest = source.content_sha256 or "无"
-                    revision = source.revision or "无"
-                    rendered.append(
-                        f"\n  来源 {source_index}\n"
-                        f"    类型={source.source_kind.value}\n"
-                        f"    路径={location}\n"
-                        f"    source_id={safe_terminal_text(source.source_id)}\n"
-                        f"    producer={safe_terminal_text(source.producer)}\n"
-                        f"    entity_ids={safe_terminal_text(entity_ids)}\n"
-                        f"    sha256={safe_terminal_text(digest)}\n"
-                        f"    revision={safe_terminal_text(revision)}",
-                        style=(f"dim {SOURCE_PALETTE[source.source_kind.value]}" if color_enabled else None),
-                    )
-            if part.exclusion_reason:
-                rendered.append(f"\n  原因 {part.exclusion_reason}")
         rendered.append("\n\n[上下文分段估算]\n", style=header_style)
         rendered.append(self._usage_details_text())
         if expanded:
@@ -361,10 +438,55 @@ class PromptApprovalApp(App[ApprovalDecision]):
             self._trace_collapsed = rendered
         return rendered
 
+    def _append_part_block(
+        self,
+        rendered: Text,
+        part,
+        *,
+        expanded: bool,
+        color_enabled: bool,
+        record_ordinals: dict[tuple[int, str], int],
+    ) -> None:
+        """[2026-08-08] 追加单个 part 的审计块，详情视图与完整复制文本共用。"""
+        whitespace_only = bool(part.content) and part.content.isspace()
+        message_index = message_index_for_part(part)
+        part_style = color_for_part(part, record_ordinals) if color_enabled else None
+        message_label = f"message={message_index}" if message_index is not None else "message=无"
+        rendered.append(
+            f"\n\n[{part.part_id}] 状态={part.participation.value} "
+            f"信任={part.trust.value} 来源数={len(part.sources)} {message_label}\n",
+            style=part_style,
+        )
+        if whitespace_only:
+            visible_content = escaped_whitespace(part.content)
+        else:
+            visible_content = safe_terminal_text(part.content)
+        rendered.append(visible_content, style=part_style)
+        if expanded:
+            for source_index, source in enumerate(part.sources, start=1):
+                location = source.project_relative_path or "无"
+                entity_ids = ",".join(source.entity_ids) or "无"
+                digest = source.content_sha256 or "无"
+                revision = source.revision or "无"
+                rendered.append(
+                    f"\n  来源 {source_index}\n"
+                    f"    类型={source.source_kind.value}\n"
+                    f"    路径={location}\n"
+                    f"    source_id={safe_terminal_text(source.source_id)}\n"
+                    f"    producer={safe_terminal_text(source.producer)}\n"
+                    f"    entity_ids={safe_terminal_text(entity_ids)}\n"
+                    f"    sha256={safe_terminal_text(digest)}\n"
+                    f"    revision={safe_terminal_text(revision)}",
+                    style=(f"dim {SOURCE_PALETTE[source.source_kind.value]}" if color_enabled else None),
+                )
+        if part.exclusion_reason:
+            rendered.append(f"\n  原因 {part.exclusion_reason}")
+
     def _trace_text(self) -> str:
         """[2026-07-21] 复制始终展开空白为可逆转义，不携带 Rich 颜色。"""
-
-        return self._trace_renderable(expand_whitespace=True).plain
+        if self._audit_text is None:
+            self._audit_text = self._trace_renderable(expand_whitespace=True).plain
+        return self._audit_text
 
     def _finish(self, approve: bool) -> None:
         if self.payload is None:
@@ -380,8 +502,13 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self._payload_json = None
         self._trace_collapsed = None
         self._trace_expanded = None
-        trace = self.query_one("#trace", RichLog)
-        trace.clear()
+        self._audit_text = None
+        self._ordinals_cache = None
+        self._parts_by_order = None
+        self._outline_keys = []
+        self._selected_key = None
+        self.query_one("#outline", ListView).clear()
+        self.query_one("#detail", TraceView).clear_content()
         self.exit(self.decision)
 
     def action_approve(self) -> None:
@@ -400,9 +527,35 @@ class PromptApprovalApp(App[ApprovalDecision]):
         if self.request is None or self.payload is None:
             return
         self.expand_whitespace = not self.expand_whitespace
-        self._refresh_trace()
+        previous_key = self._selected_key
+        self._rebuild_outline()
+        index = (
+            self._outline_keys.index(previous_key)
+            if previous_key in self._outline_keys
+            else 0
+        )
+        self._select_outline(index)
         state = "已展开" if self.expand_whitespace else "已折叠"
         self.notify(f"空白片段与来源{state}", timeout=2)
+
+    def action_toggle_focus(self) -> None:
+        detail = self.query_one("#detail", TraceView)
+        if self.focused is detail:
+            self.query_one("#outline", ListView).focus()
+        else:
+            detail.focus()
+
+    def action_cursor_down(self) -> None:
+        if self.focused is self.query_one("#detail", TraceView):
+            self.query_one("#detail", TraceView).action_scroll_down()
+        else:
+            self.query_one("#outline", ListView).action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        if self.focused is self.query_one("#detail", TraceView):
+            self.query_one("#detail", TraceView).action_scroll_up()
+        else:
+            self.query_one("#outline", ListView).action_cursor_up()
 
     def action_interrupt(self) -> None:
         self.interrupted = True
