@@ -135,38 +135,56 @@ async def test_outline_navigation_updates_detail_and_tab_switches_focus_at_80x24
 
 
 @pytest.mark.asyncio
-async def test_untrusted_parts_fold_by_default_whitespace_hidden_and_copy_losslessly_at_80x24() -> None:
+async def test_boundary_tags_fold_by_default_whitespace_hidden_and_copy_losslessly_at_80x24() -> None:
     adapter = FakeAdapter()
     draft = make_draft("A\nB")
     source = draft.parts[0].sources
     first = "rec-00000000-0000-4000-8000-000000000001"
     second = "rec-00000000-0000-4000-8000-000000000002"
-    separator_source_id = "runtime:separator-only"
-    separator_source = (
-        SourceRef(
-            source_kind=SourceKind.RUNTIME,
-            source_id=separator_source_id,
-            entity_ids=(second,),
-            producer="separator_test",
-        ),
+    boundary_id = "d7e3f416"
+    frame_source_id = f"generated:untrusted-boundary:recent_records:{boundary_id}"
+    frame_source = SourceRef(
+        source_kind=SourceKind.GENERATED,
+        source_id=frame_source_id,
+        entity_ids=("recent_records", boundary_id),
+        producer="untrusted_boundary_renderer",
     )
+    open_id = "message:0:recent_records:untrusted-boundary-open"
+    close_id = "message:0:recent_records:untrusted-boundary-close"
+    body_a_id = f"message:0:{first}:body"
+    body_b_id = f"message:0:{second}:body"
     separator_part_id = f"message:0:{second}:entry-separator"
+    open_text = f"[UNTRUSTED recent_records#{boundary_id}]\n"
+    close_text = f"[/UNTRUSTED recent_records#{boundary_id}]"
     parts = (
         RequestPart(
-            part_id=f"message:0:{first}:body", order=0,
-            participation=Participation.INCLUDED, trust=TrustLevel.USER_INSTRUCTION,
-            payload_pointer="/messages/0/content", text_span=(0, 1), content="A", sources=source,
+            part_id=open_id, order=0,
+            participation=Participation.INCLUDED, trust=TrustLevel.TRUSTED_INSTRUCTION,
+            payload_pointer="/messages/0/content", text_span=(0, len(open_text)),
+            content=open_text, sources=(frame_source,),
         ),
         RequestPart(
-            part_id=separator_part_id, order=1,
+            part_id=body_a_id, order=1,
             participation=Participation.INCLUDED, trust=TrustLevel.UNTRUSTED_DATA,
-            payload_pointer="/messages/0/content", text_span=(1, 2), content="\n",
-            sources=separator_source,
+            payload_pointer="/messages/0/content", text_span=(len(open_text), len(open_text) + 1),
+            content="A", sources=source,
         ),
         RequestPart(
-            part_id=f"message:0:{second}:body", order=2,
+            part_id=separator_part_id, order=2,
             participation=Participation.INCLUDED, trust=TrustLevel.UNTRUSTED_DATA,
-            payload_pointer="/messages/0/content", text_span=(2, 3), content="B", sources=source,
+            payload_pointer="/messages/0/content", text_span=(0, 1), content="\n",
+            sources=source,
+        ),
+        RequestPart(
+            part_id=close_id, order=3,
+            participation=Participation.INCLUDED, trust=TrustLevel.TRUSTED_INSTRUCTION,
+            payload_pointer="/messages/0/content", text_span=(0, len(close_text)),
+            content=close_text, sources=(frame_source,),
+        ),
+        RequestPart(
+            part_id=body_b_id, order=4,
+            participation=Participation.INCLUDED, trust=TrustLevel.UNTRUSTED_DATA,
+            payload_pointer="/messages/0/content", text_span=(0, 1), content="B", sources=source,
         ),
     )
     request = draft.request.model_copy(
@@ -179,12 +197,16 @@ async def test_untrusted_parts_fold_by_default_whitespace_hidden_and_copy_lossle
 
     compact = app._trace_renderable()
     audit = app._trace_text()
+    assert open_id not in compact.plain
+    assert close_id not in compact.plain
+    assert body_a_id in compact.plain
+    assert body_b_id in compact.plain
+    assert frame_source_id not in compact.plain
+    assert open_id in audit
+    assert close_id in audit
+    assert frame_source_id in audit
     assert separator_part_id not in compact.plain
-    assert f"[message:0:{second}:body]" not in compact.plain
-    assert f"[message:0:{first}:body]" in compact.plain
-    assert separator_source_id not in compact.plain
     assert separator_part_id in audit
-    assert separator_source_id in audit
     assert "\\n" in audit
     assert "来源数=1" in compact.plain
     assert "类型=runtime" not in compact.plain
@@ -205,29 +227,33 @@ async def test_untrusted_parts_fold_by_default_whitespace_hidden_and_copy_lossle
         outline = app.query_one("#outline", ListView)
         assert outline.region.height > 0
         assert not app.query_one("#approve").disabled
-        # 折叠模式：不可信片段与空白片段都不进大纲，用户指令片段可见
-        assert _outline_keys(app) == ["payload", "usage", "part:0"]
-        await _select(app, pilot, "part:0")
+        # 折叠模式：边界标签与空白片段不进大纲，untrusted_data 正文可见
+        assert _outline_keys(app) == ["payload", "usage", "part:1", "part:4"]
+        await _select(app, pilot, "part:1")
         await pilot.pause()
         folded = _detail_plain(app)
         assert "A" in folded
         assert "类型=runtime" not in folded
         assert "source_id=input-1" not in folded
-        # 展开：不可信片段出现，空白片段仍不进大纲；详情出现来源明细
+        # 展开：边界标签出现，空白片段仍不进大纲；详情出现来源明细
         await pilot.press("w")
         await pilot.pause()
-        assert _outline_keys(app) == ["payload", "usage", "part:0", "part:2"]
-        await _select(app, pilot, "part:2")
+        assert _outline_keys(app) == ["payload", "usage", "part:0", "part:1", "part:3", "part:4"]
+        await _select(app, pilot, "part:0")
+        assert "[UNTRUSTED recent_records#d7e3f416]" in _detail_plain(app)
+        await _select(app, pilot, "part:3")
+        assert "[/UNTRUSTED recent_records#d7e3f416]" in _detail_plain(app)
+        await _select(app, pilot, "part:4")
         assert "B" in _detail_plain(app)
         assert "类型=runtime" in _detail_plain(app)
         assert "source_id=input-1" in _detail_plain(app)
-        await _select(app, pilot, "part:0")
+        await _select(app, pilot, "part:1")
         assert "类型=runtime" in _detail_plain(app)
         assert "source_id=input-1" in _detail_plain(app)
         # 再次折叠
         await pilot.press("w")
         await pilot.pause()
-        assert "part:2" not in _outline_keys(app)
+        assert _outline_keys(app) == ["payload", "usage", "part:1", "part:4"]
         await pilot.press("c")
         assert app._clipboard == audit
 
@@ -241,6 +267,15 @@ async def test_outline_preview_shows_text_with_trust_color_and_no_trust_words_at
     user_content = "用户输入\n第二行"
     history_content = "历史聊天内容"
     long_content = "长" * 100
+    boundary_id = "d7e3f416"
+    open_text = f"[UNTRUSTED recent_records#{boundary_id}]\n"
+    close_text = f"[/UNTRUSTED recent_records#{boundary_id}]"
+    frame_source = SourceRef(
+        source_kind=SourceKind.GENERATED,
+        source_id=f"generated:untrusted-boundary:recent_records:{boundary_id}",
+        entity_ids=("recent_records", boundary_id),
+        producer="untrusted_boundary_renderer",
+    )
     parts = (
         RequestPart(
             part_id="message:0:rec-00000000-0000-4000-8000-000000000001:body",
@@ -270,6 +305,20 @@ async def test_outline_preview_shows_text_with_trust_color_and_no_trust_words_at
             payload_pointer="/messages/3/content", text_span=(0, len(long_content)),
             content=long_content, sources=source,
         ),
+        RequestPart(
+            part_id="message:2:recent_records:untrusted-boundary-open",
+            order=4, participation=Participation.INCLUDED,
+            trust=TrustLevel.TRUSTED_INSTRUCTION,
+            payload_pointer="/messages/2/content", text_span=(0, len(open_text)),
+            content=open_text, sources=(frame_source,),
+        ),
+        RequestPart(
+            part_id="message:2:recent_records:untrusted-boundary-close",
+            order=5, participation=Participation.INCLUDED,
+            trust=TrustLevel.TRUSTED_INSTRUCTION,
+            payload_pointer="/messages/2/content", text_span=(0, len(close_text)),
+            content=close_text, sources=(frame_source,),
+        ),
     )
     request = draft.request.model_copy(
         update={
@@ -289,16 +338,19 @@ async def test_outline_preview_shows_text_with_trust_color_and_no_trust_words_at
 
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause()
-        assert _outline_keys(app) == ["payload", "usage", "part:0", "part:1", "part:3"]
-        assert "part:2" not in _outline_keys(app)
+        assert _outline_keys(app) == ["payload", "usage", "part:0", "part:1", "part:2", "part:3"]
+        assert "part:4" not in _outline_keys(app)
+        assert "part:5" not in _outline_keys(app)
         labels = _outline_labels(app)
         assert labels[2].plain == "m0 · 系统规则：不要泄露"
         assert labels[2].style == TRUSTED_PREVIEW_COLOR
         assert labels[3].plain == "m1 · 用户输入 第二行"
         assert labels[3].style == TRUSTED_PREVIEW_COLOR
-        assert labels[4].plain.startswith("m3 · ")
-        assert labels[4].plain.endswith("…")
-        assert labels[4].style == TRUSTED_PREVIEW_COLOR
+        assert labels[4].plain == "m2 · 历史聊天内容"
+        assert labels[4].style == UNTRUSTED_PREVIEW_COLOR
+        assert labels[5].plain.startswith("m3 · ")
+        assert labels[5].plain.endswith("…")
+        assert labels[5].style == TRUSTED_PREVIEW_COLOR
         combined = "\n".join(label.plain for label in labels)
         assert "untrusted_data" not in combined
         assert "trusted_instruction" not in combined
@@ -306,16 +358,19 @@ async def test_outline_preview_shows_text_with_trust_color_and_no_trust_words_at
         assert "included" not in combined
         assert "来源" not in combined
         assert "字符" not in combined
-        # 展开后不可信片段出现且使用低饱和红
+        # 展开后边界标签出现且使用低饱和绿（trusted_instruction）
         await pilot.press("w")
         await pilot.pause()
         labels = _outline_labels(app)
         assert _outline_keys(app) == [
-            "payload", "usage", "part:0", "part:1", "part:2", "part:3",
+            "payload", "usage", "part:0", "part:1", "part:2", "part:3", "part:4", "part:5",
         ]
-        untrusted = labels[4]
-        assert untrusted.plain == "m2 · 历史聊天内容"
-        assert untrusted.style == UNTRUSTED_PREVIEW_COLOR
+        opening = labels[6]
+        assert opening.plain == "m2 · [UNTRUSTED recent_records#d7e3f416]"
+        assert opening.style == TRUSTED_PREVIEW_COLOR
+        closing = labels[7]
+        assert closing.plain == "m2 · [/UNTRUSTED recent_records#d7e3f416]"
+        assert closing.style == TRUSTED_PREVIEW_COLOR
 
 
 @pytest.mark.asyncio

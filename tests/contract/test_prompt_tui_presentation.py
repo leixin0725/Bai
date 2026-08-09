@@ -5,6 +5,7 @@ from bai_agent.debug.tui import (
     SOURCE_PALETTE,
     color_for_part,
     escaped_whitespace,
+    is_boundary_frame_part,
     message_colors,
     record_ordinals_for_parts,
     resolve_color_enabled,
@@ -52,6 +53,19 @@ def test_palette_is_muted_stable_and_no_color_preserves_text_semantics() -> None
     assert not resolve_color_enabled("auto", environ={"NO_COLOR": "1"}, supports_color=True)
     assert not resolve_color_enabled("auto", environ={}, supports_color=False)
     assert resolve_color_enabled("always", environ={"NO_COLOR": "1"}, supports_color=True)
+
+
+def test_boundary_frame_part_ids_are_recognized_exactly() -> None:
+    def part(part_id: str) -> RequestPart:
+        return _part(part_id, 0, "/messages/0/content", "x")
+
+    assert is_boundary_frame_part(part("message:0:recent_records:untrusted-boundary-open"))
+    assert is_boundary_frame_part(part("message:0:recent_records:untrusted-boundary-close"))
+    assert is_boundary_frame_part(part("message:0:recent_records:untrusted-boundary-close-separator"))
+    assert not is_boundary_frame_part(part("message:0:chat-system:untrusted-boundary-instruction"))
+    assert not is_boundary_frame_part(part("message:0:chat-system:persona"))
+    assert not is_boundary_frame_part(part("message:0:rec-00000000-0000-4000-8000-000000000001:marker"))
+    assert not is_boundary_frame_part(part("message:0:recent_records:body"))
 
 
 def test_record_fragments_alternate_by_first_seen_order_and_keep_one_record_color() -> None:

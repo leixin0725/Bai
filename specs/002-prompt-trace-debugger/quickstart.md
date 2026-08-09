@@ -68,7 +68,7 @@ CLI 会先运行不含正文的 TTY/Textual application-mode probe；stdin/stdou
    - messages、正文顺序和 tools 均完整可见。
    - system message 中 persona 与 `untrusted_memory_boundary.md` 是两个独立精确 span；materialized payload 内每个不可信逻辑块真实包含一对匹配的 visible boundary。
    - 来源详情分列 `来源数`、`类型`、`路径`、`source_id`、`producer`、`entity_ids`；`entity_ids` 是实体 UUID，不是聊天顺序。
-   - 左侧大纲只显示 `mN · 正文预览`（多行正文压成单行并截断），信任级别用低饱和绿/红整行提示、不出现 trust 字样；空白/空内容片段不进大纲，`untrusted_data` 片段默认折叠，按 `W` 切换显示并展开来源明细，复制文本始终保留完整审计块。
+   - 左侧大纲只显示 `mN · 正文预览`（多行正文压成单行并截断），信任级别用低饱和绿/红整行提示、不出现 trust 字样；空白/空内容片段不进大纲，`[UNTRUSTED …#ID]` / `[/UNTRUSTED …#ID]` 边界标签默认折叠，按 `W` 切换显示并展开来源明细，对话历史等 `untrusted_data` 正文保持可见，复制文本始终保留完整审计块（含边界标签）。
 4. 按 `C` 或点击“复制框内全部内容”，核对剪贴板包含最终 provider 载荷、全部提示片段和来源；界面应继续等待决定，且 provider 发送次数仍为 0。
 5. 核对输入估算明细之和加协议开销等于输入总估算；峰值等于输入总估算加最大输出预留。
 6. 按 `A` 批准。TUI 必须在网络发送前退出并清除原文、来源和 presenter 引用，sender 只保留已批准的同一不可变载荷。

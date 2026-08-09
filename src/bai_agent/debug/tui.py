@@ -181,6 +181,22 @@ def preview_text(value: str, limit: int = PREVIEW_MAX_CHARS) -> str:
     return visible
 
 
+# [2026-08-09] UNTRUSTED 边界标签 part 的 part_id 后缀：边界渲染器生成的框架文本，
+# 不是 untrusted_data 正文，也不匹配边界规则提示词（untrusted-boundary-instruction）
+# 或时间标记（:marker）。
+_BOUNDARY_FRAME_SUFFIXES = (
+    ":untrusted-boundary-open",
+    ":untrusted-boundary-close-separator",
+    ":untrusted-boundary-close",
+)
+
+
+def is_boundary_frame_part(part) -> bool:
+    return any(
+        part.part_id.endswith(suffix) for suffix in _BOUNDARY_FRAME_SUFFIXES
+    )
+
+
 class PromptApprovalApp(App[ApprovalDecision]):
     CSS = """
     Screen { layout: vertical; }
@@ -196,7 +212,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
     BINDINGS = [
         Binding("a", "approve", "批准并发送", priority=True),
         Binding("c", "copy_trace", "复制框内全部内容", priority=True),
-        Binding("w", "toggle_untrusted", "展开/折叠不可信片段", priority=True),
+        Binding("w", "toggle_boundaries", "展开/折叠不可信边界", priority=True),
         Binding("r", "reject", "拒绝并撤销整轮", priority=True),
         Binding("escape", "reject", "拒绝", priority=True),
         Binding("ctrl+c", "interrupt", "拒绝并退出", priority=True),
@@ -228,8 +244,9 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.decision: ApprovalDecision | None = None
         self.display_ready = False
         self.interrupted = False
-        # [2026-08-09] 折叠状态：大纲默认隐藏不可信片段；展开时同时显示来源明细（沿用原行为）。
-        self.expand_untrusted = False
+        # [2026-08-09] 折叠状态：大纲默认隐藏 UNTRUSTED 边界标签；
+        # 展开时同时显示来源明细（沿用原行为）。
+        self.expand_boundaries = False
         # [2026-08-08] 缓存 payload JSON、两种审计渲染结果与复制纯文本，
         # 避免每次布局、切换或复制都重建整段大文本。
         self._payload_json: str | None = None
@@ -293,10 +310,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
         parts_by_order: dict[int, Any] = {}
         for part in self.request.parts:
             parts_by_order[part.order] = part
-            # [2026-08-09] 空白/空内容片段不进大纲；不可信片段默认折叠，按 w 切换。
+            # [2026-08-09] 空白/空内容片段永远不进大纲；
+            # UNTRUSTED 边界标签默认折叠，按 w 切换。
             if not part.content.strip():
                 continue
-            if part.trust is TrustLevel.UNTRUSTED_DATA and not self.expand_untrusted:
+            if is_boundary_frame_part(part) and not self.expand_boundaries:
                 continue
             message_index = message_index_for_part(part)
             message_label = f"m{message_index}" if message_index is not None else "m?"
@@ -351,7 +369,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
                 self._append_part_block(
                     rendered,
                     part,
-                    expanded=self.expand_untrusted,
+                    expanded=self.expand_boundaries,
                     color_enabled=color_enabled,
                     record_ordinals=self._record_ordinals(),
                 )
@@ -424,9 +442,9 @@ class PromptApprovalApp(App[ApprovalDecision]):
         )
         return "\n".join(lines)
 
-    def _trace_renderable(self, *, expand_untrusted: bool | None = None) -> Text:
+    def _trace_renderable(self, *, expand_boundaries: bool | None = None) -> Text:
         assert self.request is not None and self.payload is not None and self.estimate is not None
-        expanded = self.expand_untrusted if expand_untrusted is None else expand_untrusted
+        expanded = self.expand_boundaries if expand_boundaries is None else expand_boundaries
         cached = self._trace_expanded if expanded else self._trace_collapsed
         if cached is not None:
             return cached
@@ -449,11 +467,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
         record_ordinals = self._record_ordinals()
         for part in self.request.parts:
             # [2026-07-21] 折叠模式隐藏整个空白 part，并隐藏其余 part 的来源明细；
-            # [2026-08-09] 折叠模式同样隐藏不可信 part；
+            # [2026-08-09] 折叠模式同样隐藏 UNTRUSTED 边界标签 part；
             # 展开/复制仍保留完整审计块。
             if (bool(part.content) and part.content.isspace()) and not expanded:
                 continue
-            if part.trust is TrustLevel.UNTRUSTED_DATA and not expanded:
+            if is_boundary_frame_part(part) and not expanded:
                 continue
             self._append_part_block(
                 rendered,
@@ -517,7 +535,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
     def _trace_text(self) -> str:
         """[2026-07-21] 复制始终展开空白为可逆转义，不携带 Rich 颜色。"""
         if self._audit_text is None:
-            self._audit_text = self._trace_renderable(expand_untrusted=True).plain
+            self._audit_text = self._trace_renderable(expand_boundaries=True).plain
         return self._audit_text
 
     def _finish(self, approve: bool) -> None:
@@ -555,10 +573,10 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.copy_to_clipboard(self._trace_text())
         self.notify("已复制框内全部内容", timeout=2)
 
-    def action_toggle_untrusted(self) -> None:
+    def action_toggle_boundaries(self) -> None:
         if self.request is None or self.payload is None:
             return
-        self.expand_untrusted = not self.expand_untrusted
+        self.expand_boundaries = not self.expand_boundaries
         previous_key = self._selected_key
         self._rebuild_outline()
         index = (
@@ -567,8 +585,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
             else 0
         )
         self._select_outline(index)
-        state = "已展开" if self.expand_untrusted else "已折叠"
-        self.notify(f"不可信片段与来源明细{state}", timeout=2)
+        state = "已展开" if self.expand_boundaries else "已折叠"
+        self.notify(f"不可信边界与来源明细{state}", timeout=2)
 
     def action_toggle_focus(self) -> None:
         detail = self.query_one("#detail", TraceView)
