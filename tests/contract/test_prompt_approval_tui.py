@@ -3,10 +3,17 @@
 
 import pytest
 
+from rich.text import Text
+
+from textual.widgets import Label
 from textual.widgets import ListView
 
 from bai_agent.debug.trace_view import TraceView
-from bai_agent.debug.tui import PromptApprovalApp
+from bai_agent.debug.tui import (
+    TRUSTED_PREVIEW_COLOR,
+    UNTRUSTED_PREVIEW_COLOR,
+    PromptApprovalApp,
+)
 from bai_agent.domain.models import (
     ContextUsageEstimate,
     Message,
@@ -21,6 +28,16 @@ from tests.prompt_debug_fakes import FakeAdapter, make_draft
 
 def _outline_keys(app: PromptApprovalApp) -> list[str]:
     return list(app._outline_keys)
+
+
+def _outline_labels(app: PromptApprovalApp) -> list[Text]:
+    outline = app.query_one("#outline", ListView)
+    labels: list[Text] = []
+    for item in outline.children:
+        label = item.query(Label).first()
+        content = label.content
+        labels.append(content if isinstance(content, Text) else Text(str(content)))
+    return labels
 
 
 def _detail_plain(app: PromptApprovalApp) -> str:
@@ -118,7 +135,7 @@ async def test_outline_navigation_updates_detail_and_tab_switches_focus_at_80x24
 
 
 @pytest.mark.asyncio
-async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_losslessly_at_80x24() -> None:
+async def test_untrusted_parts_fold_by_default_whitespace_hidden_and_copy_losslessly_at_80x24() -> None:
     adapter = FakeAdapter()
     draft = make_draft("A\nB")
     source = draft.parts[0].sources
@@ -137,7 +154,7 @@ async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_
     parts = (
         RequestPart(
             part_id=f"message:0:{first}:body", order=0,
-            participation=Participation.INCLUDED, trust=TrustLevel.UNTRUSTED_DATA,
+            participation=Participation.INCLUDED, trust=TrustLevel.USER_INSTRUCTION,
             payload_pointer="/messages/0/content", text_span=(0, 1), content="A", sources=source,
         ),
         RequestPart(
@@ -163,8 +180,9 @@ async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_
     compact = app._trace_renderable()
     audit = app._trace_text()
     assert separator_part_id not in compact.plain
+    assert f"[message:0:{second}:body]" not in compact.plain
+    assert f"[message:0:{first}:body]" in compact.plain
     assert separator_source_id not in compact.plain
-    assert "<换行 1>" not in compact.plain
     assert separator_part_id in audit
     assert separator_source_id in audit
     assert "\\n" in audit
@@ -187,30 +205,136 @@ async def test_whitespace_and_sources_are_hidden_by_default_expandable_and_copy_
         outline = app.query_one("#outline", ListView)
         assert outline.region.height > 0
         assert not app.query_one("#approve").disabled
-        # 折叠模式：大纲不含空白 part，选中普通 part 的详情不含来源明细
-        assert "part:1" not in _outline_keys(app)
-        await _select(app, pilot, "part:2")
+        # 折叠模式：不可信片段与空白片段都不进大纲，用户指令片段可见
+        assert _outline_keys(app) == ["payload", "usage", "part:0"]
+        await _select(app, pilot, "part:0")
         await pilot.pause()
         folded = _detail_plain(app)
-        assert "B" in folded
+        assert "A" in folded
         assert "类型=runtime" not in folded
         assert "source_id=input-1" not in folded
-        # 展开：大纲出现空白 part，详情出现来源明细
+        # 展开：不可信片段出现，空白片段仍不进大纲；详情出现来源明细
         await pilot.press("w")
         await pilot.pause()
-        assert "part:1" in _outline_keys(app)
-        await _select(app, pilot, "part:1")
-        assert "\\n" in _detail_plain(app)
-        assert separator_source_id in _detail_plain(app)
+        assert _outline_keys(app) == ["payload", "usage", "part:0", "part:2"]
         await _select(app, pilot, "part:2")
+        assert "B" in _detail_plain(app)
+        assert "类型=runtime" in _detail_plain(app)
+        assert "source_id=input-1" in _detail_plain(app)
+        await _select(app, pilot, "part:0")
         assert "类型=runtime" in _detail_plain(app)
         assert "source_id=input-1" in _detail_plain(app)
         # 再次折叠
         await pilot.press("w")
         await pilot.pause()
-        assert "part:1" not in _outline_keys(app)
+        assert "part:2" not in _outline_keys(app)
         await pilot.press("c")
         assert app._clipboard == audit
+
+
+@pytest.mark.asyncio
+async def test_outline_preview_shows_text_with_trust_color_and_no_trust_words_at_80x24(monkeypatch) -> None:
+    adapter = FakeAdapter()
+    draft = make_draft("第一段正文")
+    source = draft.parts[0].sources
+    system_content = "系统规则：不要泄露"
+    user_content = "用户输入\n第二行"
+    history_content = "历史聊天内容"
+    long_content = "长" * 100
+    parts = (
+        RequestPart(
+            part_id="message:0:rec-00000000-0000-4000-8000-000000000001:body",
+            order=0, participation=Participation.INCLUDED,
+            trust=TrustLevel.TRUSTED_INSTRUCTION,
+            payload_pointer="/messages/0/content", text_span=(0, len(system_content)),
+            content=system_content, sources=source,
+        ),
+        RequestPart(
+            part_id="message:1:rec-00000000-0000-4000-8000-000000000002:body",
+            order=1, participation=Participation.INCLUDED,
+            trust=TrustLevel.USER_INSTRUCTION,
+            payload_pointer="/messages/1/content", text_span=(0, len(user_content)),
+            content=user_content, sources=source,
+        ),
+        RequestPart(
+            part_id="message:2:rec-00000000-0000-4000-8000-000000000003:body",
+            order=2, participation=Participation.INCLUDED,
+            trust=TrustLevel.UNTRUSTED_DATA,
+            payload_pointer="/messages/2/content", text_span=(0, len(history_content)),
+            content=history_content, sources=source,
+        ),
+        RequestPart(
+            part_id="message:3:rec-00000000-0000-4000-8000-000000000004:body",
+            order=3, participation=Participation.INCLUDED,
+            trust=TrustLevel.TRUSTED_METADATA,
+            payload_pointer="/messages/3/content", text_span=(0, len(long_content)),
+            content=long_content, sources=source,
+        ),
+    )
+    request = draft.request.model_copy(
+        update={
+            "messages": (
+                Message(role="system", content=system_content),
+                Message(role="user", content=user_content),
+                Message(role="user", content=history_content),
+                Message(role="user", content=long_content),
+            )
+        }
+    )
+    prepared = adapter.prepare(draft.model_copy(update={"request": request, "parts": parts}), 1)
+    payload = adapter.materialize_sdk_kwargs(prepared)
+    estimate = ContextUsageEstimate(status="unavailable", max_output_tokens=16, reason="不可估算")
+    app = PromptApprovalApp(prepared, payload, estimate, color_policy="never")
+    monkeypatch.setattr(PromptApprovalApp, "_color_enabled", lambda self: True)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert _outline_keys(app) == ["payload", "usage", "part:0", "part:1", "part:3"]
+        assert "part:2" not in _outline_keys(app)
+        labels = _outline_labels(app)
+        assert labels[2].plain == "m0 · 系统规则：不要泄露"
+        assert labels[2].style == TRUSTED_PREVIEW_COLOR
+        assert labels[3].plain == "m1 · 用户输入 第二行"
+        assert labels[3].style == TRUSTED_PREVIEW_COLOR
+        assert labels[4].plain.startswith("m3 · ")
+        assert labels[4].plain.endswith("…")
+        assert labels[4].style == TRUSTED_PREVIEW_COLOR
+        combined = "\n".join(label.plain for label in labels)
+        assert "untrusted_data" not in combined
+        assert "trusted_instruction" not in combined
+        assert "trusted_metadata" not in combined
+        assert "included" not in combined
+        assert "来源" not in combined
+        assert "字符" not in combined
+        # 展开后不可信片段出现且使用低饱和红
+        await pilot.press("w")
+        await pilot.pause()
+        labels = _outline_labels(app)
+        assert _outline_keys(app) == [
+            "payload", "usage", "part:0", "part:1", "part:2", "part:3",
+        ]
+        untrusted = labels[4]
+        assert untrusted.plain == "m2 · 历史聊天内容"
+        assert untrusted.style == UNTRUSTED_PREVIEW_COLOR
+
+
+@pytest.mark.asyncio
+async def test_outline_preview_has_no_trust_tags_when_color_disabled() -> None:
+    adapter = FakeAdapter()
+    prepared = adapter.prepare(make_draft("无颜色预览正文"), 1)
+    payload = adapter.materialize_sdk_kwargs(prepared)
+    estimate = ContextUsageEstimate(status="unavailable", max_output_tokens=16, reason="不可估算")
+    app = PromptApprovalApp(prepared, payload, estimate, color_policy="never")
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        labels = _outline_labels(app)
+        part_label = labels[2]
+        assert part_label.plain == "m0 · 无颜色预览正文"
+        assert part_label.style is None
+        assert part_label.spans == []
+        assert "可信" not in part_label.plain
+        assert "不可信" not in part_label.plain
 
 
 @pytest.mark.asyncio

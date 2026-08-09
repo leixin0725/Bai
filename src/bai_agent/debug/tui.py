@@ -22,6 +22,7 @@ from bai_agent.domain.models import (
     ContextUsageEstimate,
     MaterializedSendPayload,
     PreparedProviderRequest,
+    TrustLevel,
     canonical_json,
     thaw_json,
 )
@@ -156,6 +157,30 @@ def safe_terminal_text(value: str) -> str:
     return _CONTROL_ESCAPE.sub(lambda match: f"\\x{ord(match.group()):02x}", value)
 
 
+# [2026-08-09] 大纲预览的信任提示色：低饱和绿/红；无颜色模式不加文字标签，
+# 信任级别在选中后的详情标题中可见。
+TRUSTED_PREVIEW_COLOR = "#8aa888"
+UNTRUSTED_PREVIEW_COLOR = "#c08d88"
+PREVIEW_MAX_CHARS = 64
+
+
+def trust_preview_color(trust: TrustLevel) -> str:
+    return (
+        TRUSTED_PREVIEW_COLOR
+        if trust is not TrustLevel.UNTRUSTED_DATA
+        else UNTRUSTED_PREVIEW_COLOR
+    )
+
+
+def preview_text(value: str, limit: int = PREVIEW_MAX_CHARS) -> str:
+    """[2026-08-09] 大纲单行预览：空白序列折叠为一个空格、控制字符转义、按字符截断。"""
+    collapsed = " ".join(value.split())
+    visible = safe_terminal_text(collapsed)
+    if len(visible) > limit:
+        visible = visible[:limit] + "…"
+    return visible
+
+
 class PromptApprovalApp(App[ApprovalDecision]):
     CSS = """
     Screen { layout: vertical; }
@@ -171,7 +196,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
     BINDINGS = [
         Binding("a", "approve", "批准并发送", priority=True),
         Binding("c", "copy_trace", "复制框内全部内容", priority=True),
-        Binding("w", "toggle_whitespace", "展开/折叠空白片段与来源", priority=True),
+        Binding("w", "toggle_untrusted", "展开/折叠不可信片段", priority=True),
         Binding("r", "reject", "拒绝并撤销整轮", priority=True),
         Binding("escape", "reject", "拒绝", priority=True),
         Binding("ctrl+c", "interrupt", "拒绝并退出", priority=True),
@@ -203,7 +228,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.decision: ApprovalDecision | None = None
         self.display_ready = False
         self.interrupted = False
-        self.expand_whitespace = False
+        # [2026-08-09] 折叠状态：大纲默认隐藏不可信片段；展开时同时显示来源明细（沿用原行为）。
+        self.expand_untrusted = False
         # [2026-08-08] 缓存 payload JSON、两种审计渲染结果与复制纯文本，
         # 避免每次布局、切换或复制都重建整段大文本。
         self._payload_json: str | None = None
@@ -256,7 +282,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
 
     def _rebuild_outline(self) -> None:
         assert self.request is not None and self.estimate is not None
-        entries: list[tuple[str, str]] = [
+        color_enabled = self._color_enabled()
+        entries: list[tuple[str, Text | str]] = [
             (self.PAYLOAD_KEY, "[P] 最终 provider 载荷（完整 JSON）"),
             (
                 self.USAGE_KEY,
@@ -266,14 +293,16 @@ class PromptApprovalApp(App[ApprovalDecision]):
         parts_by_order: dict[int, Any] = {}
         for part in self.request.parts:
             parts_by_order[part.order] = part
-            whitespace_only = bool(part.content) and part.content.isspace()
-            if whitespace_only and not self.expand_whitespace:
+            # [2026-08-09] 空白/空内容片段不进大纲；不可信片段默认折叠，按 w 切换。
+            if not part.content.strip():
+                continue
+            if part.trust is TrustLevel.UNTRUSTED_DATA and not self.expand_untrusted:
                 continue
             message_index = message_index_for_part(part)
             message_label = f"m{message_index}" if message_index is not None else "m?"
-            label = (
-                f"{message_label} · {part.participation.value} · {part.trust.value} · "
-                f"来源{len(part.sources)} · {len(part.content)}字符"
+            label = Text(
+                f"{message_label} · {preview_text(part.content)}",
+                style=trust_preview_color(part.trust) if color_enabled else None,
             )
             entries.append((f"part:{part.order}", label))
         self._parts_by_order = parts_by_order
@@ -322,7 +351,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
                 self._append_part_block(
                     rendered,
                     part,
-                    expanded=self.expand_whitespace,
+                    expanded=self.expand_untrusted,
                     color_enabled=color_enabled,
                     record_ordinals=self._record_ordinals(),
                 )
@@ -395,9 +424,9 @@ class PromptApprovalApp(App[ApprovalDecision]):
         )
         return "\n".join(lines)
 
-    def _trace_renderable(self, *, expand_whitespace: bool | None = None) -> Text:
+    def _trace_renderable(self, *, expand_untrusted: bool | None = None) -> Text:
         assert self.request is not None and self.payload is not None and self.estimate is not None
-        expanded = self.expand_whitespace if expand_whitespace is None else expand_whitespace
+        expanded = self.expand_untrusted if expand_untrusted is None else expand_untrusted
         cached = self._trace_expanded if expanded else self._trace_collapsed
         if cached is not None:
             return cached
@@ -420,8 +449,11 @@ class PromptApprovalApp(App[ApprovalDecision]):
         record_ordinals = self._record_ordinals()
         for part in self.request.parts:
             # [2026-07-21] 折叠模式隐藏整个空白 part，并隐藏其余 part 的来源明细；
+            # [2026-08-09] 折叠模式同样隐藏不可信 part；
             # 展开/复制仍保留完整审计块。
             if (bool(part.content) and part.content.isspace()) and not expanded:
+                continue
+            if part.trust is TrustLevel.UNTRUSTED_DATA and not expanded:
                 continue
             self._append_part_block(
                 rendered,
@@ -485,7 +517,7 @@ class PromptApprovalApp(App[ApprovalDecision]):
     def _trace_text(self) -> str:
         """[2026-07-21] 复制始终展开空白为可逆转义，不携带 Rich 颜色。"""
         if self._audit_text is None:
-            self._audit_text = self._trace_renderable(expand_whitespace=True).plain
+            self._audit_text = self._trace_renderable(expand_untrusted=True).plain
         return self._audit_text
 
     def _finish(self, approve: bool) -> None:
@@ -523,10 +555,10 @@ class PromptApprovalApp(App[ApprovalDecision]):
         self.copy_to_clipboard(self._trace_text())
         self.notify("已复制框内全部内容", timeout=2)
 
-    def action_toggle_whitespace(self) -> None:
+    def action_toggle_untrusted(self) -> None:
         if self.request is None or self.payload is None:
             return
-        self.expand_whitespace = not self.expand_whitespace
+        self.expand_untrusted = not self.expand_untrusted
         previous_key = self._selected_key
         self._rebuild_outline()
         index = (
@@ -535,8 +567,8 @@ class PromptApprovalApp(App[ApprovalDecision]):
             else 0
         )
         self._select_outline(index)
-        state = "已展开" if self.expand_whitespace else "已折叠"
-        self.notify(f"空白片段与来源{state}", timeout=2)
+        state = "已展开" if self.expand_untrusted else "已折叠"
+        self.notify(f"不可信片段与来源明细{state}", timeout=2)
 
     def action_toggle_focus(self) -> None:
         detail = self.query_one("#detail", TraceView)
