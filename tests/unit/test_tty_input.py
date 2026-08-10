@@ -276,6 +276,7 @@ async def test_backspace_on_unwrapped_line_keeps_simple_erase() -> None:
         assert "\b \b" in writer.text
         assert "\x1b[1A" not in writer.text
         assert "\x1b[K" not in writer.text
+        assert "\x1b[J" not in writer.text
     finally:
         editor.close()
         os.close(master)
@@ -284,18 +285,21 @@ async def test_backspace_on_unwrapped_line_keeps_simple_erase() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("text", "expected", "redrawn_line"),
+    ("text", "width", "expected", "redrawn_line"),
     [
-        ("abcdef", "abcde", "abcde"),
-        ("中中", "中", "中"),
-        ("ab中", "ab", "ab"),
+        ("abcdef", 5, "abcde", "abcde"),
+        ("中中", 3, "中", "中"),
+        ("ab中", 3, "ab", "ab"),
+        # 宽字符在只剩 1 列时换行到续行；删除它后第一行末尾必须干净。
+        ("abcdefghi中", 10, "abcdefghi", "abcdefghi"),
+        ("abcdefghi👍", 10, "abcdefghi", "abcdefghi"),
     ],
 )
 async def test_backspace_across_wrap_redraws_current_line(
-    text: str, expected: str, redrawn_line: str
+    text: str, width: int, expected: str, redrawn_line: str
 ) -> None:
     master, slave = _open_pty()
-    _set_pty_size(slave, 24, 5 if "中" not in text else 3)
+    _set_pty_size(slave, 24, width)
     writer = _CaptureWriter()
     editor = TtyLineEditor(_FdStream(slave), writer)
     try:
@@ -303,10 +307,7 @@ async def test_backspace_across_wrap_redraws_current_line(
             await _read(editor, master, text.encode("utf-8") + b"\x7f\r")
             == expected
         )
-        assert (
-            "\x1b[1A\r\x1b[K\x1b[1B\x1b[K\x1b[1A\r" + redrawn_line
-            in writer.text
-        )
+        assert "\x1b[1A\r\x1b[J" + redrawn_line in writer.text
     finally:
         editor.close()
         os.close(master)
@@ -325,9 +326,53 @@ async def test_continue_typing_after_wrapped_backspace_keeps_display_consistent(
             == "abcdeg"
         )
         assert (
-            "\x1b[1A\r\x1b[K\x1b[1B\x1b[K\x1b[1A\rabcdeg"
+            "\x1b[1A\r\x1b[Jabcdeg"
             in writer.text
         )
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_continue_typing_after_wide_char_wrap_backspace() -> None:
+    """宽字符换行后删除，再继续输入，光标与内容保持一致。"""
+    master, slave = _open_pty()
+    _set_pty_size(slave, 24, 10)
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert (
+            await _read(
+                editor, master, "abcdefghi中".encode("utf-8") + b"\x7fx\r"
+            )
+            == "abcdefghix"
+        )
+        assert writer.text.endswith(
+            "\x1b[1A\r\x1b[Jabcdefghix" + "\r\n"
+        )
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_backspace_across_three_rows_redraws_whole_line() -> None:
+    """三行输入删除后收成两行，重绘序列从第 2 行回到行首一次清到屏尾。"""
+    master, slave = _open_pty()
+    _set_pty_size(slave, 24, 10)
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        text = "abcdefghij中中中中中中"
+        expected = "abcdefghij中中中中中"
+        assert (
+            await _read(editor, master, text.encode("utf-8") + b"\x7f\r")
+            == expected
+        )
+        assert "\x1b[2A\r\x1b[J" + expected in writer.text
     finally:
         editor.close()
         os.close(master)

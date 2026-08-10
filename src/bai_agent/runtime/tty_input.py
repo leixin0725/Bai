@@ -302,13 +302,13 @@ class TtyLineEditor:
         if span is None:
             return
         start, end, width = span
-        old_rows, old_row, _ = _line_layout(
+        _, old_row, _ = _line_layout(
             "".join(self._buffer[line_start:]), self._terminal_width()
         )
         del self._buffer[line_start + start : line_start + end]
         new_line = "".join(self._buffer[line_start:])
         if old_row > 0:
-            self._redraw_current_line(old_rows, old_row, new_line)
+            self._redraw_current_line(old_row, new_line)
         elif width > 0:
             self._echo("\b" * width + " " * width + "\b" * width)
 
@@ -338,15 +338,13 @@ class TtyLineEditor:
             return 80
         return columns if columns > 0 else 80
 
-    def _redraw_current_line(self, old_rows: int, old_row: int, new_line: str) -> None:
-        """[2026-08-10] 从当前光标位置回到逻辑行首，清掉旧行占用的物理行后重绘。"""
+    def _redraw_current_line(self, old_row: int, new_line: str) -> None:
+        """[2026-08-10] 回到逻辑行首，清到屏尾后重绘当前行。
+
+        逐行 EL 在宽字符/行尾场景可能清不干净（第一行末尾残留），
+        因此从行首一次性 ED（\x1b[J）清掉旧行及下方空白，再重绘。
+        """
         if old_row > 0:
             self._echo(f"\x1b[{old_row}A")
-        self._echo("\r")
-        for row in range(old_rows):
-            self._echo("\x1b[K")
-            if row + 1 < old_rows:
-                self._echo("\x1b[1B")
-        if old_rows > 1:
-            self._echo(f"\x1b[{old_rows - 1}A\r")
+        self._echo("\r\x1b[J")
         self._echo(new_line)
