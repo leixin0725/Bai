@@ -12,11 +12,12 @@ from typing import Any
 from rich.cells import cell_len, split_graphemes
 
 
-ENABLE_PROTOCOLS = "\x1b[?2004h\x1b[>1u"
+ENABLE_PROTOCOLS = "\x1b[?2004h\x1b[>1;4u"
 DISABLE_PROTOCOLS = "\x1b[?2004l\x1b[<1u"
 BRACKETED_PASTE_START = "\x1b[200~"
 BRACKETED_PASTE_END = "\x1b[201~"
 KITTY_SHIFT_ENTER = "\x1b[13;2u"
+LEGACY_SHIFT_ENTER = "\x1b\r"
 
 
 def display_width(text: str) -> int:
@@ -86,6 +87,10 @@ class TtyLineEditor:
     delayed EOL wrap 状态时，简单 \b 擦除依赖终端右边缘语义而残留最后一字符，
     也避免编辑器模拟光标与真实光标偏离后误清上方已显示内容。
     Shift+Enter/Ctrl+J 换出的空行同样可用退格删掉换行符并回上一行。
+    Shift+Enter 依赖终端把按键编码为 CSI u（Kitty 键盘协议，请求标志 1|4：
+    消歧义 + 备用键，`CSI >1;4u`）；部分终端/键位配置注入的是传统 ESC+CR
+    编码（如 VS Code `sendSequence "\u001b\r"` 与 codex 生态常见变通），
+    同样按换行处理，保证两种编码行为一致。
     """
 
     def __init__(self, stdin: Any, stdout: Any) -> None:
@@ -256,7 +261,7 @@ class TtyLineEditor:
         if sequence == BRACKETED_PASTE_END:
             self._paste_mode = False
             return
-        if sequence == KITTY_SHIFT_ENTER and not self._paste_mode:
+        if sequence in (KITTY_SHIFT_ENTER, LEGACY_SHIFT_ENTER) and not self._paste_mode:
             self._insert_newline()
             return
         # 其余 CSI（方向键等）本阶段忽略，不回显。

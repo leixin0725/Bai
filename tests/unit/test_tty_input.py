@@ -104,6 +104,27 @@ async def test_shift_enter_inserts_newline_without_marker_echo() -> None:
 
 
 @pytest.mark.asyncio
+async def test_legacy_esc_cr_is_shift_enter_fallback() -> None:
+    """部分终端/键位把 Shift+Enter 注入为 ESC+CR（VS Code sendSequence 与
+    codex 生态常见变通），必须与 Kitty CSI u 编码同样换行。"""
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        task = asyncio.create_task(editor.read_line())
+        await asyncio.sleep(0)
+        os.write(master, "第一行".encode("utf-8"))
+        os.write(master, b"\x1b\r")
+        os.write(master, "第二行".encode("utf-8"))
+        os.write(master, b"\r")
+        assert await asyncio.wait_for(task, timeout=1) == "第一行\n第二行"
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("payload", "expected", "redraw"),
     [
