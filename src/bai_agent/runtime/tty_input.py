@@ -83,6 +83,7 @@ class TtyLineEditor:
     不提供方向键/历史等复杂编辑（本阶段范围外）；ISIG 保留，Ctrl+C 走既有信号优雅停止。
     回显由本编辑器控制，因此括号粘贴标记（CSI 200~ / 201~）不会出现在终端。
     退格按终端 cell 宽度擦除；遇到自动换行的续行时整行重绘，避免光标无法回到上一行。
+    Shift+Enter/Ctrl+J 换出的空行同样可用退格删掉换行符并回上一行。
     """
 
     def __init__(self, stdin: Any, stdout: Any) -> None:
@@ -292,7 +293,10 @@ class TtyLineEditor:
         self._echo("\r\n")
 
     def _backspace(self) -> None:
-        if not self._buffer or self._buffer[-1] == "\n":
+        if not self._buffer:
+            return
+        if self._buffer[-1] == "\n":
+            self._delete_newline()
             return
         # 只回看当前行，避免把前一行换行符并入 grapheme 计算。
         line_start = len(self._buffer)
@@ -311,6 +315,20 @@ class TtyLineEditor:
             self._redraw_current_line(old_row, new_line)
         elif width > 0:
             self._echo("\b" * width + " " * width + "\b" * width)
+
+    def _delete_newline(self) -> None:
+        """[2026-08-10] 删除行尾换行符：把当前空行并回上一行并整行重绘。"""
+        newline_index = len(self._buffer) - 1
+        prev_start = newline_index
+        while prev_start > 0 and self._buffer[prev_start - 1] != "\n":
+            prev_start -= 1
+        prev_line = "".join(self._buffer[prev_start:newline_index])
+        prev_rows, _, _ = _line_layout(prev_line, self._terminal_width())
+        del self._buffer[newline_index]
+        # 删除换行后，从上一行行首到当前行行尾的文本构成新的当前行；
+        # 光标正位于当前空行行首，上移 prev_rows 行即回到合并后的行首。
+        combined = "".join(self._buffer[prev_start:])
+        self._redraw_current_line(prev_rows, combined)
 
     def _submit(self) -> None:
         self._results.append("".join(self._buffer))

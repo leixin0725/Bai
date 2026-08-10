@@ -104,6 +104,86 @@ async def test_shift_enter_inserts_newline_without_marker_echo() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "expected", "redraw"),
+    [
+        (b"a\x1b[13;2ub\x7f\x7f\r", "a", "\x1b[1A\r\x1b[Ja"),
+        (b"a\x1b[13;2u\x7f\r", "a", "\x1b[1A\r\x1b[Ja"),
+        ("中文\x1b[13;2u\x7f\r".encode("utf-8"), "中文", "\x1b[1A\r\x1b[J中文"),
+        (b"a\nb\x7f\x7f\r", "a", "\x1b[1A\r\x1b[Ja"),
+    ],
+)
+async def test_backspace_deletes_shift_enter_newline_and_returns_to_previous_line(
+    payload: bytes, expected: str, redraw: str
+) -> None:
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert await _read(editor, master, payload) == expected
+        assert redraw in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_backspace_joins_wrapped_previous_line() -> None:
+    """上一行自动换行成两行时，删除换行符要上移两行再整行重绘。"""
+    master, slave = _open_pty()
+    _set_pty_size(slave, 24, 5)
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert (
+            await _read(
+                editor, master, b"abcdef\x1b[13;2u\x7f\r"
+            )
+            == "abcdef"
+        )
+        assert "\x1b[2A\r\x1b[Jabcdef" in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_continue_typing_after_joining_lines_keeps_display_consistent() -> None:
+    """删除换行符后继续输入，光标与内容保持一致。"""
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert (
+            await _read(editor, master, b"a\x1b[13;2ub\x7f\x7fc\r")
+            == "ac"
+        )
+        assert writer.text.endswith("\x1b[1A\r\x1b[Jac\r\n")
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_backspace_joins_multiple_shift_enter_lines() -> None:
+    """连续多行可逐层退格删回第一行。"""
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        payload = b"a\x1b[13;2ub\x1b[13;2uc" + b"\x7f" * 4 + b"\r"
+        assert await _read(editor, master, payload) == "a"
+        assert "\x1b[1A\r\x1b[Ja" in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
 async def test_ctrl_j_is_newline_fallback() -> None:
     master, slave = _open_pty()
     editor = TtyLineEditor(_FdStream(slave), _CaptureWriter())
