@@ -12,17 +12,51 @@ from typing import Any
 from bai_agent.domain.models import ConversationAction, InputBoundary, new_id
 
 
+# [2026-08-10] 括号粘贴标记：终端把一次粘贴包裹在 CSI 200~ … 201~ 之间，
+# 作为确定性粘贴边界，不依赖送达时序与时间窗口。
+BRACKETED_PASTE_START = b"\x1b[200~"
+BRACKETED_PASTE_END = b"\x1b[201~"
+
+
+def enable_bracketed_paste(stream: Any) -> None:
+    """[2026-08-10] 仅 POSIX TTY 启用括号粘贴；非 TTY 或 Windows 静默跳过。"""
+    if sys.platform == "win32":
+        return
+    try:
+        if stream is None or not stream.isatty():
+            return
+        stream.write("\x1b[?2004h")
+        stream.flush()
+    except (AttributeError, OSError, ValueError):
+        return
+
+
+def disable_bracketed_paste(stream: Any) -> None:
+    """[2026-08-10] 退出前关闭括号粘贴，避免终端残留 2004 状态。"""
+    if sys.platform == "win32":
+        return
+    try:
+        if stream is None or not stream.isatty():
+            return
+        stream.write("\x1b[?2004l")
+        stream.flush()
+    except (AttributeError, OSError, ValueError):
+        return
+
+
 class StdinInputSource:
     """[2026-08-08] 真实文件描述符走 add_reader 分块读取（不阻塞事件循环、无线程）；内存流直接同步读。"""
 
-    def __init__(self, stream: Any) -> None:
+    def __init__(self, stream: Any, *, bracketed_stdout: Any = None) -> None:
         self._stream = stream
+        self._bracketed_stdout = bracketed_stdout
         self._fd: int | None = None
         self._buffer = bytearray()
         self._eof = False
         self._paused = False
         self._read_pending: asyncio.Future[bool] | None = None
         self._resume_event: asyncio.Event | None = None
+        self._in_bracketed_paste = False
         try:
             fd = stream.fileno()
             self._fd = fd if isinstance(fd, int) and fd >= 0 else None
@@ -44,6 +78,14 @@ class StdinInputSource:
 
     async def buffered(self) -> bool:
         """[2026-08-08] 零等待判定：stdin 已有更多数据则合并；Windows 无等效路径时降级为逐行。"""
+        # [2026-08-10] 已读入适配器缓冲但尚未消费的行仍属于"连片输入"，
+        # 否则一次粘贴被 os.read 整块读入后，fd 无可读字节会误判为逐行提交。
+        if self._buffer:
+            return True
+        # [2026-08-10] 括号粘贴进行中即使 fd 暂时无数据也必须继续累积，
+        # 否则终端逐行送达粘贴内容时会在第一个回车处误判为发送。
+        if self._in_bracketed_paste:
+            return True
         if sys.platform == "win32" or self._fd is None:
             return False
         try:
@@ -65,6 +107,34 @@ class StdinInputSource:
         event = self._resume_event
         if event is not None:
             event.set()
+        # [2026-08-10] 调试 TUI 退出时会恢复自己的终端状态，这里重新启用括号粘贴。
+        enable_bracketed_paste(self._bracketed_stdout)
+
+    @property
+    def in_bracketed_paste(self) -> bool:
+        return self._in_bracketed_paste
+
+    def _append_chunk(self, chunk: bytes) -> None:
+        self._buffer.extend(chunk)
+        self._strip_markers()
+
+    def _strip_markers(self) -> None:
+        """[2026-08-10] 单遍按序剥离完整粘贴标记并维护状态；跨分块的部分标记保留到下次补齐。"""
+        out = bytearray()
+        index = 0
+        length = len(self._buffer)
+        while index < length:
+            if self._buffer.startswith(BRACKETED_PASTE_START, index):
+                self._in_bracketed_paste = True
+                index += len(BRACKETED_PASTE_START)
+                continue
+            if self._buffer.startswith(BRACKETED_PASTE_END, index):
+                self._in_bracketed_paste = False
+                index += len(BRACKETED_PASTE_END)
+                continue
+            out.append(self._buffer[index])
+            index += 1
+        self._buffer = out
 
     async def _read_fd_line(self) -> str | None:
         """[2026-08-08] add_reader 驱动分块读取；newline 完整才返回行，EOF 返回剩余缓冲。"""
@@ -76,6 +146,7 @@ class StdinInputSource:
                 del self._buffer[: newline + 1]
                 return raw.decode("utf-8", errors="replace")
             if self._eof:
+                self._strip_markers()
                 if not self._buffer:
                     return None
                 raw = bytes(self._buffer)
@@ -105,7 +176,7 @@ class StdinInputSource:
                 if not chunk:
                     self._eof = True
                 else:
-                    self._buffer.extend(chunk)
+                    self._append_chunk(chunk)
                 if not future.done():
                     future.set_result(True)
 

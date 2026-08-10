@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+import io
 
 import pytest
 
@@ -20,7 +21,12 @@ import time
 import tty
 
 from bai_agent.domain.models import ConversationAction, InputBoundary
-from bai_agent.runtime.input_reader import InputReader, StdinInputSource
+from bai_agent.runtime.input_reader import (
+    InputReader,
+    StdinInputSource,
+    disable_bracketed_paste,
+    enable_bracketed_paste,
+)
 from tests.fakes import FakeInputSource
 
 
@@ -219,3 +225,168 @@ async def test_pause_resume_are_idempotent_without_fd() -> None:
     await source.resume()
     await source.resume()
     assert not source._paused
+
+
+@pytest.mark.asyncio
+async def test_paste_burst_is_merged_into_one_action() -> None:
+    """[2026-08-10] 回归：整块读入 Python 缓冲后，buffered() 必须仍视为连片输入。"""
+    master, slave = _open_raw_pty()
+    try:
+        os.write(master, "第一行\n第二行\n第三行\n".encode("utf-8"))
+        source = StdinInputSource(_PtyStream(slave))
+        actions: list[ConversationAction] = []
+        first_action = asyncio.Event()
+        eof_calls: list[bool] = []
+
+        async def on_action(action: ConversationAction) -> None:
+            actions.append(action)
+            if not first_action.is_set():
+                first_action.set()
+
+        def on_eof() -> None:
+            eof_calls.append(True)
+
+        reader_task = asyncio.create_task(
+            InputReader(source, on_action=on_action, on_eof=on_eof).run()
+        )
+        await asyncio.wait_for(first_action.wait(), timeout=1)
+        os.close(master)
+        await asyncio.wait_for(reader_task, timeout=1)
+        assert len(actions) == 1
+        assert actions[0].text == "第一行\n第二行\n第三行"
+        assert actions[0].source_boundary is InputBoundary.BUFFER_EMPTY
+        assert eof_calls == [True]
+    finally:
+        try:
+            os.close(slave)
+        except OSError:
+            pass
+
+
+class _TtyWriter:
+    """[2026-08-10] 记录写入的终端转义序列，用于验证括号粘贴开关。"""
+
+    def __init__(self) -> None:
+        self.writes: list[str] = []
+
+    def isatty(self) -> bool:
+        return True
+
+    def write(self, text: str) -> None:
+        self.writes.append(text)
+
+    def flush(self) -> None:
+        return None
+
+
+def test_bracketed_paste_helpers_only_write_on_tty() -> None:
+    tty_writer = _TtyWriter()
+    enable_bracketed_paste(tty_writer)
+    assert tty_writer.writes == ["\x1b[?2004h"]
+    disable_bracketed_paste(tty_writer)
+    assert tty_writer.writes == ["\x1b[?2004h", "\x1b[?2004l"]
+
+    non_tty = io.StringIO()
+    enable_bracketed_paste(non_tty)
+    disable_bracketed_paste(non_tty)
+    assert non_tty.getvalue() == ""
+
+
+@pytest.mark.asyncio
+async def test_bracketed_paste_markers_are_stripped_from_lines() -> None:
+    master, slave = _open_raw_pty()
+    source = StdinInputSource(_PtyStream(slave))
+    try:
+        os.write(master, "\x1b[200~第一行\n".encode("utf-8"))
+        assert await asyncio.wait_for(source.read_line(), 1) == "第一行\n"
+        assert source.in_bracketed_paste
+        assert await source.buffered() is True
+        os.write(master, "第二行\x1b[201~\n".encode("utf-8"))
+        assert await asyncio.wait_for(source.read_line(), 1) == "第二行\n"
+        assert not source.in_bracketed_paste
+        assert await source.buffered() is False
+    finally:
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_bracketed_paste_without_end_marker_keeps_merging() -> None:
+    """[2026-08-10] 粘贴中即使 fd 无新数据也必须继续累积（逐行送达的竞态回归）。"""
+    master, slave = _open_raw_pty()
+    source = StdinInputSource(_PtyStream(slave))
+    try:
+        os.write(master, "\x1b[200~第一行\n".encode("utf-8"))
+        assert await asyncio.wait_for(source.read_line(), 1) == "第一行\n"
+        assert await source.buffered() is True
+        os.write(master, "第二行\n".encode("utf-8"))
+        assert await asyncio.wait_for(source.read_line(), 1) == "第二行\n"
+        assert await source.buffered() is True
+    finally:
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_bracketed_paste_marker_split_across_chunks() -> None:
+    master, slave = _open_raw_pty()
+    source = StdinInputSource(_PtyStream(slave))
+    try:
+        os.write(master, b"\x1b[20")
+        os.write(master, "0~第一行\n第二行\x1b[201".encode("utf-8"))
+        assert await asyncio.wait_for(source.read_line(), 1) == "第一行\n"
+        assert source.in_bracketed_paste
+        os.write(master, b"~\n")
+        assert await asyncio.wait_for(source.read_line(), 1) == "第二行\n"
+        assert not source.in_bracketed_paste
+    finally:
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_bracketed_paste_staggered_delivery_merges_into_one_action() -> None:
+    """[2026-08-10] 用户场景回归：逐行延迟送达的粘贴不再在第一个回车处发送。"""
+    master, slave = _open_raw_pty()
+    source = StdinInputSource(_PtyStream(slave))
+    actions: list[ConversationAction] = []
+    first_action = asyncio.Event()
+    eof_calls: list[bool] = []
+
+    async def on_action(action: ConversationAction) -> None:
+        actions.append(action)
+        if not first_action.is_set():
+            first_action.set()
+
+    def on_eof() -> None:
+        eof_calls.append(True)
+
+    reader_task = asyncio.create_task(
+        InputReader(source, on_action=on_action, on_eof=on_eof).run()
+    )
+    try:
+        os.write(master, "\x1b[200~第一行\n".encode("utf-8"))
+        await asyncio.sleep(0.02)
+        os.write(master, "第二行\n".encode("utf-8"))
+        await asyncio.sleep(0.02)
+        os.write(master, "第三行\x1b[201~\n".encode("utf-8"))
+        await asyncio.wait_for(first_action.wait(), timeout=1)
+        os.close(master)
+        await asyncio.wait_for(reader_task, timeout=1)
+        assert len(actions) == 1
+        assert actions[0].text == "第一行\n第二行\n第三行"
+        assert "\x1b" not in actions[0].text
+        assert eof_calls == [True]
+    finally:
+        if not reader_task.done():
+            reader_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await reader_task
+        try:
+            os.close(master)
+        except OSError:
+            pass
+        try:
+            os.close(slave)
+        except OSError:
+            pass

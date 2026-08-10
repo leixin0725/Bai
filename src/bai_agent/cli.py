@@ -221,12 +221,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "chat":
             from bai_agent.application import build_application
             from bai_agent.debug.tui import preflight_debug_terminal
-            from bai_agent.runtime.input_reader import StdinInputSource
+            from bai_agent.runtime.input_reader import (
+                StdinInputSource,
+                disable_bracketed_paste,
+                enable_bracketed_paste,
+            )
             from bai_agent.runtime.shell import RuntimeShell
 
             if args.debug_prompts:
                 preflight_debug_terminal(sys.stdin, sys.stdout)
-            input_source = StdinInputSource(sys.stdin)
+            input_source = StdinInputSource(sys.stdin, bracketed_stdout=sys.stdout)
             app = build_application(
                 args.config_dir,
                 args.data_dir,
@@ -234,6 +238,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 debug_prompts=bool(args.debug_prompts),
                 input_source=input_source,
             )
+            # [2026-08-10] 仅 TTY 生效；退出路径统一关闭，避免终端残留 2004 状态。
+            enable_bracketed_paste(sys.stdout)
             try:
                 pending = app.archive.pending_turn()
                 resume = None
@@ -256,6 +262,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 return asyncio.run(_run_chat(shell, input_source, resume))
             finally:
+                disable_bracketed_paste(sys.stdout)
                 app.close()
     except BaiError as exc:
         _print({"ok": False, "error": exc.as_dict()})
