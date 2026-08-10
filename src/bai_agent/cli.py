@@ -221,16 +221,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "chat":
             from bai_agent.application import build_application
             from bai_agent.debug.tui import preflight_debug_terminal
-            from bai_agent.runtime.input_reader import (
-                StdinInputSource,
-                disable_bracketed_paste,
-                enable_bracketed_paste,
-            )
+            from bai_agent.runtime.input_reader import StdinInputSource
             from bai_agent.runtime.shell import RuntimeShell
 
             if args.debug_prompts:
                 preflight_debug_terminal(sys.stdin, sys.stdout)
-            input_source = StdinInputSource(sys.stdin, bracketed_stdout=sys.stdout)
+            # [2026-08-10] 真实 POSIX TTY 使用 raw 模式行编辑器（Enter 发送、
+            # Shift+Enter 换行、粘贴不回显标记）；内存缓冲/管道/Windows 走逐行输入源。
+            try:
+                real_tty = sys.stdin.isatty() and sys.stdin.fileno() >= 0
+            except (AttributeError, OSError, ValueError):
+                real_tty = False
+            if sys.platform != "win32" and real_tty:
+                from bai_agent.runtime.tty_input import TtyLineEditor
+
+                input_source = TtyLineEditor(sys.stdin, sys.stdout)
+            else:
+                input_source = StdinInputSource(sys.stdin)
             app = build_application(
                 args.config_dir,
                 args.data_dir,
@@ -238,8 +245,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 debug_prompts=bool(args.debug_prompts),
                 input_source=input_source,
             )
-            # [2026-08-10] 仅 TTY 生效；退出路径统一关闭，避免终端残留 2004 状态。
-            enable_bracketed_paste(sys.stdout)
             try:
                 pending = app.archive.pending_turn()
                 resume = None
@@ -262,7 +267,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 return asyncio.run(_run_chat(shell, input_source, resume))
             finally:
-                disable_bracketed_paste(sys.stdout)
+                close_input = getattr(input_source, "close", None)
+                if close_input is not None:
+                    close_input()
                 app.close()
     except BaiError as exc:
         _print({"ok": False, "error": exc.as_dict()})

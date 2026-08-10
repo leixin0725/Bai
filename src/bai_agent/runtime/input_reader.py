@@ -76,6 +76,10 @@ class StdinInputSource:
             return None if line == "" else line
         return await self._read_fd_line()
 
+    def close(self) -> None:
+        """[2026-08-10] 统一关闭接口：该路径不持有终端状态，无操作。"""
+        return None
+
     async def buffered(self) -> bool:
         """[2026-08-08] 零等待判定：stdin 已有更多数据则合并；Windows 无等效路径时降级为逐行。"""
         # [2026-08-10] 已读入适配器缓冲但尚未消费的行仍属于"连片输入"，

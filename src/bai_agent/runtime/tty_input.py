@@ -1,0 +1,253 @@
+"""[2026-08-10] TTY 行编辑器：raw 模式逐键读取，Enter 发送、Shift+Enter 换行、粘贴不显示标记。"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+import termios
+import tty
+from typing import Any
+
+
+ENABLE_PROTOCOLS = "\x1b[?2004h\x1b[>1u"
+DISABLE_PROTOCOLS = "\x1b[?2004l\x1b[<1u"
+BRACKETED_PASTE_START = "\x1b[200~"
+BRACKETED_PASTE_END = "\x1b[201~"
+KITTY_SHIFT_ENTER = "\x1b[13;2u"
+
+
+class TtyLineEditor:
+    """[2026-08-10] 最小 raw 模式编辑器：UTF-8 输入、退格、Enter/Shift+Enter、括号粘贴与 Ctrl+D。
+
+    不提供方向键/历史等复杂编辑（本阶段范围外）；ISIG 保留，Ctrl+C 走既有信号优雅停止。
+    回显由本编辑器控制，因此括号粘贴标记（CSI 200~ / 201~）不会出现在终端。
+    """
+
+    def __init__(self, stdin: Any, stdout: Any) -> None:
+        self._stdin = stdin
+        self._stdout = stdout
+        self._fd = stdin.fileno()
+        self._saved_attrs: list[Any] | None = None
+        self._raw_mode = False
+        self._paused = False
+        self._closed = False
+        self._buffer: list[str] = []
+        self._pending = bytearray()
+        self._paste_mode = False
+        self._results: list[str | None] = []
+        self._wake: asyncio.Future[bool] | None = None
+        self._resume_event: asyncio.Event | None = None
+
+    @property
+    def is_tty(self) -> bool:
+        return True
+
+    async def buffered(self) -> bool:
+        # [2026-08-10] 编辑器每次 read_line 只返回一个完整动作，无需缓冲合并。
+        return False
+
+    def _enter_raw(self) -> None:
+        if self._raw_mode:
+            return
+        self._saved_attrs = termios.tcgetattr(self._fd)
+        tty.setraw(self._fd, termios.TCSANOW)
+        attrs = termios.tcgetattr(self._fd)
+        attrs[3] |= termios.ISIG
+        attrs[1] |= termios.OPOST
+        termios.tcsetattr(self._fd, termios.TCSANOW, attrs)
+        self._raw_mode = True
+        self._write(ENABLE_PROTOCOLS)
+
+    def _restore(self) -> None:
+        if self._raw_mode and self._saved_attrs is not None:
+            self._write(DISABLE_PROTOCOLS)
+            termios.tcsetattr(self._fd, termios.TCSANOW, self._saved_attrs)
+            self._raw_mode = False
+
+    def close(self) -> None:
+        """[2026-08-10] 退出前恢复终端并关闭协议，避免残留 raw/2004/kitty 状态。"""
+        self._closed = True
+        self._restore()
+        wake = self._wake
+        if wake is not None and not wake.done():
+            wake.set_result(True)
+
+    async def pause(self) -> None:
+        """[2026-08-10] TUI 等独占终端期间交还 stdin：恢复 canonical 并移除监听。"""
+        self._paused = True
+        self._restore()
+        wake = self._wake
+        if wake is not None and not wake.done():
+            wake.set_result(True)
+
+    async def resume(self) -> None:
+        """[2026-08-10] 独占结束：重新进入 raw 模式并重发协议，未消费字节保留。"""
+        self._paused = False
+        self._enter_raw()
+        event = self._resume_event
+        if event is not None:
+            event.set()
+
+    async def read_line(self) -> str | None:
+        """[2026-08-10] 等待一个完整输入：Enter 返回正文，Ctrl+D 空缓冲返回 EOF。"""
+        loop = asyncio.get_running_loop()
+        while True:
+            if self._results:
+                return self._results.pop(0)
+            if self._closed:
+                return None
+            if self._paused:
+                self._resume_event = asyncio.Event()
+                try:
+                    await self._resume_event.wait()
+                finally:
+                    self._resume_event = None
+                continue
+            self._enter_raw()
+            future = loop.create_future()
+            self._wake = future
+            try:
+                loop.add_reader(self._fd, lambda: self._on_readable(future))
+                await future
+            finally:
+                self._wake = None
+                loop.remove_reader(self._fd)
+
+    def _on_readable(self, future: asyncio.Future[bool]) -> None:
+        if future.done():
+            return
+        try:
+            chunk = os.read(self._fd, 4096)
+        except (BlockingIOError, InterruptedError):
+            return
+        except OSError:
+            chunk = b""
+        if not chunk:
+            self._results.append(None)
+        else:
+            self._feed(chunk)
+        future.set_result(True)
+
+    def _feed(self, chunk: bytes) -> None:
+        self._pending.extend(chunk)
+        while self._pending:
+            if self._pending[0] == 0x1B:
+                sequence = self._consume_escape()
+                if sequence is None:
+                    break
+                self._handle_escape(sequence)
+            else:
+                char = self._consume_utf8()
+                if char is None:
+                    break
+                self._handle_char(char)
+
+    def _consume_utf8(self) -> str | None:
+        first = self._pending[0]
+        if first < 0x80:
+            length = 1
+        elif first < 0xC0:
+            length = 1
+        elif first < 0xE0:
+            length = 2
+        elif first < 0xF0:
+            length = 3
+        else:
+            length = 4
+        if len(self._pending) < length:
+            return None
+        raw = bytes(self._pending[:length])
+        del self._pending[:length]
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return raw.decode("utf-8", errors="replace")
+
+    def _consume_escape(self) -> str | None:
+        if len(self._pending) < 2:
+            return None
+        if self._pending[1] != 0x5B:  # 非 CSI（ESC+单字符），直接消费两个字节
+            raw = bytes(self._pending[:2])
+            del self._pending[:2]
+            return raw.decode("latin-1")
+        index = 2
+        while index < len(self._pending):
+            byte = self._pending[index]
+            if 0x40 <= byte <= 0x7E:
+                raw = bytes(self._pending[: index + 1])
+                del self._pending[: index + 1]
+                return raw.decode("latin-1")
+            index += 1
+        if len(self._pending) > 64:
+            raw = bytes(self._pending[:2])
+            del self._pending[:2]
+            return raw.decode("latin-1")
+        return None
+
+    def _handle_escape(self, sequence: str) -> None:
+        if sequence == BRACKETED_PASTE_START:
+            self._paste_mode = True
+            return
+        if sequence == BRACKETED_PASTE_END:
+            self._paste_mode = False
+            return
+        if sequence == KITTY_SHIFT_ENTER and not self._paste_mode:
+            self._insert_newline()
+            return
+        # 其余 CSI（方向键等）本阶段忽略，不回显。
+
+    def _handle_char(self, char: str) -> None:
+        if self._paste_mode:
+            if char in ("\r", "\n"):
+                self._insert_newline()
+            else:
+                self._buffer.append(char)
+                self._echo(char)
+            return
+        if char == "\r":
+            self._submit()
+            return
+        if char == "\n":
+            self._insert_newline()
+            return
+        if char in ("\x7f", "\x08"):
+            self._backspace()
+            return
+        if char == "\x04":
+            if self._buffer:
+                self._submit()
+            else:
+                self._results.append(None)
+            return
+        if char.isprintable() or char in ("\t", " "):
+            self._buffer.append(char)
+            self._echo(char)
+
+    def _insert_newline(self) -> None:
+        self._buffer.append("\n")
+        self._echo("\r\n")
+
+    def _backspace(self) -> None:
+        if not self._buffer or self._buffer[-1] == "\n":
+            return
+        self._buffer.pop()
+        self._echo("\b \b")
+
+    def _submit(self) -> None:
+        self._results.append("".join(self._buffer))
+        self._buffer = []
+        self._echo("\r\n")
+
+    def _echo(self, text: str) -> None:
+        try:
+            self._stdout.write(text)
+            self._stdout.flush()
+        except (AttributeError, OSError, ValueError):
+            return
+
+    def _write(self, text: str) -> None:
+        try:
+            self._stdout.write(text)
+            self._stdout.flush()
+        except (AttributeError, OSError, ValueError):
+            return
