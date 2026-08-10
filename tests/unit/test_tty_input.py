@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
+import fcntl
+import struct
 
 import pytest
 
@@ -20,6 +22,7 @@ from bai_agent.runtime.tty_input import (
     DISABLE_PROTOCOLS,
     ENABLE_PROTOCOLS,
     _last_grapheme_span,
+    _line_layout,
     display_width,
     TtyLineEditor,
 )
@@ -51,6 +54,10 @@ class _CaptureWriter:
 def _open_pty() -> tuple[int, int]:
     master, slave = pty.openpty()
     return master, slave
+
+
+def _set_pty_size(fd: int, rows: int, columns: int) -> None:
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
 
 
 async def _read(editor: TtyLineEditor, master: int, payload: bytes) -> str | None:
@@ -182,6 +189,23 @@ def test_last_grapheme_span_groups_visible_clusters(
     assert _last_grapheme_span(text) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "width", "expected"),
+    [
+        ("", 5, (1, 0, 0)),
+        ("abcde", 5, (1, 0, 5)),
+        ("abcdef", 5, (2, 1, 1)),
+        ("中文", 3, (2, 1, 2)),
+        ("ab中", 3, (2, 1, 2)),
+        ("abcde中", 5, (2, 1, 2)),
+    ],
+)
+def test_line_layout_simulates_terminal_wrap(
+    text: str, width: int, expected: tuple[int, int, int]
+) -> None:
+    assert _line_layout(text, width) == expected
+
+
 @pytest.mark.asyncio
 async def test_backspace_erases_cjk_by_terminal_width() -> None:
     master, slave = _open_pty()
@@ -234,6 +258,75 @@ async def test_continue_typing_after_mixed_backspace_keeps_display_consistent() 
         )
         assert writer.text.endswith(
             "a中b" + "\b \b" + "\b\b  \b\b" + "c" + "\r\n"
+        )
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_backspace_on_unwrapped_line_keeps_simple_erase() -> None:
+    master, slave = _open_pty()
+    _set_pty_size(slave, 24, 5)
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert await _read(editor, master, b"abcde\x7f\r") == "abcd"
+        assert "\b \b" in writer.text
+        assert "\x1b[1A" not in writer.text
+        assert "\x1b[K" not in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "expected", "redrawn_line"),
+    [
+        ("abcdef", "abcde", "abcde"),
+        ("中中", "中", "中"),
+        ("ab中", "ab", "ab"),
+    ],
+)
+async def test_backspace_across_wrap_redraws_current_line(
+    text: str, expected: str, redrawn_line: str
+) -> None:
+    master, slave = _open_pty()
+    _set_pty_size(slave, 24, 5 if "中" not in text else 3)
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert (
+            await _read(editor, master, text.encode("utf-8") + b"\x7f\r")
+            == expected
+        )
+        assert (
+            "\x1b[1A\r\x1b[K\x1b[1B\x1b[K\x1b[1A\r" + redrawn_line
+            in writer.text
+        )
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_continue_typing_after_wrapped_backspace_keeps_display_consistent() -> None:
+    master, slave = _open_pty()
+    _set_pty_size(slave, 24, 5)
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert (
+            await _read(editor, master, b"abcdef\x7fg\r")
+            == "abcdeg"
+        )
+        assert (
+            "\x1b[1A\r\x1b[K\x1b[1B\x1b[K\x1b[1A\rabcdeg"
+            in writer.text
         )
     finally:
         editor.close()

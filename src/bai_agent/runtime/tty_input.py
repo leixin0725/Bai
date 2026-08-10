@@ -50,11 +50,39 @@ def _last_grapheme_span(text: str) -> tuple[int, int, int] | None:
     return start, end, display_width(text[start:end])
 
 
+def _line_layout(text: str, terminal_width: int) -> tuple[int, int, int]:
+    """[2026-08-10] 模拟终端自动换行，返回 (物理行数, 光标所在行, 光标列)。
+
+    宽字符在仅剩 1 列时会被终端放到下一行行首，避免拆字；该规则在此同步模拟。
+    """
+    if terminal_width <= 0:
+        return 1, 0, display_width(text)
+    rows = 0
+    column = 0
+    spans, _ = split_graphemes(text)
+    for start, end, _ in spans:
+        chunk = text[start:end]
+        # 与 _last_grapheme_span 保持一致：本编辑器不追踪 tab stop，按 1 列近似。
+        width = 1 if chunk.endswith("\t") else display_width(chunk)
+        if width <= 0:
+            continue
+        if column + width <= terminal_width:
+            column += width
+        else:
+            rows += 1
+            if width > 1 and column == terminal_width - 1:
+                column = width
+            else:
+                column = width
+    return rows + 1, rows, column
+
+
 class TtyLineEditor:
     """[2026-08-10] 最小 raw 模式编辑器：UTF-8 输入、退格、Enter/Shift+Enter、括号粘贴与 Ctrl+D。
 
     不提供方向键/历史等复杂编辑（本阶段范围外）；ISIG 保留，Ctrl+C 走既有信号优雅停止。
     回显由本编辑器控制，因此括号粘贴标记（CSI 200~ / 201~）不会出现在终端。
+    退格按终端 cell 宽度擦除；遇到自动换行的续行时整行重绘，避免光标无法回到上一行。
     """
 
     def __init__(self, stdin: Any, stdout: Any) -> None:
@@ -274,8 +302,14 @@ class TtyLineEditor:
         if span is None:
             return
         start, end, width = span
+        old_rows, old_row, _ = _line_layout(
+            "".join(self._buffer[line_start:]), self._terminal_width()
+        )
         del self._buffer[line_start + start : line_start + end]
-        if width > 0:
+        new_line = "".join(self._buffer[line_start:])
+        if old_row > 0:
+            self._redraw_current_line(old_rows, old_row, new_line)
+        elif width > 0:
             self._echo("\b" * width + " " * width + "\b" * width)
 
     def _submit(self) -> None:
@@ -296,3 +330,23 @@ class TtyLineEditor:
             self._stdout.flush()
         except (AttributeError, OSError, ValueError):
             return
+
+    def _terminal_width(self) -> int:
+        try:
+            columns = os.get_terminal_size(self._fd).columns
+        except (OSError, ValueError, AttributeError):
+            return 80
+        return columns if columns > 0 else 80
+
+    def _redraw_current_line(self, old_rows: int, old_row: int, new_line: str) -> None:
+        """[2026-08-10] 从当前光标位置回到逻辑行首，清掉旧行占用的物理行后重绘。"""
+        if old_row > 0:
+            self._echo(f"\x1b[{old_row}A")
+        self._echo("\r")
+        for row in range(old_rows):
+            self._echo("\x1b[K")
+            if row + 1 < old_rows:
+                self._echo("\x1b[1B")
+        if old_rows > 1:
+            self._echo(f"\x1b[{old_rows - 1}A\r")
+        self._echo(new_line)
