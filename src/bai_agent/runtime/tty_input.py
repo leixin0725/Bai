@@ -82,7 +82,9 @@ class TtyLineEditor:
 
     不提供方向键/历史等复杂编辑（本阶段范围外）；ISIG 保留，Ctrl+C 走既有信号优雅停止。
     回显由本编辑器控制，因此括号粘贴标记（CSI 200~ / 201~）不会出现在终端。
-    退格按终端 cell 宽度擦除；遇到自动换行的续行时整行重绘，避免光标无法回到上一行。
+    退格按终端 cell 宽度删除，并始终整行重绘当前逻辑行；避免满宽行处于
+    delayed EOL wrap 状态时，简单 \b 擦除依赖终端右边缘语义而残留最后一字符，
+    也避免编辑器模拟光标与真实光标偏离后误清上方已显示内容。
     Shift+Enter/Ctrl+J 换出的空行同样可用退格删掉换行符并回上一行。
     """
 
@@ -305,16 +307,17 @@ class TtyLineEditor:
         span = _last_grapheme_span("".join(self._buffer[line_start:]))
         if span is None:
             return
-        start, end, width = span
+        start, end, _ = span
         _, old_row, _ = _line_layout(
             "".join(self._buffer[line_start:]), self._terminal_width()
         )
         del self._buffer[line_start + start : line_start + end]
         new_line = "".join(self._buffer[line_start:])
-        if old_row > 0:
-            self._redraw_current_line(old_row, new_line)
-        elif width > 0:
-            self._echo("\b" * width + " " * width + "\b" * width)
+        # 始终整行重绘：整行恰好占满终端宽度时终端处于 delayed EOL wrap
+        # 状态，\b+空格+\b 的简单擦除在不同终端右边缘语义下会残留最后一字符
+        # （如 Windows Terminal），并使编辑器模拟光标与真实光标偏离；每次
+        # 退格都从逻辑行首重绘可确保显示与编辑器状态始终一致。
+        self._redraw_current_line(old_row, new_line)
 
     def _delete_newline(self) -> None:
         """[2026-08-10] 删除行尾换行符：把当前空行并回上一行并整行重绘。"""
@@ -359,10 +362,12 @@ class TtyLineEditor:
     def _redraw_current_line(self, old_row: int, new_line: str) -> None:
         """[2026-08-10] 回到逻辑行首，清到屏尾后重绘当前行。
 
-        逐行 EL 在宽字符/行尾场景可能清不干净（第一行末尾残留），
-        因此从行首一次性 ED（\x1b[J）清掉旧行及下方空白，再重绘。
+        先 CR 回到本行第 0 列，确定性清除 delayed EOL wrap 标志并摆脱
+        右边缘 \b/CUB 的终端差异，再上移 old_row 行到逻辑行首；随后从
+        行首一次性 ED（\x1b[J）清掉旧行及下方空白，再重绘当前行。
         """
+        self._echo("\r")
         if old_row > 0:
             self._echo(f"\x1b[{old_row}A")
-        self._echo("\r\x1b[J")
+        self._echo("\x1b[J")
         self._echo(new_line)
