@@ -105,8 +105,6 @@ def _data_root(config_root: Path, reference: str) -> Path:
     candidate = (config_root / reference).resolve()
     if candidate in {config_root.resolve(), config_root.resolve().parent} or candidate == Path(candidate.anchor):
         raise BaiError("CONFIG_INVALID", "data_root 不能是配置根、仓库根或文件系统根。")
-    if str(candidate).startswith("\\\\"):
-        raise BaiError("CONFIG_INVALID", "首版不接受网络共享数据根。")
     return candidate
 
 

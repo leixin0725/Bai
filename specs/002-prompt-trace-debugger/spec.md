@@ -177,7 +177,7 @@
 - **FR-032**: 已批准请求发生普通 provider 或网络失败且不再重试时，系统 MUST 将当前事务持久转换为 `READY_PENDING`，幂等发布且仅发布一条 USER pending；只有显式 `--resume-pending` 才允许恢复并重发该内容，下一次未指定恢复参数的默认启动或显式 `--discard-pending` MUST 原子丢弃该合法尾部 pending 后进入新输入；维护者明确拒绝 MUST NOT 形成 pending。
 - **FR-033**: 当前工具注册表 MUST 只声明并执行只读工具；未来具有写副作用的工具在可拒绝轮次中 MUST 提供可持久恢复的 `prepare/commit/rollback` 或明确补偿契约，否则系统 MUST 在任何副作用发生前拒绝执行。
 - **FR-034**: chat 与 memory curator profile MUST 从 `deepseek-chat` 迁移到 `deepseek-v4-flash`，保持 `thinking_enabled=false`、`max_output_tokens=8192` 及各 profile 现有 temperature、tools、structured-output 等生成参数不变；每个初始、重试和工具续接请求 MUST 在唯一物化载荷中显式发送 `thinking.type=disabled`，不得依赖 V4 默认思考模式；provider 能力元数据 MUST 记录 1,000,000 token context 和 384,000 token 输出上限。
-- **FR-035**: `chat` MUST 提供互斥的 `--resume-pending` 与 `--discard-pending`；Linux `start.sh` MUST 透传对应长参数，Windows `start.ps1` MUST 提供互斥的 `-ResumePending` 与 `-DiscardPending`，且两种入口均可与各自 debug 参数组合。无 pending 时三种启动模式均 MUST 安全进入新输入，不得调用恢复发送。
+- **FR-035**: `chat` MUST 提供互斥的 `--resume-pending` 与 `--discard-pending`；`start.sh` MUST 透传对应长参数并与 `--debug-prompts` 组合。无 pending 时三种启动模式均 MUST 安全进入新输入，不得调用恢复发送。
 - **FR-036**: pending 丢弃 MUST 只允许删除 raw archive 最末尾、角色为 USER、无对应 ASSISTANT 且未进入长期记忆、来源索引、coverage 或 curation frontier 的未完成轮次；MUST 保持此前完整轮次、全局 sequence 连续性、分段 JSONL、内容哈希和其他用户数据不变，并使用现有 WriterLease、私有权限与原子替换机制使崩溃后只可能保留完整旧状态或完整新状态。
 - **FR-037**: fresh 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C MUST 丢弃 PREPARED；恢复既有 pending 的调试轮次遇到相同明确拒绝时 MUST 通过受保护的尾部丢弃删除 raw pending。R、Esc 和拒绝按钮返回输入界面，Ctrl+C 完成丢弃后 MUST 以 130 退出；EOF、终端丢失或 presentation failure MUST 保持零发送且不得伪装成批准。
 - **FR-038**: 等待批准的 TUI MUST 提供“复制框内全部内容”按钮和 `C` 快捷键，把最终 provider 载荷、全部提示片段及来源按当前安全可见文本完整复制到终端剪贴板；复制 MUST NOT 批准、拒绝、发送、关闭界面、改变请求或在应用内创建持久 trace，完成通知 MUST NOT 回显正文。
@@ -209,7 +209,7 @@
 ### Documentation Requirements *(mandatory for major updates)*
 
 - **DR-001**: README 和运行指南 MUST 说明调试视图的用途、启动参数、默认关闭行为、pending 默认丢弃/显式恢复/显式丢弃命令、基础类 TUI 的调用与来源标签、框内全部内容复制及快捷键、交互式颜色及无颜色模式、上下文估算字段、逐次批准、批准后清除、拒绝整轮撤销、普通失败转 pending 和私人记忆暴露提醒。
-- **DR-002**: 快速开始与验收说明 MUST 提供可执行的最小验证流程，覆盖单次聊天、多次模型调用、文件来源、运行时来源、上下文估算、批准发送、fresh 与 resumed 拒绝、普通失败后的默认丢弃/`--discard-pending`/`--resume-pending`、PowerShell 参数透传、调试关闭、非 TTY 失败和凭据不显示。
+- **DR-002**: 快速开始与验收说明 MUST 提供可执行的最小验证流程，覆盖单次聊天、多次模型调用、文件来源、运行时来源、上下文估算、批准发送、fresh 与 resumed 拒绝、普通失败后的默认丢弃/`--discard-pending`/`--resume-pending`、启动脚本参数透传、调试关闭、非 TTY 失败和凭据不显示。
 - **DR-003**: 配置说明 MUST 记录颜色策略、高占用阈值、模型上下文容量元数据的默认值、校验失败行为、`deepseek-v4-flash` 迁移不变量和不同模型提供商的兼容性边界。
 - **DR-004**: 故障排查说明 MUST 解释来源未知、估算不可用、容量超限、交互式无颜色或非交互终端、追踪完整性失败、拒绝回滚中断、可重试与不可重试 provider 失败、工具续接协议、写工具门禁和提供商未返回实际用量时的表现与恢复方式。
 
@@ -247,7 +247,7 @@
 - **SC-015**: 在 retry exhausted、non-retryable provider error 和网络中断验收中，100% 普通失败最终只形成一条 USER pending；显式 `--resume-pending` 复用同一 turn 且不重复 USER，下一次默认启动或 `--discard-pending` 删除该 pending 后直接进入新输入；明确 reject 最终 pending 数量为 0。
 - **SC-016**: 对当前全部工具和至少一个 fake 写工具执行合同验收时，当前工具只读声明与实现一致率为 100%；缺少有效事务或补偿能力的写工具在副作用前拒绝率为 100%，副作用调用数量为 0。
 - **SC-017**: 配置和 provider 合同测试中，chat 与 memory curator 均使用 `deepseek-v4-flash` 非思考模式，每个物理请求的 `thinking.type` 均为 `disabled`，`max_output_tokens` 均为 8192，迁移前后其余生成参数差异数量为 0；provider 能力元数据分别为 1,000,000 context 和 384,000 output cap。
-- **SC-018**: 默认、`--discard-pending`、`--resume-pending` 与 `--debug-prompts` 的适用组合在存在/不存在 pending 时全部通过合同与集成测试；CLI 互斥参数退出 2，PowerShell 互斥参数在读取凭据或启动 Python 前给出参数绑定错误。
+- **SC-018**: 默认、`--discard-pending`、`--resume-pending` 与 `--debug-prompts` 的适用组合在存在/不存在 pending 时全部通过合同与集成测试；CLI 与 `start.sh` 的互斥参数在读取凭据或启动 Python 前退出 2。
 - **SC-019**: fresh 与 resumed 调试轮次的 R、Esc、拒绝按钮和 Ctrl+C 验收中 provider 发送次数均为 0；resumed pending 在明确拒绝后从 raw 尾部消失，Ctrl+C 退出码为 130，其余明确拒绝返回输入循环。
 - **SC-020**: Textual Pilot 中通过 `C` 和复制按钮得到的剪贴板文本 MUST 与边框内完整纯文本逐字符一致，且两条路径的批准、拒绝、provider 发送、界面关闭和持久 trace 数量均为 0。
 - **SC-021**: 在 400/401/402/403/422、429/500/503、网络失败和未知 SDK 异常合同测试中，不可重试错误的发送与批准次数均为 1；每个可重试物理 attempt 恰有一次新批准；SDK 内部重试次数为 0，错误正文、请求正文和凭据泄漏数量为 0。
@@ -268,4 +268,4 @@
 - 调试模式中的当前轮数据在整轮确认前视为可无痕撤销的临时工作；拒绝任一待批请求会恢复轮前检查点并返回输入界面。此前已发送的外部辅助调用无法撤回，但其响应和本地派生结果不会进入之后的应用状态。
 - 普通 provider/网络失败继续使用现有 USER pending；只有显式 `--resume-pending` 重发，默认启动和 `--discard-pending` 均放弃该未完成尾部轮次并开始新对话。
 - `deepseek-v4-flash` 使用非思考模式；chat 与 memory curator 的 `max_output_tokens=8192` 及现有 temperature、tools、structured-output 设置保持不变，1M/384K 仅作为 provider 能力上限元数据。
-- 原生 Linux 是主要支持平台，Windows 是次要功能兼容平台，macOS 不在本功能范围内。
+- 原生 Ubuntu 24.04/WSL 是唯一支持平台，原生 Windows 与 macOS 不在本功能范围内。

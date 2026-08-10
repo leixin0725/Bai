@@ -6,7 +6,6 @@ import asyncio
 from collections.abc import Awaitable, Callable
 import os
 import select
-import sys
 from typing import Any
 
 from bai_agent.domain.models import ConversationAction, InputBoundary, new_id
@@ -19,9 +18,7 @@ BRACKETED_PASTE_END = b"\x1b[201~"
 
 
 def enable_bracketed_paste(stream: Any) -> None:
-    """[2026-08-10] 仅 POSIX TTY 启用括号粘贴；非 TTY 或 Windows 静默跳过。"""
-    if sys.platform == "win32":
-        return
+    """[2026-08-10] 仅 TTY 启用括号粘贴；非 TTY 静默跳过。"""
     try:
         if stream is None or not stream.isatty():
             return
@@ -33,8 +30,6 @@ def enable_bracketed_paste(stream: Any) -> None:
 
 def disable_bracketed_paste(stream: Any) -> None:
     """[2026-08-10] 退出前关闭括号粘贴，避免终端残留 2004 状态。"""
-    if sys.platform == "win32":
-        return
     try:
         if stream is None or not stream.isatty():
             return
@@ -81,7 +76,7 @@ class StdinInputSource:
         return None
 
     async def buffered(self) -> bool:
-        """[2026-08-08] 零等待判定：stdin 已有更多数据则合并；Windows 无等效路径时降级为逐行。"""
+        """[2026-08-08] 零等待判定：stdin 已有更多数据则合并。"""
         # [2026-08-10] 已读入适配器缓冲但尚未消费的行仍属于"连片输入"，
         # 否则一次粘贴被 os.read 整块读入后，fd 无可读字节会误判为逐行提交。
         if self._buffer:
@@ -90,7 +85,7 @@ class StdinInputSource:
         # 否则终端逐行送达粘贴内容时会在第一个回车处误判为发送。
         if self._in_bracketed_paste:
             return True
-        if sys.platform == "win32" or self._fd is None:
+        if self._fd is None:
             return False
         try:
             readable, _, _ = select.select([self._fd], [], [], 0)
@@ -187,7 +182,8 @@ class StdinInputSource:
             try:
                 loop.add_reader(self._fd, on_readable)
             except NotImplementedError:
-                # [2026-08-08] Windows 次要兼容：阻塞式逐行读取，不做合并。
+                # [2026-08-10] 事件循环不支持 add_reader 时降级为阻塞式逐行读取；
+                # Ubuntu/WSL 正常路径不会走到。
                 line = self._stream.readline()
                 return None if line == "" else line
             try:

@@ -24,9 +24,9 @@
 
 **Decision**: 使用标准库 `zoneinfo.ZoneInfo` 验证与转换 IANA 时区，并在运行依赖中加入 `tzdata>=2026.3` 作为系统时区库缺失时的第一方后备。配置时区无法解析时 fail closed，不用固定偏移或本机默认时区替代。
 
-**Rationale**: Python 的 `zoneinfo` 会优先使用系统时区数据，再查找 `tzdata`；Windows 通常没有 IANA 数据库，显式依赖才能让 `Asia/Shanghai` 和含 DST 的验收在两个受支持平台一致。固定偏移无法表达 DST，静默回退会让同一配置产生不同标记。
+**Rationale**: Python 的 `zoneinfo` 会优先使用系统时区数据，再查找 `tzdata`；显式依赖 `tzdata` 能保证各 Ubuntu/WSL 环境对 `Asia/Shanghai` 和含 DST 的验收输出一致。固定偏移无法表达 DST，静默回退会让同一配置产生不同标记。
 
-**Alternatives considered**: 只依赖 Linux 系统数据会让 Windows 出现 `ZoneInfoNotFoundError`；使用 `pytz`/dateutil 增加不必要的第二套 API；把所有时间显示成 UTC 不符合可配置显示时区需求。
+**Alternatives considered**: 只依赖系统时区数据会让精简 Linux/WSL 镜像出现 `ZoneInfoNotFoundError`；使用 `pytz`/dateutil 增加不必要的第二套 API；把所有时间显示成 UTC 不符合可配置显示时区需求。
 
 **Sources**: [Python `zoneinfo` data sources](https://docs.python.org/3/library/zoneinfo.html#data-sources)、[Python-owned `tzdata` package](https://pypi.org/project/tzdata/)
 
@@ -110,7 +110,7 @@ split_on_local_date_change = true
 
 ## 12. 存储、来源工具、测试与文档边界
 
-**Decision**: 不修改 raw/long-term 持久化格式，不写回 marker，不迁移 UTC 时间；`src/bai_agent/tools/memory_source.py` 的输入、输出、分页、权限和返回 JSON 逐字保持。该工具作为工具历史返回模型时，只允许 controller 在外层 message content 前添加时间 marker，工具自身返回 body 仍是精确子串。分层测试覆盖算法/配置/投影/预算、聊天/整理/工具集成、wire/provenance/debug 回归、10k 性能和 Windows/Linux 时区；README 与 001/002/003 合同和 quickstart 随实现同步。
+**Decision**: 不修改 raw/long-term 持久化格式，不写回 marker，不迁移 UTC 时间；`src/bai_agent/tools/memory_source.py` 的输入、输出、分页、权限和返回 JSON 逐字保持。该工具作为工具历史返回模型时，只允许 controller 在外层 message content 前添加时间 marker，工具自身返回 body 仍是精确子串。分层测试覆盖算法/配置/投影/预算、聊天/整理/工具集成、wire/provenance/debug 回归、10k 性能和 Ubuntu/WSL 时区；README 与 001/002/003 合同和 quickstart 随实现同步。
 
 **Rationale**: 用户明确排除来源追溯工具，展示元数据也不应污染事实存储。黄金合同与 no-write 测试比仅依赖代码审查更能防止未来接入时越界。
 

@@ -123,4 +123,4 @@ prompt assembler 必须从 asset 传递来源，不能只接收裸字符串。�
 - README/quickstart 必须说明模型能力数字来自配置而非实时 API 探测。
 - 从 `deepseek-chat` alias 迁移到 `deepseek-v4-flash` 时，更新现有 001 配置合同和运行指南；不得仅改生产 TOML。
 - 新 provider 必须提供 capability 配置、estimator 或明确 unavailable 行为，以及 `prepare()`、唯一 `materialize_sdk_kwargs()`、`send_once()` adapter 合同测试。
-- 主要兼容矩阵为 Ubuntu 24.04/Python 3.13 与 3.14；Windows runner 只承担次要功能兼容，macOS 不在本功能范围内；500 ms 性能门禁只在 Ubuntu 24.04/Python 3.13 执行。
+- 兼容矩阵为 Ubuntu 24.04/Python 3.13 与 3.14；原生 Windows 与 macOS 不在本功能范围内；500 ms 性能门禁只在 Ubuntu 24.04/Python 3.13 执行。

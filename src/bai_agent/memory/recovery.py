@@ -20,9 +20,7 @@ def _noop(_: str) -> None:
 
 
 def _sync_directory(path: Path) -> None:
-    """[2026-07-19] Windows 不支持通用目录 fsync；POSIX 支持时同步目录项。"""
-    if os.name == "nt":
-        return
+    """[2026-08-10] POSIX（Ubuntu/WSL）下同步目录项，保证原子替换落盘。"""
     descriptor = os.open(path, os.O_RDONLY)
     try:
         os.fsync(descriptor)
@@ -83,4 +81,3 @@ class WriterLease:
 
     def __exit__(self, *_: object) -> None:
         self.release()
-

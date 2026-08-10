@@ -9,7 +9,7 @@
 5. 记录 repository scan revision、runtime/log scan revision 与处置记录编号。
 6. 分次或一次确认处置证据：
 
-```powershell
+```bash
 python -m bai_agent security incident acknowledge --rotation-reference REF --repository-scan-revision REV --runtime-scan-revision REV --disposition-record RECORD
 python -m bai_agent security incident check
 ```

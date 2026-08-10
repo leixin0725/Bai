@@ -20,7 +20,7 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 ```
 
-Windows/PowerShell 只承担次要兼容验收；macOS 不在支持范围。依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。跨 Ubuntu 机器部署和升级见[部署手册](../../docs/ubuntu-deployment.md)。
+原生 Windows 与 macOS 不在支持范围；Windows 用户经 WSL 使用。依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。跨 Ubuntu 机器部署和升级见[部署手册](../../docs/ubuntu-deployment.md)。
 
 ## 2. 配置与外部凭据
 
@@ -118,7 +118,7 @@ pytest tests/contract/test_prompt_temporal_context.py tests/integration/test_tem
 
 配置修改只在下一份完整快照边界生效，缺失或无效文件必须在请求前失败。生成 marker 不写入 raw/长期记忆；直接检查 `data/memory/` 构建前后字节可证明无持久化副作用。
 
-参数单位与边界：`long_gap_minutes` 为 `1..1440` 分钟；`continuous_segment_refresh_minutes` 为 `1..10080` 分钟且必须大于等于 gap；`split_on_local_date_change` 只能是布尔值；`display_timezone` 只能是 `zoneinfo`/`tzdata` 可解析的 IANA 名称。不要使用 `Local`、Windows 时区名或 `UTC+8` 固定偏移。
+参数单位与边界：`long_gap_minutes` 为 `1..1440` 分钟；`continuous_segment_refresh_minutes` 为 `1..10080` 分钟且必须大于等于 gap；`split_on_local_date_change` 只能是布尔值；`display_timezone` 只能是 `zoneinfo`/`tzdata` 可解析的 IANA 名称。不要使用 `Local`、本机 locale 或 `UTC+8` 固定偏移。
 
 若 reload 报错，先保留当前进程与记忆文件，修复错误中点名的 `history_timestamps.toml` 字段，再离线验证并重试下一轮；不需要重置或迁移 raw/YAML。验证只检查凭据环境变量是否存在，可使用明确无效的测试占位值，不会发起网络请求：
 
@@ -127,7 +127,7 @@ DEEPSEEK_API_KEY=invalid-placeholder-only python -m bai_agent config validate --
 pytest tests/integration/test_temporal_config_reload.py tests/integration/test_packaging.py -q
 ```
 
-项目依赖 `tzdata>=2026.3`，Windows 无系统 IANA 数据库时也必须把固定 UTC instant 转成与 Ubuntu 相同的 `Asia/Shanghai` 日期、分钟和 `+08:00`。
+项目依赖 `tzdata>=2026.3`，保证 Ubuntu/WSL 环境把固定 UTC instant 转成一致的 `Asia/Shanghai` 日期、分钟和 `+08:00`。
 
 ## 4. 记忆组织与完整覆盖
 
@@ -232,7 +232,7 @@ python -m bai_agent --config-dir config --data-dir data memory validate
 python -m bai_agent --config-dir config --data-dir data doctor
 ```
 
-POSIX 预期目录为 `0700`、文件为 `0600`；Windows 预期 DACL 仅允许当前用户、SYSTEM 和 Administrators。程序会尽力收紧本地路径，网络共享、符号链接/junction 或无法验证的权限会 fail-closed。
+预期目录为 `0700`、文件为 `0600`。程序会收紧本地路径；符号链接或无法验证的权限会 fail-closed。
 
 ## 8. Provider、工具、状态与自主循环扩展
 
@@ -256,7 +256,7 @@ python -m bai_agent --data-dir .tmp/validation security incident check
 git diff --check
 ```
 
-`.github/workflows/compatibility.yml` 在固定 Ubuntu 24.04 上以 Python 3.12/3.13/3.14 运行主要功能门禁，并在 Windows runner 上运行次要兼容门禁；macOS 不在范围。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
+`.github/workflows/compatibility.yml` 在固定 Ubuntu 24.04 上以 Python 3.12/3.13/3.14 运行功能门禁；原生 Windows 与 macOS 不在范围（Windows 用户经 WSL 使用）。真实 DeepSeek smoke test 必须使用显式 marker、隔离数据和最小配额，不进入默认 CI。
 
 ## 10. Ubuntu 24.04 提示 TUI 性能复现
 
@@ -266,14 +266,14 @@ git diff --check
 TERM=xterm-256color pytest tests/performance/test_prompt_tui_latency.py -q -s
 ```
 
-计时从 frozen request、来源和估算就绪到标题、身份、上下文摘要完成 mounted；首次冷启动单独记录，强制门禁只计算随后 30 次同进程启动的 p95：小样本不超过 500 ms，300K 字符大载荷样本不超过 1000 ms，1M 字符样本不超过 2000 ms。Python 3.14 进入 Ubuntu 主要功能矩阵但不承担该固定性能门禁；Windows 仅做次要功能兼容，macOS 不在范围。
+计时从 frozen request、来源和估算就绪到标题、身份、上下文摘要完成 mounted；首次冷启动单独记录，强制门禁只计算随后 30 次同进程启动的 p95：小样本不超过 500 ms，300K 字符大载荷样本不超过 1000 ms，1M 字符样本不超过 2000 ms。Python 3.14 进入 Ubuntu 功能矩阵但不承担该固定性能门禁；原生 Windows 与 macOS 不在范围。
 
 ## 11. 凭据事件处置
 
 常规检查：
 
-```powershell
-pytest tests\integration\test_repository_secret_safety.py
+```bash
+pytest tests/integration/test_repository_secret_safety.py
 python -m bai_agent --data-dir data security incident check
 ```
 

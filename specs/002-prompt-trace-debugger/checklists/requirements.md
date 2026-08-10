@@ -31,7 +31,7 @@
 - [x] Provider materialization, approval binding, TUI clearing, sender release, and actual-usage ownership have one lifecycle
 - [x] Current read-only tools and future write-tool recovery capability are explicitly bounded
 - [x] Model migration preserves both profiles' generation parameters and records provider capability metadata
-- [x] Linux primary, Windows secondary, and macOS out-of-scope compatibility boundaries are explicit
+- [x] Ubuntu/Linux primary, and native Windows/macOS out-of-scope compatibility boundaries are explicit
 
 ## Feature Readiness
 

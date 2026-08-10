@@ -11,8 +11,8 @@ python -m bai_agent --config-dir config --data-dir data chat --resume-pending --
 - `--debug-prompts` 仅属于 `chat` 子命令，只对当前进程有效。
 - 未提供参数时调试关闭；配置文件不得启用或记住该状态。
 - 进程运行中不提供切换命令；重启时必须重新显式传参。
-- Linux `start.sh` 和 Windows `start.ps1` 只做安全透传，不把状态写入环境持久区或配置。
-- `--resume-pending` 与 `--discard-pending` 在 CLI 解析阶段及 Bash 启动脚本中互斥；`-ResumePending` 与 `-DiscardPending` 在 PowerShell 参数绑定阶段互斥。显式 pending 参数都可分别与对应 debug 参数组合。
+- `start.sh` 只做安全透传，不把状态写入环境持久区或配置。
+- `--resume-pending` 与 `--discard-pending` 在 CLI 解析阶段及 Bash 启动脚本中互斥。显式 pending 参数都可与 `--debug-prompts` 组合。
 
 ## Pending 启动策略
 
@@ -45,7 +45,7 @@ debug TTY/Textual 预检仍先于应用构建和 pending 修改；因此 debug �
 
 请求级 TUI 在 PREPARED 写入后若发生运行期渲染/终端丢失，则仍保持零发送并退出；未决定 journal 在下次持有 WriterLease 的启动恢复中丢弃。该路径不同于启动预检，不把失败伪装成明确 reject 或普通 provider pending。
 
-该门禁不做平台替代：原生 Ubuntu 24.04 是主要支持环境，Windows 11/PowerShell 是次要功能兼容环境，macOS 不在范围内。
+该门禁不做平台替代：原生 Ubuntu 24.04/WSL 是唯一支持环境，原生 Windows 与 macOS 不在范围内。
 
 ## 界面生命周期
 

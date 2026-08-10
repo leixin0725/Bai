@@ -2,7 +2,7 @@
 
 ## 1. 入口
 
-```powershell
+```bash
 python -m bai_agent [GLOBAL_OPTIONS] COMMAND [COMMAND_OPTIONS]
 ```
 
@@ -17,7 +17,7 @@ CLI 不提供会话/线程 ID、创建新对话或选择历史对话。所有 `c
 
 ## 2. `config validate`
 
-```powershell
+```bash
 python -m bai_agent config validate --config-dir config
 ```
 
@@ -31,11 +31,11 @@ python -m bai_agent config validate --config-dir config
 
 ## 3. `memory validate`
 
-```powershell
+```bash
 python -m bai_agent memory validate
 ```
 
-行为：取得写锁或只读一致快照，验证所有原始段、全局顺序、长期 YAML、来源、哈希、`MemoryCoverageOverview` 连续覆盖、修剪前沿、文件权限和凭据模式。POSIX 目录/文件必须为 `0700`/`0600`；Windows DACL 的 `too_broad` 或 `unverifiable` 均返回安全失败。不得修改主记忆文件；只有全部有效时才可原子刷新 last-valid 副本。
+行为：取得写锁或只读一致快照，验证所有原始段、全局顺序、长期 YAML、来源、哈希、`MemoryCoverageOverview` 连续覆盖、修剪前沿、文件权限和凭据模式。目录/文件必须为 `0700`/`0600`；`too_broad` 或 `unverifiable` 均返回安全失败。不得修改主记忆文件；只有全部有效时才可原子刷新 last-valid 副本。
 
 成功 JSON：
 
@@ -45,7 +45,7 @@ python -m bai_agent memory validate
 
 ## 4. `memory source`
 
-```powershell
+```bash
 python -m bai_agent memory source MEMORY_ID [--cursor CURSOR]
 ```
 
@@ -53,7 +53,7 @@ python -m bai_agent memory source MEMORY_ID [--cursor CURSOR]
 
 ## 5. `memory reset`
 
-```powershell
+```bash
 python -m bai_agent memory reset long-term
 python -m bai_agent memory reset all
 ```
@@ -73,7 +73,7 @@ python -m bai_agent memory reset all
 
 ## 6. `doctor`
 
-```powershell
+```bash
 python -m bai_agent doctor
 ```
 
@@ -81,7 +81,7 @@ python -m bai_agent doctor
 
 ## 7. `chat`
 
-```powershell
+```bash
 python -m bai_agent chat
 ```
 
@@ -125,7 +125,7 @@ python -m bai_agent chat
 
 凭据事件命令：
 
-```powershell
+```bash
 python -m bai_agent security incident check
 python -m bai_agent security incident acknowledge --rotation-reference REF --repository-scan-revision REV --runtime-scan-revision REV --disposition-record RECORD
 ```

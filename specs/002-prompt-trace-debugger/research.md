@@ -5,11 +5,11 @@
 
 ## 1. 终端界面框架
 
-**Decision**: 使用 Textual `>=8.2,<9`，每次待批模型调用启动一个短生命周期全屏应用；界面退出后恢复原终端内容。原生 Ubuntu 24.04 是主要支持与性能门禁平台，Windows 11/PowerShell 只承担次要功能兼容验收，macOS 不在范围内。
+**Decision**: 使用 Textual `>=8.2,<9`，每次待批模型调用启动一个短生命周期全屏应用；界面退出后恢复原终端内容。原生 Ubuntu 24.04/WSL 是唯一支持与性能门禁平台，原生 Windows 与 macOS 不在范围内。
 
-**Rationale**: 需求包含超长正文按需查看、结构式审计、固定操作区、交互式颜色/无色降级、终端尺寸变化、显式批准和可重复的无头交互测试。Textual 的 application mode、虚拟化列表/滚动视图与 Pilot 正好覆盖这些边界，单一依赖比自行维护 ANSI alternate-screen、键盘读取、重绘和 Windows 兼容代码更清晰；固定 Linux 门禁环境避免把 Windows runner 波动混入性能强制指标。
+**Rationale**: 需求包含超长正文按需查看、结构式审计、固定操作区、交互式颜色/无色降级、终端尺寸变化、显式批准和可重复的无头交互测试。Textual 的 application mode、虚拟化列表/滚动视图与 Pilot 正好覆盖这些边界，单一依赖比自行维护 ANSI alternate-screen、键盘读取和重绘代码更清晰；固定 Linux 门禁环境保证性能指标稳定。
 
-**Alternatives considered**: Rich 单独使用缺少完整输入/生命周期模型；`prompt_toolkit` 可行但长内容布局和测试需更多自定义代码；手写 ANSI/Win32 状态机会扩大安全清屏和兼容风险。
+**Alternatives considered**: Rich 单独使用缺少完整输入/生命周期模型；`prompt_toolkit` 可行但长内容布局和测试需更多自定义代码；手写 ANSI 状态机会扩大安全清屏和兼容风险。
 
 **Sources**: [Textual application mode](https://textual.textualize.io/guide/app/)、[RichLog](https://textual.textualize.io/widgets/rich_log/)、[Textual testing](https://textual.textualize.io/guide/testing/)
 

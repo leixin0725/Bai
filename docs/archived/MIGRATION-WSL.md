@@ -1,5 +1,7 @@
 # Bai WSL 迁移记录（2026-08-03）
 
+> [2026-08-10] 归档说明：本项目已移除原生 Windows 支持，仅支持 Ubuntu/WSL Linux；本文保留为历史迁移记录，其中关于 Windows 兼容矩阵与 `start.ps1` 的描述不再代表当前支持范围。
+
 本文记录 Bai Agent 迁移到 Ubuntu WSL 后的权威位置、数据完整性证据、Linux 适配内容和复验方法。后续开发以 Linux 工作树为准。
 
 ## 1. 迁移结果

@@ -226,13 +226,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             if args.debug_prompts:
                 preflight_debug_terminal(sys.stdin, sys.stdout)
-            # [2026-08-10] 真实 POSIX TTY 使用 raw 模式行编辑器（Enter 发送、
-            # Shift+Enter 换行、粘贴不回显标记）；内存缓冲/管道/Windows 走逐行输入源。
+            # [2026-08-10] 真实 TTY 使用 raw 模式行编辑器（Enter 发送、
+            # Shift+Enter 换行、粘贴不回显标记）；内存缓冲/管道走逐行输入源。
             try:
                 real_tty = sys.stdin.isatty() and sys.stdin.fileno() >= 0
             except (AttributeError, OSError, ValueError):
                 real_tty = False
-            if sys.platform != "win32" and real_tty:
+            if real_tty:
                 from bai_agent.runtime.tty_input import TtyLineEditor
 
                 input_source = TtyLineEditor(sys.stdin, sys.stdout)
@@ -302,7 +302,7 @@ def _make_sigint_handler(shell: Any) -> Callable[[], None]:
 
 
 async def _run_chat(shell: Any, source: Any, resume: tuple[str, str] | None) -> int:
-    """[2026-08-08] 安装 POSIX 信号处理；Windows 保留 KeyboardInterrupt 兜底。"""
+    """[2026-08-08] 安装信号处理；事件循环不支持信号处理器时保留 KeyboardInterrupt 兜底。"""
     loop = asyncio.get_running_loop()
     try:
         loop.add_signal_handler(signal.SIGINT, _make_sigint_handler(shell))

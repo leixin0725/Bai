@@ -61,9 +61,9 @@ revision: <same ConfigSnapshot revision>
 
 ## Cross-platform timezone data
 
-- Python 使用标准库 `zoneinfo`；项目声明 `tzdata>=2026.3` 以支持没有系统 IANA 数据的 Windows。
-- Linux 与 Windows 对同一 IANA zone/instant 必须输出相同本地日期、时间和 offset。
-- 不接受 Windows zone name、本机 locale 名称、`UTC+8` 自定义字符串或仅固定 offset 代替 IANA zone。
+- Python 使用标准库 `zoneinfo`；项目声明 `tzdata>=2026.3` 作为 Ubuntu/WSL 环境下 IANA 时区数据的确定性后备。
+- 各 Ubuntu/WSL 环境对同一 IANA zone/instant 必须输出相同本地日期、时间和 offset。
+- 不接受本机 locale 名称、`UTC+8` 自定义字符串或仅固定 offset 代替 IANA zone。
 - 原始 persisted datetime 不随 `display_timezone` 变更；只有新构建的 marker 变化。
 
 ## Error cases
@@ -83,4 +83,4 @@ revision: <same ConfigSnapshot revision>
 - 单元/合同：必需字段、unknown、bool/int、range、relationship、IANA、DST、asset identity/revision。
 - 集成：有效修改在下一轮让 45 分钟 gap 从“分段”变为“不分段”；聊天、curation、tool 使用同一 snapshot。
 - 失败原子性：无效 reload 后 provider 调用数、raw 写入数和工具执行数均为 0，无消费者保留部分新策略。
-- 打包：wheel/sdist 包含默认配置安装路径所需资产，Ubuntu/Windows 都能解析 `Asia/Shanghai`。
+- 打包：wheel/sdist 包含默认配置安装路径所需资产，Ubuntu/WSL 都能解析 `Asia/Shanghai`。

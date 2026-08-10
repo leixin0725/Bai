@@ -22,7 +22,7 @@ Bai Agent 是一个 Python 单用户聊天 Agent。它不创建或切换“对�
 
 ## 安装
 
-主要开发和部署环境是 Ubuntu 24.04，支持 Python 3.12、3.13 或 3.14。Ubuntu 24.04 的系统 Python 3.12 可以直接使用：
+主要开发和部署环境是 Ubuntu 24.04（或 WSL 中的 Ubuntu），支持 Python 3.12、3.13 或 3.14；不支持原生 Windows。Ubuntu 24.04 的系统 Python 3.12 可以直接使用：
 
 ```bash
 sudo apt-get update
@@ -55,7 +55,7 @@ bash start.sh --resume-pending --debug-prompts
 
 resume 与 discard 参数互斥；`--resume-pending` 是唯一允许重发旧 pending 内容的方式。丢弃只允许原子截去 raw archive 最末尾的未配对 USER，完整 USER/ASSISTANT 轮次继续永久不可删除。
 
-Windows 仅作为次要兼容环境，仍可使用 `start.ps1`；新开发、测试和发布应在 Linux 文件系统内完成。
+项目只支持 Ubuntu/WSL Linux。Windows 用户可在 Windows Terminal 等终端中打开 WSL 后按本文与[Ubuntu 部署手册](docs/ubuntu-deployment.md)操作；仓库必须位于 WSL 文件系统（例如 `$HOME/Dev_project/Bai`），不要放在 `/mnt/c`、`/mnt/d` 等 Windows 挂载目录中。
 
 ## 提示词调试批准
 
@@ -85,7 +85,7 @@ Windows 仅作为次要兼容环境，仍可使用 `start.ps1`；新开发、测
 
 默认策略位于独立文件 `config/history_timestamps.toml`：显示时区为 `Asia/Shanghai`，长间隔为 30 分钟，连续段刷新为 120 分钟，并启用跨本地日期分段。固定格式为 `[时间：YYYY-MM-DD HH:mm ±HH:MM]`、`[时间范围：YYYY-MM-DD HH:mm ±HH:MM 至 YYYY-MM-DD HH:mm ±HH:MM]` 和 `[记录时间：YYYY-MM-DD HH:mm ±HH:MM]`，标签与结构不可由配置覆盖。
 
-`long_gap_minutes` 的单位为分钟、范围 `1..1440`；`continuous_segment_refresh_minutes` 范围 `1..10080` 且不得小于 gap；跨日开关必须是布尔值，显示时区必须是可解析的 IANA 名称。标准库 `zoneinfo` 配合运行依赖 `tzdata`，使 Ubuntu 与 Windows 不依赖本机 locale 或固定 offset。有效改动在下一轮把 assembler、curation、tool bridge 与 provider/executor 整组替换；缺失、未知字段、类型/范围/关系或时区错误会在 raw、工具和 provider 边界前失败，旧对象不部分更新。修复文件后直接重试下一轮即可，无需迁移记忆。
+`long_gap_minutes` 的单位为分钟、范围 `1..1440`；`continuous_segment_refresh_minutes` 范围 `1..10080` 且不得小于 gap；跨日开关必须是布尔值，显示时区必须是可解析的 IANA 名称。标准库 `zoneinfo` 配合运行依赖 `tzdata`，使各 Ubuntu/WSL 环境不依赖本机 locale 或固定 offset。有效改动在下一轮把 assembler、curation、tool bridge 与 provider/executor 整组替换；缺失、未知字段、类型/范围/关系或时区错误会在 raw、工具和 provider 边界前失败，旧对象不部分更新。修复文件后直接重试下一轮即可，无需迁移记忆。
 
 当前输入也复用同一个 annotator，并严格使用本轮已经建立的 provisional `RawRecord.created_at`；retry、恢复 pending、TUI 审批与实际发送不重新读取 wall clock。只有当前输入的时间 marker 作为可信时间元数据放在边界外，用户正文放入 `current_input` 不可信边界内，同时仍保持本轮 `USER_INSTRUCTION` 语义；历史记录中的 marker 暂时继续与历史正文一起位于不可信边界内。基础人格、状态人格和系统规则不标注。聊天中的 `memory_overview`、`long_term_memories`、`recent_records` 分别从空状态分段，因此三个非空区块各有自己的首标记。recent 使用 raw `created_at` 点时间；长期记忆和 coverage overview 对全部已验证 `source_refs` 求最早—最晚事件时间并显示 `[时间范围：… 至 …]`，不会把整理时间冒充发生时间。
 
@@ -111,7 +111,7 @@ Windows 仅作为次要兼容环境，仍可使用 `start.ps1`；新开发、测
 
 `memory reset long-term` 保留永久原始聊天和近期窗口，只清空长期派生正文；`memory reset all` 清空全部聊天与长期记忆并恢复首次启动状态。两条命令立即执行且不可撤销，运行前必须先关闭聊天进程；安全事件状态不会随记忆重置而删除。
 
-程序会尽力把 POSIX 权限收紧到目录 `0700`、文件 `0600`，并在 Windows 检查和收紧 DACL；无法证明为私有时验证失败关闭。若凭据可能进入 Git、配置、日志或运行记忆，立即停止聊天/整理，并按[凭据泄露事件处置流程](docs/security-incident-response.md)完成轮换、全仓库与历史扫描、运行数据扫描和显式解除门禁。
+程序会把 POSIX 权限收紧到目录 `0700`、文件 `0600`；无法证明为私有时验证失败关闭。若凭据可能进入 Git、配置、日志或运行记忆，立即停止聊天/整理，并按[凭据泄露事件处置流程](docs/security-incident-response.md)完成轮换、全仓库与历史扫描、运行数据扫描和显式解除门禁。
 
 当前注册工具均为只读。未来写工具只有在注册时通过可恢复 `prepare/commit/rollback` 或明确补偿契约门禁后才能执行；执行、超时、结果大小或凭据校验失败都会在提交前 rollback/补偿，否则在任何副作用前拒绝。
 
@@ -130,6 +130,6 @@ Windows 仅作为次要兼容环境，仍可使用 `start.ps1`；新开发、测
 .venv/bin/python -m bai_agent --data-dir .tmp/validation security incident check
 ```
 
-Ubuntu 24.04 × Python 3.12/3.13/3.14 的主要功能矩阵和 Windows 次要兼容矩阵在 `.github/workflows/compatibility.yml`；macOS 不在支持范围。提示 TUI 的 500 ms 强制性能门禁只在 Ubuntu 24.04/Python 3.13 固定环境运行，Windows 仅做功能验收；详细安装、人工维护、备份、来源查询和性能复现实验见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
+Ubuntu 24.04 × Python 3.12/3.13/3.14 的功能矩阵在 `.github/workflows/compatibility.yml`；原生 Windows 与 macOS 不在支持范围（Windows 用户经 WSL 使用）。提示 TUI 的 500 ms 强制性能门禁只在 Ubuntu 24.04/Python 3.13 固定环境运行；详细安装、人工维护、备份、来源查询和性能复现实验见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
 
 > [2026-07-19] 本文与 `specs/001-persistent-memory-agent/` 的规格、计划、契约和验收任务同步。

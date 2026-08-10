@@ -28,11 +28,11 @@
 
 **Git Milestones**: 设计工件完成并校验后提交；持久化/恢复核心及测试完成后提交；配置/模型/工具/状态边界完成后提交；端到端 CLI、故障注入、性能与安全验证通过后提交。每个提交仅包含对应重大修改
 
-**Target Platform**: Windows、Linux、macOS 的本地终端；UTF-8 文件系统；单用户、单写进程
+**Target Platform**: Ubuntu 24.04/WSL 的本地终端；UTF-8 文件系统；单用户、单写进程；原生 Windows 与 macOS 不在支持范围
 
 **Project Type**: 可复用 Python 包 + CLI 应用
 
-**Performance Goals**: 指定 Windows 参考环境中，10,000 条永久原始记录和 1,000 条长期记忆下至少 100 次全新进程启动的 nearest-rank p95 不超过 3 秒；计时从进程创建到配置、原始索引、长期 YAML 与覆盖概览可供首轮组装，网络调用为 0。Ubuntu/Windows × Python 3.12/3.13/3.14 另运行功能矩阵，不在非参考环境判定 3 秒门槛；macOS 不在支持范围
+**Performance Goals**: Ubuntu 24.04/Python 3.13 的提示 TUI 性能门禁（见 `specs/002`）；启动性能以 10,000 条永久原始记录/1,000 条长期记忆的验收数据集进行功能与完整性验证，不设独立启动耗时门槛。Ubuntu 24.04 × Python 3.12/3.13/3.14 运行功能矩阵；原生 Windows 与 macOS 不在支持范围
 
 **Constraints**: 所有可变参数与提示词配置化；原始记录永久保留；长期记忆可直接人工编辑；任何写入中断不得暴露半条确认记录；单次模型输入受配置预算限制；外部工具和自主循环默认禁用；明文记忆的安全边界必须明确可见
 

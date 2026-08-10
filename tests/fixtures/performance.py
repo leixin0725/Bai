@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from bai_agent.config.loader import load_config
 from bai_agent.domain.models import (
     CoverageSpan,
     CreatedBy,
@@ -21,16 +20,12 @@ from bai_agent.domain.models import (
     Role,
     SourceReference,
     SourceRelation,
-    StateResolutionContext,
     canonical_json,
 )
 from bai_agent.memory.archive import RawRecordArchive
 from bai_agent.memory.long_term import LongTermStore
 from bai_agent.memory.selection import select_recent_complete_turns
-from bai_agent.prompting.assembler import PromptAssembler
-from bai_agent.prompting.personas import PersonaPromptSet
 from bai_agent.security.permissions import ensure_private_path
-from bai_agent.states.resolver import StaticStateResolver
 
 
 RAW_RECORD_COUNT = 10_000
@@ -156,64 +151,3 @@ def prepare_performance_dataset(data_dir: Path) -> PerformanceDataset:
         long_term_memory_count=len(memories),
         curated_through=CURATED_THROUGH,
     )
-
-
-def startup_probe(config_dir: Path, data_dir: Path) -> dict[str, int]:
-    """[2026-07-19] 探针止于首轮上下文可用，不构造 Provider，因此网络调用恒为零。"""
-    snapshot = load_config(config_dir, require_credentials=False, environ={})
-    memory_root = data_dir / "memory"
-    archive = RawRecordArchive(memory_root)
-    index = archive.record_index()
-    records = archive.read_all()
-    store = LongTermStore(memory_root, archive)
-    document = store.load()
-
-    state_document = snapshot.settings["states.toml"]
-    states = {
-        str(item["id"]): tuple(item["ordered_persona_ids"])
-        for item in state_document["states"]
-        if item.get("enabled", False)
-    }
-    resolver = StaticStateResolver(snapshot.default_state_id, states)
-    resolution = resolver.resolve(
-        StateResolutionContext(
-            turn_id=_identifier("turn", RAW_RECORD_COUNT + 1),
-            untrusted_text="启动性能探针",
-        )
-    )
-    personas = PersonaPromptSet.from_snapshot(snapshot)
-    assembler = PromptAssembler.mvp(
-        personas.chat,
-        personas.state_prompts(resolution.ordered_persona_ids),
-    )
-    recent = select_recent_complete_turns(
-        records,
-        curated_through=document.curation.curated_through_sequence,
-        max_records=RECENT_RECORD_COUNT,
-    )
-    context = assembler.assemble(
-        flow_id="performance-startup",
-        turn_id=_identifier("turn", RAW_RECORD_COUNT + 1),
-        config_revision=snapshot.revision,
-        state_resolution=resolution,
-        memory_overview=document.coverage_overview,
-        long_term_memories=(item.text for item in document.memories),
-        recent_records=recent,
-        current_input="启动性能探针",
-        all_raw_records=records,
-        curated_through=document.curation.curated_through_sequence,
-        budgets={
-            "overview_chars": 12_000,
-            "long_term_chars": 128_000,
-            "recent_chars": 128_000,
-        },
-    )
-    return {
-        "raw_records": len(records),
-        "raw_index": len(index),
-        "long_term_memories": len(document.memories),
-        "coverage_spans": len(document.coverage_overview.coverage_spans),
-        "recent_records": len(recent),
-        "prompt_segments": len(context.segments),
-        "network_calls": 0,
-    }

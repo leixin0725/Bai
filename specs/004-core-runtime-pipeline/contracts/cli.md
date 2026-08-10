@@ -4,7 +4,7 @@
 
 ## 1. `chat` 启动
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data chat [--resume-pending|--discard-pending] [--debug-prompts]
 ```
 

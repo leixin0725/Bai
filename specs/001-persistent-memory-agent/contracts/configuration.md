@@ -193,7 +193,7 @@ continuous_segment_refresh_minutes = 120
 split_on_local_date_change = true
 ```
 
-`schema_version` 必须是整数 1；gap 是 `1..1440` 分钟；refresh 是 `1..10080` 分钟且 `refresh >= gap`；跨日字段必须是严格布尔值；显示时区必须是 IANA 名称。未知或缺失字段、bool 冒充整数、Windows zone name、本机 locale 和固定 offset 均拒绝。Python 标准库 `zoneinfo` 使用 `tzdata>=2026.3` 作为无系统 IANA 数据平台的后备。
+`schema_version` 必须是整数 1；gap 是 `1..1440` 分钟；refresh 是 `1..10080` 分钟且 `refresh >= gap`；跨日字段必须是严格布尔值；显示时区必须是 IANA 名称。未知或缺失字段、bool 冒充整数、本机 locale 和固定 offset 均拒绝。Python 标准库 `zoneinfo` 配合运行依赖 `tzdata>=2026.3` 作为 IANA 时区数据的确定性后备。
 
 reload 先用同一 snapshot 构造 policy、assembler、curation service、gateway、tool executor 与 controller，再在轮次边界替换单个 controller 引用。任何构造失败都保留完整旧运行时，但当前请求在 raw/工具/provider 前失败；修复配置后下一轮可恢复，不修改 UTC 原始时间或存储字节。wheel/sdist 携带完整 `bai_agent/default_config`，API 可通过 `default_config_dir()` 发现安装制品中的示例配置；生产运行仍应显式传入受控 `--config-dir`。
 

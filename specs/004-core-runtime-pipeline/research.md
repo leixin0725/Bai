@@ -58,6 +58,6 @@
 
 ## 8. 依赖与平台
 
-- **Decision**: 不新增依赖；asyncio 标准库；Ubuntu 24.04 主支持，Windows 次要兼容（`select` 在 Windows 上不支持 stdin 时，输入读取器使用等价的非阻塞读取路径或文档化降级为逐行）。
-- **Rationale**: 项目约束与兼容矩阵（`.github/workflows/compatibility.yml`）要求 Windows 功能可验收；输入合并的零等待判定在 Windows 控制台可用 `msvcrt` 等价实现，或在该平台明确降级为逐行并在文档记录。
+- **Decision**: 不新增依赖；asyncio 标准库；Ubuntu 24.04/WSL 是唯一支持平台，输入读取器使用 `select` 做零等待非阻塞判定，事件循环不支持 `add_reader` 时降级为逐行。
+- **Rationale**: 项目约束要求 Ubuntu/WSL 功能可验收；输入合并的零等待判定使用 `select` 实现，事件循环不支持 `add_reader` 时明确降级为逐行并在文档记录。
 - **Alternatives considered**: 引入 `selectors`/第三方输入库：不必要的依赖。

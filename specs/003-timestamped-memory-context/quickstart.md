@@ -2,7 +2,7 @@
 
 **Status**: Phase 1 validation guide
 
-**Platforms**: Ubuntu 24.04/Python 3.13–3.14（主要）；Windows 11/PowerShell（次要）
+**Platforms**: Ubuntu 24.04/WSL、Python 3.13–3.14；原生 Windows 与 macOS 不在范围
 
 本指南中的测试文件是本功能计划目标；实现阶段完成后命令必须可直接运行。命令不需要真实 provider 凭据，夹具只使用无效占位值。
 
@@ -79,7 +79,7 @@ pytest tests/contract/test_history_timestamp_config.py tests/integration/test_te
 4. 依次验证文件缺失、unknown field、`true` 冒充整数、越界和非法 IANA 时区；都不得混用旧/新策略。
 5. 还原 canonical default 并重新运行 `config validate`。
 
-Windows 必须额外验证安装 wheel 后无需系统 IANA 数据也能解析 `Asia/Shanghai`；Ubuntu 和 Windows 对固定 UTC instant 输出相同的本地日期、分钟和 `+08:00`。
+必须验证安装 wheel 后无需系统 IANA 数据也能解析 `Asia/Shanghai`；Ubuntu/WSL 对固定 UTC instant 输出相同的本地日期、分钟和 `+08:00`。
 
 ## 4. 验证聊天与长期记忆
 

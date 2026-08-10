@@ -39,7 +39,7 @@
 3. **US3 一次输入动作合并**：stdin 输入读取器（管道 EOF 整批、终端缓冲连片合并、零等待）；BR-006 测试 + 契约同步。
 4. **US4 最小后台执行器与事件投递**：后台执行器（提交/串行/状态）；定时事件、系统事件进入管道的投递入口与测试处理钩子；BR-004 测试 + 契约同步。
 5. **US5 运行状态查看**：`:status` 会话内状态命令；BR-007 测试 + 契约同步。
-6. **US6 + 收尾**：阶段 0 两处标记核对记录、全部文档（README、quickstart、三份契约、迁移计划）一致性校验与全量回归、凭据/注释/Windows 兼容审计。
+6. **US6 + 收尾**：阶段 0 两处标记核对记录、全部文档（README、quickstart、三份契约、迁移计划）一致性校验与全量回归、凭据/注释审计。
 
 **Documentation Impact**:
 
@@ -51,7 +51,7 @@
 - `Scriptor_to_Bai_migration/migration-plan.md`：已完成阶段 0/1 范围同步（2026-08-08 提交）。
 - `docs/ubuntu-deployment.md`：仅当启动/停止命令变化时同步，否则记录 N/A。
 
-**Target Platform**: 原生 Ubuntu 24.04、Python 3.12/3.13/3.14 为主要支持环境；Windows/PowerShell 为次要功能兼容环境；macOS 不在支持范围。
+**Target Platform**: 原生 Ubuntu 24.04/WSL、Python 3.12/3.13/3.14 是唯一支持环境；原生 Windows 与 macOS 不在支持范围。
 
 **Project Type**: 单体 Python CLI 应用；在现有领域模型、应用装配与端口/适配器分层上新增运行时外壳。
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -31,9 +30,8 @@ def _prepared(tmp_path: Path, content: str = "事务输入") -> tuple[RawRecordA
 
 def test_journal_is_private_and_schema_version_is_strict(tmp_path: Path) -> None:
     _, uow = _prepared(tmp_path)
-    if os.name != "nt":
-        assert uow.path.stat().st_mode & 0o777 == 0o600
-        assert uow.path.parent.stat().st_mode & 0o777 == 0o700
+    assert uow.path.stat().st_mode & 0o777 == 0o600
+    assert uow.path.parent.stat().st_mode & 0o777 == 0o700
     payload = json.loads(uow.path.read_text(encoding="utf-8"))
     payload["schema_version"] = 999
     uow.path.write_text(json.dumps(payload), encoding="utf-8")

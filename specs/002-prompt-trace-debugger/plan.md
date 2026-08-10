@@ -26,9 +26,9 @@
 
 **Git Milestones**: 六个阶段提交与任务检查点一一对应：(1) Foundation（Setup + Foundational）；(2) US1 完整请求、来源、批准/拒绝和唯一网关；(3) US2 多调用身份、顺序与视觉表达；(4) US3 上下文估算、实际用量、模型迁移与 Linux 性能门禁；(5) US4 TTY、恢复、释放与等价性硬化；(6) Final 规模、安全、可用性、兼容性和最终审计。每个阶段只在代码、同批文档和验证结果齐备后原子提交。
 
-**Documentation Impact**: 更新 `README.md`（pending 默认丢弃、显式恢复/丢弃、批准、隐私、非 TTY 和普通失败语义）；更新 `specs/001-persistent-memory-agent/quickstart.md` 和 `contracts/{cli,storage}.md`（启动命令、尾部未完成轮次、三态恢复顺序）；同步 Linux `start.sh` 与 Windows `start.ps1` 的 pending/debug 参数安全透传；校准本功能的 `research.md`、`data-model.md`、`contracts/`、`quickstart.md` 和 requirements/implementation audit checklist。用文档命令冒烟、合同/集成/故障测试、相对链接检查和凭据扫描验证，并与对应重大代码变更同一提交。
+**Documentation Impact**: 更新 `README.md`（pending 默认丢弃、显式恢复/丢弃、批准、隐私、非 TTY 和普通失败语义）；更新 `specs/001-persistent-memory-agent/quickstart.md` 和 `contracts/{cli,storage}.md`（启动命令、尾部未完成轮次、三态恢复顺序）；同步 `start.sh` 的 pending/debug 参数安全透传；校准本功能的 `research.md`、`data-model.md`、`contracts/`、`quickstart.md` 和 requirements/implementation audit checklist。用文档命令冒烟、合同/集成/故障测试、相对链接检查和凭据扫描验证，并与对应重大代码变更同一提交。
 
-**Target Platform**: 原生 Linux 为主要支持平台，以 Ubuntu 24.04、Python 3.12/3.13/3.14 的交互式终端为功能验收环境；Windows 11/PowerShell 为次要功能兼容平台；macOS 不在本功能范围内。调试模式要求 stdin 和 stdout 都是 TTY，性能门禁固定在 Python 3.13。
+**Target Platform**: 原生 Ubuntu 24.04/WSL 是唯一支持平台，以 Ubuntu 24.04、Python 3.12/3.13/3.14 的交互式终端为功能验收环境；原生 Windows 与 macOS 不在本功能范围内。调试模式要求 stdin 和 stdout 都是 TTY，性能门禁固定在 Python 3.13。
 
 **Project Type**: 单体 Python CLI 应用，采用领域端口与适配器分层。
 

@@ -34,6 +34,7 @@ from tests.fakes import FakeProvider
 ROOT = Path(__file__).resolve().parents[2]
 
 # [2026-07-19] 清单记录跨文件验收证据；完整 pytest 会执行这些节点，而本测试防止重命名后留下静默缺口。
+# [2026-08-10] SC-008（Windows 启动性能门禁）已随原生 Windows 支持移除，保留其余编号不变。
 ACCEPTANCE_EVIDENCE: dict[str, tuple[str, ...]] = {
     "SC-001": ("tests/integration/test_restart_continuity.py::test_empty_and_one_hundred_turns_across_ten_restarts",),
     "SC-002": ("tests/contract/test_mvp_prompt_context.py::test_mvp_context_has_every_required_segment_in_order",),
@@ -45,7 +46,6 @@ ACCEPTANCE_EVIDENCE: dict[str, tuple[str, ...]] = {
         "tests/integration/test_tool_extension.py::test_default_registry_excludes_future_tool_until_explicit_enable",
         "tests/integration/test_autonomous_loop.py::test_loop_stops_at_configured_budget",
     ),
-    "SC-008": ("tests/performance/test_startup.py::test_windows_reference_fresh_process_startup",),
     "SC-009": ("tests/integration/test_repository_secret_safety.py::test_repository_and_reachable_history_have_no_usable_credentials",),
     "SC-010": ("tests/integration/test_curation_workflow.py::test_threshold_zero_call_then_single_joint_commit",),
     "SC-011": ("tests/integration/test_long_term_store.py::test_valid_manual_text_edit_is_marked_and_revisioned",),
@@ -60,7 +60,10 @@ ACCEPTANCE_EVIDENCE: dict[str, tuple[str, ...]] = {
 
 
 def test_acceptance_evidence_is_complete_and_resolvable() -> None:
-    assert set(ACCEPTANCE_EVIDENCE) == {f"SC-{index:03d}" for index in range(1, 19)}
+    expected = {f"SC-{index:03d}" for index in range(1, 8)} | {
+        f"SC-{index:03d}" for index in range(9, 19)
+    }
+    assert set(ACCEPTANCE_EVIDENCE) == expected
     for node_ids in ACCEPTANCE_EVIDENCE.values():
         assert node_ids
         for node_id in node_ids:

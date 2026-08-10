@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from importlib.metadata import version
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -70,9 +69,8 @@ def test_local_atomic_utf8_and_permission_normalization(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "第二版：跨平台 UTF-8。\n"
     assert find_temporary_files(target.parent) == ()
     permission = ensure_private_path(target, is_directory=False)
-    assert permission.status in {PermissionStatus.PRIVATE, PermissionStatus.UNVERIFIABLE}
-    if os.name != "nt":
-        assert target.stat().st_mode & 0o777 == 0o600
+    assert permission.status is PermissionStatus.PRIVATE
+    assert target.stat().st_mode & 0o777 == 0o600
 
     archive = RawRecordArchive(tmp_path / "portable-memory")
     record = archive.append(
@@ -90,7 +88,7 @@ def test_local_atomic_utf8_and_permission_normalization(tmp_path: Path) -> None:
 
 def test_compatibility_workflow_covers_supported_matrix() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    assert "windows-latest" in workflow
+    assert "windows-latest" not in workflow
     assert "ubuntu-24.04" in workflow
     assert "macos-latest" not in workflow
     assert "'3.13'" in workflow

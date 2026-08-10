@@ -12,7 +12,7 @@
 
 **Language/Version**: Python `>=3.13,<3.15`
 
-**Primary Dependencies**: 保留现有 `filelock`、`openai`、`pydantic`、`ruamel.yaml`、`textual`；时间运算使用标准库 `datetime`/`zoneinfo`，新增 `tzdata>=2026.3` 作为 Windows 等缺少系统 IANA 时区数据库的平台后备，不引入日期时间框架或后台服务。
+**Primary Dependencies**: 保留现有 `filelock`、`openai`、`pydantic`、`ruamel.yaml`、`textual`；时间运算使用标准库 `datetime`/`zoneinfo`，新增 `tzdata>=2026.3` 作为 Ubuntu/WSL 缺少系统 IANA 时区数据库时的确定性后备，不引入日期时间框架或后台服务。
 
 **Storage**: 继续使用 JSONL 原始记录和 YAML 长期记忆；原始 UTC 时间、正文和来源关系不迁移、不改写，生成的时间标记不持久化。仅新增受版本控制的 `config/history_timestamps.toml`，并将其作为既有原子 `ConfigSnapshot` 的必需资产加载。
 
@@ -26,9 +26,9 @@
 
 **Git Milestones**: 六个可独立验证的原子阶段，与 `tasks.md` 检查点一致：(1) Foundation + US1 MVP：时区依赖、独立配置、领域值对象、纯分段器和近期聊天接入；(2) Memory/Prompt：长期记忆、overview、选择预算与主聊天提示接入；(3) Curation：三类整理历史区块及精确来源接入；(4) Tools/Provider：可注入时钟、工具事件桥、DeepSeek 协议与来源去重；(5) Configuration：所有消费者的原子 reload、打包与跨平台时区验证；(6) Final：全消费者验收、10k 性能、README/001/002/003 文档一致性和最终安全审计。每阶段的实现、测试和受影响文档在验证后同一提交。
 
-**Documentation Impact**: 更新 `README.md`（覆盖范围、默认稀疏规则、配置入口及来源工具不变）；更新 `specs/001-persistent-memory-agent/quickstart.md` 与 `contracts/{configuration,model-and-tools,storage}.md`（配置字段、提示合同、UTC/来源范围/无迁移语义）；更新 `specs/002-prompt-trace-debugger/quickstart.md` 与 `contracts/model-call.md`（marker/body span、预算和调试所见即所发）；维护本功能的 `research.md`、`data-model.md`、`contracts/`、`quickstart.md`。通过相对链接检查、默认值/消费者清单搜索、配置/合同/集成/性能测试验证，并与对应重大代码变更同一提交。`.github/workflows/compatibility.yml` 仅在新增命令未被现有 Ubuntu/Windows pytest 步骤覆盖时同步，否则在实现审计记录 N/A 理由。
+**Documentation Impact**: 更新 `README.md`（覆盖范围、默认稀疏规则、配置入口及来源工具不变）；更新 `specs/001-persistent-memory-agent/quickstart.md` 与 `contracts/{configuration,model-and-tools,storage}.md`（配置字段、提示合同、UTC/来源范围/无迁移语义）；更新 `specs/002-prompt-trace-debugger/quickstart.md` 与 `contracts/model-call.md`（marker/body span、预算和调试所见即所发）；维护本功能的 `research.md`、`data-model.md`、`contracts/`、`quickstart.md`。通过相对链接检查、默认值/消费者清单搜索、配置/合同/集成/性能测试验证，并与对应重大代码变更同一提交。`.github/workflows/compatibility.yml` 仅在新增命令未被现有 Ubuntu pytest 步骤覆盖时同步，否则在实现审计记录 N/A 理由。
 
-**Target Platform**: 原生 Ubuntu 24.04、Python 3.12/3.13/3.14 为主要支持环境，1 秒性能门禁固定在 Python 3.13；Windows 11/PowerShell 为次要功能兼容平台并验证 `tzdata` 后备；macOS 延续现有项目范围，不纳入本功能支持。
+**Target Platform**: 原生 Ubuntu 24.04/WSL、Python 3.12/3.13/3.14 是唯一支持环境，1 秒性能门禁固定在 Python 3.13；原生 Windows 与 macOS 不纳入本功能支持。
 
 **Project Type**: 单体 Python CLI 应用，沿用领域模型、应用编排、端口/适配器和文件存储分层。
 
@@ -46,7 +46,7 @@
 |------|-------------------|--------|
 | I. Clarity, extensibility, maintainability | 通用分段器、记忆时间投影、消费者渲染、配置装配和 provider wire mapping 职责明确；未来日志只需适配统一项 | PASS |
 | II. Decoupling and readability | `prompting.temporal` 不读取存储、模板或 provider；消费者单向依赖纯模块，单份不可变策略无共享可变状态 | PASS |
-| III. Simplest understandable implementation | 使用标准 datetime/zoneinfo、一个纯模块和薄适配层；仅因 Windows IANA 数据增加 `tzdata`，不引入数据库、服务或日期框架 | PASS |
+| III. Simplest understandable implementation | 使用标准 datetime/zoneinfo、一个纯模块和薄适配层；仅因 IANA 数据一致性增加 `tzdata`，不引入数据库、服务或日期框架 | PASS |
 | IV. zh-CN traceable comments | `Comment Impact` 已明确核心入口/不变量的简体中文注释和 `[2026-07-20]` 追踪规则 | PASS |
 | V. Git discipline | `Git Milestones` 定义与 `tasks.md` 一致的六个带验证和文档同步的原子提交边界 | PASS |
 | VI. Core business tests | `Core Business Logic` 将 BR-001—BR-010 全部映射到成功、边界和关键失败自动化测试 | PASS |
@@ -129,4 +129,4 @@ tests/
 
 ## Complexity Tracking
 
-无宪章例外。一个纯时间模块、一个记忆投影适配器和消费者侧薄桥接是满足“所有历史构建模块统一复用”、精确来源 span 与工具协议不变的最小结构；`tzdata` 仅补齐受支持 Windows 平台的 IANA 数据，不引入第二套时间实现。现有长期记忆 schema v1 强制非空 `source_refs`，因此不为不存在的旧 schema 放宽完整性或创建迁移；通用合同保留显式 `RECORDED` 语义，但当前版本没有相应持久化入口，未来必须通过独立功能明确 schema/version 后才能接入。
+无宪章例外。一个纯时间模块、一个记忆投影适配器和消费者侧薄桥接是满足“所有历史构建模块统一复用”、精确来源 span 与工具协议不变的最小结构；`tzdata` 仅补齐 Ubuntu/WSL 环境的 IANA 数据一致性，不引入第二套时间实现。现有长期记忆 schema v1 强制非空 `source_refs`，因此不为不存在的旧 schema 放宽完整性或创建迁移；通用合同保留显式 `RECORDED` 语义，但当前版本没有相应持久化入口，未来必须通过独立功能明确 schema/version 后才能接入。

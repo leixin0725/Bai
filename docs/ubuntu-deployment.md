@@ -1,6 +1,6 @@
 # Ubuntu 部署手册
 
-Bai Agent 的主要开发和部署环境是 Ubuntu 24.04。项目支持 Python 3.12、3.13 和 3.14；Ubuntu 24.04 自带的 Python 3.12 即可运行，不要求额外 PPA。
+Bai Agent 的主要开发和部署环境是 Ubuntu 24.04。项目支持 Python 3.12、3.13 和 3.14；Ubuntu 24.04 自带的 Python 3.12 即可运行，不要求额外 PPA。项目不支持原生 Windows；Windows 用户可在 Windows Terminal 等终端中打开 WSL（Ubuntu）后按本手册操作，仓库必须位于 WSL 文件系统。
 
 ## 1. 系统准备
 

@@ -218,7 +218,7 @@ async def test_pause_during_pending_read_preserves_buffer_and_resumes() -> None:
 
 @pytest.mark.asyncio
 async def test_pause_resume_are_idempotent_without_fd() -> None:
-    """[2026-08-08] 无 fd（Windows 回退路径）时 pause/resume 保持无副作用幂等。"""
+    """[2026-08-08] 无 fd（内存流路径）时 pause/resume 保持无副作用幂等。"""
     source = StdinInputSource(_PtyStream(-1))
     await source.pause()
     await source.pause()

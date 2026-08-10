@@ -4,21 +4,12 @@
 
 ## 1. 安装开发环境
 
-主要验收环境为原生 Ubuntu 24.04、Python 3.12/3.13/3.14；性能门禁固定使用 Python 3.13。Windows 11/PowerShell 仅做次要功能兼容验收，macOS 不在本功能范围内。
+验收环境为原生 Ubuntu 24.04/WSL、Python 3.12/3.13/3.14；性能门禁固定使用 Python 3.13。原生 Windows 与 macOS 不在本功能范围内（Windows 用户经 WSL 使用）。
 
 ```bash
 cd /path/to/bai-agent
 bash scripts/bootstrap-ubuntu.sh --dev
 source .venv/bin/activate
-```
-
-Windows 次要兼容环境：
-
-```powershell
-Set-Location path\to\bai-agent
-py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
 ```
 
 确认配置和 CLI 可加载：
@@ -33,20 +24,12 @@ python -m bai_agent chat --help
 
 ## 2. 安全注入凭据并启动
 
-Linux 主要环境可由 `start.sh` 隐藏读取凭据并显式传递调试开关。实际验收使用后续 fake provider 测试，不向真实 DeepSeek API 发起请求：
+环境可由 `start.sh` 隐藏读取凭据并显式传递调试开关。实际验收使用后续 fake provider 测试，不向真实 DeepSeek API 发起请求：
 
 ```bash
 bash start.sh --debug-prompts
 bash start.sh --discard-pending
 bash start.sh --resume-pending --debug-prompts
-```
-
-Windows 次要环境推荐沿用项目启动脚本的隐藏输入能力：
-
-```powershell
-.\start.ps1 -DebugPrompts
-.\start.ps1 -DiscardPending
-.\start.ps1 -ResumePending -DebugPrompts
 ```
 
 预期：每次新运行都显示“本地界面可能展示私人记忆”的提醒；退出再普通启动时调试默认关闭。
@@ -82,8 +65,6 @@ CLI 会先运行不含正文的 TTY/Textual application-mode probe；stdin/stdou
 sha256sum data/memory/long_term.yaml
 sha256sum data/memory/raw/*
 ```
-
-Windows 次要兼容环境可使用 `Get-FileHash` 取得同一基线。
 
 启动调试，输入唯一标记 `验收-必须撤销-002`，在任一 approval app 按 `R`：
 
@@ -123,7 +104,7 @@ pytest tests/contract/test_cli_chat.py tests/fault_injection/test_pending_discar
 
 手工命令矩阵：
 
-```powershell
+```bash
 python -m bai_agent --config-dir config --data-dir data chat
 python -m bai_agent --config-dir config --data-dir data chat --discard-pending
 python -m bai_agent --config-dir config --data-dir data chat --resume-pending
@@ -140,12 +121,10 @@ python -m bai_agent --config-dir config --data-dir data chat --resume-pending --
 NO_COLOR=1 python -m bai_agent --config-dir config --data-dir /tmp/bai-debug-acceptance chat --debug-prompts
 ```
 
-Windows PowerShell 次要兼容验收：
+经启动脚本的等价验收：
 
-```powershell
-$env:NO_COLOR = "1"
-.\start.ps1 -DebugPrompts
-Remove-Item Env:NO_COLOR -ErrorAction SilentlyContinue
+```bash
+NO_COLOR=1 bash start.sh --debug-prompts
 ```
 
 预期：无 ANSI 颜色或 Rich 样式 span，但调用、included/excluded/empty/unknown_source、trusted_instruction/trusted_metadata/user_instruction/untrusted_data、`message:N`、来源字段、边界、缩进和操作含义仍完整。启用颜色时 message index 使用确定性的低饱和基础色，同一历史 message 内按结构化 record 顺序 A/B 交错；颜色不进入复制文本、日志或 provider payload。主体为两栏审计视图：左侧 part 大纲、右侧选中项详情（虚拟化 `TraceView`），首帧展示身份/估算/操作区，正文按选择按需加载，超大内容后台换行并显示占位符；80×24 下操作按钮、大纲、详情与完整复制文本均可访问。
@@ -178,7 +157,7 @@ pytest tests/integration -k "actual_usage" -q
 
 时间 marker 已在 estimator 前成为普通 prompt fragment，因此 marker token 只应在 part 明细中出现一次。工具续接还应检查 assistant content 的 marker/body parts 与独立 `/tool_calls` part：同一 content pointer 的 spans 从 0 连续覆盖到正文结尾，不能存在 whole-content 重叠 fallback。
 
-```powershell
+```bash
 pytest tests/integration/test_prompt_debug_equivalence.py tests/unit/test_prompt_provenance.py -q
 pytest tests/contract/test_temporal_tool_protocol.py tests/integration/test_temporal_tool_continuation.py -q
 ```
@@ -199,15 +178,7 @@ python -m pytest tests/integration/test_repository_secret_safety.py -q
 
 性能测试从 frozen request、来源和估算全部就绪测到标题、身份和上下文摘要完成 mounted；记录首次冷启动，但强制门禁只计算随后 30 次同一进程启动的 p95：小样本不超过 500 ms，300K 字符大载荷样本不超过 1000 ms，1M 字符样本不超过 2000 ms。
 
-门禁基线为 `tests/performance/baselines/ubuntu-24.04-python-3.13.json`；Windows 只做功能兼容并跳过该强制时延断言。
-
-Windows 次要功能兼容验收：
-
-```powershell
-pytest -q
-git diff --check
-python -m pytest tests/integration/test_repository_secret_safety.py -q
-```
+门禁基线为 `tests/performance/baselines/ubuntu-24.04-python-3.13.json`；原生 Windows 与 macOS 不在范围。
 
 实现阶段还应完成：
 

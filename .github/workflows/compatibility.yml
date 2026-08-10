@@ -23,7 +23,7 @@ jobs:
       matrix:
         python: ['3.12', '3.13', '3.14']
     steps:
-      # [2026-07-20] 原生 Ubuntu 24.04 是主要功能矩阵；完整历史供凭据扫描使用。
+      # [2026-08-10] Ubuntu 24.04/WSL 是唯一支持平台；完整历史供凭据扫描使用。
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -35,30 +35,7 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Verify module entry
         run: python -m bai_agent --help
-      - name: Run cross-platform functional suite
-        run: pytest -m "not performance"
-
-  windows-secondary:
-    name: Windows secondary / Python ${{ matrix.python }}
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ['3.12', '3.13', '3.14']
-    steps:
-      # [2026-07-20] Windows 只承担次要功能兼容，不执行 500ms 强制性能门禁。
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python }}
-          cache: pip
-      - name: Install package and test dependencies
-        run: python -m pip install -e ".[dev]"
-      - name: Verify module entry
-        run: python -m bai_agent --help
-      - name: Run secondary functional suite
+      - name: Run functional suite
         run: pytest -m "not performance"
 
   prompt-tui-reference-performance:
