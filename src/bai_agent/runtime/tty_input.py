@@ -6,7 +6,10 @@ import asyncio
 import os
 import termios
 import tty
+import unicodedata
 from typing import Any
+
+from rich.cells import cell_len, split_graphemes
 
 
 ENABLE_PROTOCOLS = "\x1b[?2004h\x1b[>1u"
@@ -14,6 +17,37 @@ DISABLE_PROTOCOLS = "\x1b[?2004l\x1b[<1u"
 BRACKETED_PASTE_START = "\x1b[200~"
 BRACKETED_PASTE_END = "\x1b[201~"
 KITTY_SHIFT_ENTER = "\x1b[13;2u"
+
+
+def display_width(text: str) -> int:
+    """[2026-08-10] 文本在终端中占用的 cell 宽度，委托 Rich 的 Unicode 宽度表。"""
+    return cell_len(text)
+
+
+def _last_grapheme_span(text: str) -> tuple[int, int, int] | None:
+    """[2026-08-10] 返回一行文本最后一个 grapheme 的 [start, end) 与 cell 宽度。
+
+    退格按终端显示单元删除，而不是按 Python 字符数：普通 CJK 占 2 列、
+    组合字符并入前一可见字符、ZWJ/VS16 emoji 序列按一个 grapheme 处理。
+    制表符本编辑器不追踪 tab stop，仍按旧的 1 列近似处理，避免被并入前一字符。
+    """
+    if not text:
+        return None
+    if text[-1] == "\t":
+        return len(text) - 1, len(text), 1
+    # Regional indicator 成对构成旗帜 emoji；Rich 的简化分组把它们当两个 1 列字符，
+    # 这里按终端显示习惯把最后一对当作一个 2 列 grapheme。
+    if (
+        len(text) >= 2
+        and "\U0001f1e6" <= text[-1] <= "\U0001f1ff"
+        and "\U0001f1e6" <= text[-2] <= "\U0001f1ff"
+    ):
+        return len(text) - 2, len(text), 2
+    spans, _ = split_graphemes(text)
+    if not spans:
+        return None
+    start, end, _ = spans[-1]
+    return start, end, display_width(text[start:end])
 
 
 class TtyLineEditor:
@@ -219,7 +253,9 @@ class TtyLineEditor:
             else:
                 self._results.append(None)
             return
-        if char.isprintable() or char in ("\t", " "):
+        # Cf 是零宽格式字符（ZWJ、emoji tag、bidi 控制等）；保留它们才能让
+        # ZWJ emoji / tag flag 等 grapheme 在后续退格时作为一个整体被删除。
+        if char.isprintable() or char in ("\t", " ") or unicodedata.category(char) == "Cf":
             self._buffer.append(char)
             self._echo(char)
 
@@ -230,8 +266,17 @@ class TtyLineEditor:
     def _backspace(self) -> None:
         if not self._buffer or self._buffer[-1] == "\n":
             return
-        self._buffer.pop()
-        self._echo("\b \b")
+        # 只回看当前行，避免把前一行换行符并入 grapheme 计算。
+        line_start = len(self._buffer)
+        while line_start > 0 and self._buffer[line_start - 1] != "\n":
+            line_start -= 1
+        span = _last_grapheme_span("".join(self._buffer[line_start:]))
+        if span is None:
+            return
+        start, end, width = span
+        del self._buffer[line_start + start : line_start + end]
+        if width > 0:
+            self._echo("\b" * width + " " * width + "\b" * width)
 
     def _submit(self) -> None:
         self._results.append("".join(self._buffer))

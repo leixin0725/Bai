@@ -19,6 +19,8 @@ import tty
 from bai_agent.runtime.tty_input import (
     DISABLE_PROTOCOLS,
     ENABLE_PROTOCOLS,
+    _last_grapheme_span,
+    display_width,
     TtyLineEditor,
 )
 
@@ -134,6 +136,131 @@ async def test_backspace_removes_last_visible_char() -> None:
     try:
         assert await _read(editor, master, b"abc\x7f\r") == "ab"
         assert "\b \b" in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("abc", 3),
+        ("中文", 4),
+        ("a中b", 4),
+        ("中文abc", 7),
+        ("👍", 2),
+        ("e\u0301", 1),
+        ("中\u0301", 2),
+        ("👨\u200d👩\u200d👧\u200d👦", 2),
+    ],
+)
+def test_display_width_uses_terminal_cells(text: str, expected: int) -> None:
+    assert display_width(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("中文", (1, 2, 2)),
+        ("a中b", (2, 3, 1)),
+        ("中文abc", (4, 5, 1)),
+        ("e\u0301", (0, 2, 1)),
+        ("中\u0301", (0, 2, 2)),
+        ("👍", (0, 1, 2)),
+        ("👨\u200d👩\u200d👧\u200d👦", (0, 7, 2)),
+        ("🇨🇳", (0, 2, 2)),
+        ("🇨🇳x", (2, 3, 1)),
+        ("🏴\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f", (0, 7, 2)),
+        ("\u0301", (0, 1, 0)),
+        ("a\t", (1, 2, 1)),
+    ],
+)
+def test_last_grapheme_span_groups_visible_clusters(
+    text: str, expected: tuple[int, int, int]
+) -> None:
+    assert _last_grapheme_span(text) == expected
+
+
+@pytest.mark.asyncio
+async def test_backspace_erases_cjk_by_terminal_width() -> None:
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert await _read(editor, master, "中文".encode("utf-8") + b"\x7f\r") == "中"
+        assert "\b\b  \b\b" in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("text", "expected", "erase_sequence"),
+    [
+        ("abc", "ab", "\b \b"),
+        ("中文", "中", "\b\b  \b\b"),
+        ("a中b", "a", "\b \b\b\b  \b\b"),
+        ("中文abc", "中文", "\b \b\b \b\b \b"),
+    ],
+)
+async def test_backspace_sequence_matches_mixed_width_deletions(
+    text: str, expected: str, erase_sequence: str
+) -> None:
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        payload = text.encode("utf-8") + b"\x7f" * (len(text) - len(expected)) + b"\r"
+        assert await _read(editor, master, payload) == expected
+        assert erase_sequence in writer.text
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+async def test_continue_typing_after_mixed_backspace_keeps_display_consistent() -> None:
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert (
+            await _read(editor, master, "a中b".encode("utf-8") + b"\x7f\x7fc\r")
+            == "ac"
+        )
+        assert writer.text.endswith(
+            "a中b" + "\b \b" + "\b\b  \b\b" + "c" + "\r\n"
+        )
+    finally:
+        editor.close()
+        os.close(master)
+        os.close(slave)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload", "erase_sequence"),
+    [
+        ("👍".encode("utf-8"), "\b\b  \b\b"),
+        ("👨\u200d👩\u200d👧\u200d👦".encode("utf-8"), "\b\b  \b\b"),
+        ("🇨🇳".encode("utf-8"), "\b\b  \b\b"),
+        ("e\u0301".encode("utf-8"), "\b \b"),
+        ("中\u0301".encode("utf-8"), "\b\b  \b\b"),
+    ],
+)
+async def test_backspace_removes_whole_emoji_and_combining_grapheme(
+    payload: bytes, erase_sequence: str
+) -> None:
+    master, slave = _open_pty()
+    writer = _CaptureWriter()
+    editor = TtyLineEditor(_FdStream(slave), writer)
+    try:
+        assert await _read(editor, master, payload + b"\x7f\r") == ""
+        assert erase_sequence in writer.text
     finally:
         editor.close()
         os.close(master)
