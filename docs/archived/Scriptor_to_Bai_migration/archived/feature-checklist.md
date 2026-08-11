@@ -185,7 +185,7 @@
 
 ## 参考来源
 
-- Bai：`Bai/README.md`、`Bai/specs/001~003`、`Bai/src/bai_agent/` 全部模块、`Bai/config/`、`Bai/docs/`
+- Bai：`Bai/README.md`、`Bai/docs/archived/specs/001~003`、`Bai/src/bai_agent/` 全部模块、`Bai/config/`、`Bai/docs/`
 - qqbot 部署说明：`qqbot/MIGRATION-CATALOG.md`、`qqbot/docker-compose.yml`
 - Scriptor：`qqbot/astrbot/data/plugins/Scriptor/`（README、PROJECT、docs、specs、skills、核心模块、Web 界面）
 - 附带插件：`qqbot/astrbot/data/plugins/astrbot_plugin_biliread/`、`astrbot_plugin_dreamer/`、`astrbot_plugin_hapi_connector/`、`meme_manager/`

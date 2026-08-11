@@ -1,10 +1,10 @@
 # Quickstart: 核心运行时与消息管道（阶段 0、1）
 
-> 2026-08-08。本文给出阶段 1 的可运行验证路径；契约细节见 [contracts/](./contracts/)，实体见 [data-model.md](./data-model.md)。验证前先按 [specs/001 安装说明](../../specs/001-persistent-memory-agent/quickstart.md) 准备开发环境并注入 `DEEPSEEK_API_KEY`（或使用测试夹具，见第 6 节）。
+> 2026-08-08。本文给出阶段 1 的可运行验证路径；契约细节见 [contracts/](./contracts/)，实体见 [data-model.md](./data-model.md)。验证前先按 [specs/001 安装说明](../001-persistent-memory-agent/quickstart.md) 准备开发环境并注入 `DEEPSEEK_API_KEY`（或使用测试夹具，见第 6 节）。
 
 ## 0. 阶段 0 核对（无代码改动）
 
-对照 `../../docs/archived/Scriptor_to_Bai_migration/archived/feature-checklist.md` 第 4 节备注与第 12 节、`../../docs/archived/Scriptor_to_Bai_migration/archived/future-and-discarded.md` 第 4 节核对：
+对照 `../../Scriptor_to_Bai_migration/archived/feature-checklist.md` 第 4 节备注与第 12 节、`../../Scriptor_to_Bai_migration/archived/future-and-discarded.md` 第 4 节核对：
 
 - 远程编码代理接入归入未来插件系统（本次不做）——已落盘；
 - 内置技能暂缓，只做技能框架（阶段 8 实现）——已落盘。

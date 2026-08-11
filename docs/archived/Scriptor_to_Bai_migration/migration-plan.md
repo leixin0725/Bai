@@ -39,11 +39,11 @@
 
 ### 阶段 0 · 清单与文档落盘（无功能条目）
 
-- 无功能清单条目；仅核对两处标记是否已在清单落盘：远程编码代理接入归入未来插件系统（`archived/feature-checklist.md` 第 4 节备注与 `archived/future-and-discarded.md` 第 4 节）；内置技能暂缓、只做技能框架（`archived/feature-checklist.md` 第 12 节 [ ] 项）。两处均已落实，无需再改；2026-08-08 核对记录见 `specs/004-core-runtime-pipeline/quickstart.md` 第 0 节。
+- 无功能清单条目；仅核对两处标记是否已在清单落盘：远程编码代理接入归入未来插件系统（`archived/feature-checklist.md` 第 4 节备注与 `archived/future-and-discarded.md` 第 4 节）；内置技能暂缓、只做技能框架（`archived/feature-checklist.md` 第 12 节 [ ] 项）。两处均已落实，无需再改；2026-08-08 核对记录见 `docs/archived/specs/004-core-runtime-pipeline/quickstart.md` 第 0 节。
 
 ### 阶段 1 · 核心运行时与消息管道（8 项）
 
-> 2026-08-08 需求澄清（详见 `specs/004-core-runtime-pipeline/spec.md`）：事件驱动架构收敛为统一串行消息处理管道，不引入事件总线/订阅发布框架；后台异步任务收敛为最小后台执行器（不做优先级、取消、持久化）；并发控制只保留会话防重入（并行限制与优先级留待阶段 3/4）；连续消息合并收敛为只合并一次输入动作（一次粘贴的多行或一次管道输入，不做时间窗口合并）；**长回复自动分段移出本期**（CLI 一次性完整输出，未来接入 IM 或流式输出时再议）。
+> 2026-08-08 需求澄清（详见 `docs/archived/specs/004-core-runtime-pipeline/spec.md`）：事件驱动架构收敛为统一串行消息处理管道，不引入事件总线/订阅发布框架；后台异步任务收敛为最小后台执行器（不做优先级、取消、持久化）；并发控制只保留会话防重入（并行限制与优先级留待阶段 3/4）；连续消息合并收敛为只合并一次输入动作（一次粘贴的多行或一次管道输入，不做时间窗口合并）；**长回复自动分段移出本期**（CLI 一次性完整输出，未来接入 IM 或流式输出时再议）。
 
 第 1 节·框架与基础运行（7 项）：
 
@@ -156,7 +156,7 @@
 - 功能：统一消息处理管道（对话消息、定时事件、系统事件按到达顺序串行处理，不引入事件总线）；配置热重载与分组校验（启动时+运行中）；最小后台执行器（提交/串行执行/状态查看，不做优先级、取消、持久化）；会话防重入（同一时刻只处理一个对话动作，新输入等待）；生命周期（优雅启动/停止/清理）；运行状态与统计；一次输入动作合并（一次粘贴多行/管道输入作为一条对话动作，不做时间窗口合并）。长回复分段与自然停顿经澄清移出本期。
 - 验收：现有 CLI 全流程可用；管道与任务可观测；配置运行中修改生效；一次输入动作合并行为符合预期。
 
-> 2026-08-08 实现完成：阶段 0 与阶段 1 已按 `specs/004-core-runtime-pipeline/`（spec/plan/tasks/quickstart/contracts）落地，验收以该规格 SC-001~SC-006、`tests/` 回归与本节的阶段 0/1 记录为准。
+> 2026-08-08 实现完成：阶段 0 与阶段 1 已按 `docs/archived/specs/004-core-runtime-pipeline/`（spec/plan/tasks/quickstart/contracts）落地，验收以该规格 SC-001~SC-006、`tests/` 回归与本节的阶段 0/1 记录为准。
 
 ### 阶段 2 · 模型接入与生成（依赖：1）
 
@@ -216,5 +216,5 @@
 
 - `archived/feature-checklist.md`（已确认清单）
 - `archived/future-and-discarded.md`（未来考虑/舍弃档案）
-- `Bai/README.md` 与 `Bai/specs/001~003`（现有架构依据）
+- `Bai/README.md` 与 `Bai/docs/archived/specs/001~003`（现有架构依据）
 - `qqbot/` 调查材料（AstrBot 官方文档、Scriptor 插件与附带插件）

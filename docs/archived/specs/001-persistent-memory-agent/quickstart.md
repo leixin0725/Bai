@@ -20,7 +20,7 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 ```
 
-原生 Windows 与 macOS 不在支持范围；Windows 用户经 WSL 使用。依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。跨 Ubuntu 机器部署和升级见[部署手册](../../docs/ubuntu-deployment.md)。
+原生 Windows 与 macOS 不在支持范围；Windows 用户经 WSL 使用。依赖及 Python 范围以 `pyproject.toml` 为准，业务模块不会在运行时安装依赖。跨 Ubuntu 机器部署和升级见[部署手册](../../../../docs/ubuntu-deployment.md)。
 
 ## 2. 配置与外部凭据
 
@@ -241,7 +241,7 @@ DeepSeek 通过 Provider-neutral DTO 接入。新增供应商时实现 `ModelPro
 
 ## 9. 自动化与兼容性矩阵
 
-根据[项目宪章](../../AGENTS.md)，每次重大更新都要在对应实现阶段同步维护受影响的 README、quickstart、运行手册、配置说明、公共契约和当前功能制品，不能只在最终润色阶段补文档。计划必须列出文档影响、更新内容与验证方式；无影响时记录 `N/A` 及理由。
+根据[项目宪章](../../../../AGENTS.md)，每次重大更新都要在对应实现阶段同步维护受影响的 README、quickstart、运行手册、配置说明、公共契约和当前功能制品，不能只在最终润色阶段补文档。计划必须列出文档影响、更新内容与验证方式；无影响时记录 `N/A` 及理由。
 
 提交前应实际执行受影响文档中的安全本地命令，核对路径和相对链接可达、示例与当前参数及输出语义一致，并运行下面的适用自动化门禁。重大更新的代码和对应文档必须位于同一个原子提交中。
 
@@ -276,6 +276,6 @@ pytest tests/integration/test_repository_secret_safety.py
 python -m bai_agent --data-dir data security incident check
 ```
 
-若凭据可能进入工作树、可达 Git 历史、生成制品、日志或运行数据，立即停止聊天和整理。按照[全仓库凭据泄露事件处置流程](../../docs/security-incident-response.md)撤销/轮换凭据，扫描工作树与全部可达历史，检查运行数据和制品，并提供四项处置证据后再显式解除门禁。不得仅删除当前文件就继续运行。
+若凭据可能进入工作树、可达 Git 历史、生成制品、日志或运行数据，立即停止聊天和整理。按照[全仓库凭据泄露事件处置流程](../../../../docs/security-incident-response.md)撤销/轮换凭据，扫描工作树与全部可达历史，检查运行数据和制品，并提供四项处置证据后再显式解除门禁。不得仅删除当前文件就继续运行。
 
 > [2026-07-19] 本 quickstart 与当前 CLI、性能基线和六组合兼容矩阵同步。

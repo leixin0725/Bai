@@ -119,7 +119,7 @@ resume 与 discard 参数互斥；`--resume-pending` 是唯一允许重发旧 pe
 
 项目工程约束以[项目宪章](AGENTS.md)为准。每次完成核心业务逻辑、公共契约、架构或模块边界、数据结构、安全控制、关键依赖或平台迁移等重大更新时，必须在同一交付中同步更新受影响的 README、quickstart、运行手册、配置说明和契约文档。计划或评审若判定无需改文档，必须记录 `N/A` 及理由。
 
-重大更新只有在适用测试通过、文档中的命令/路径/链接/示例与当前实现一致，并且相关代码与文档进入同一个原子提交后才算完成。详细验收步骤见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
+重大更新只有在适用测试通过、文档中的命令/路径/链接/示例与当前实现一致，并且相关代码与文档进入同一个原子提交后才算完成。历史功能的详细验收步骤见[归档 quickstart](docs/archived/specs/001-persistent-memory-agent/quickstart.md)。
 
 ## 验证
 
@@ -130,6 +130,6 @@ resume 与 discard 参数互斥；`--resume-pending` 是唯一允许重发旧 pe
 .venv/bin/python -m bai_agent --data-dir .tmp/validation security incident check
 ```
 
-Ubuntu 24.04 × Python 3.12/3.13/3.14 的功能矩阵在 `.github/workflows/compatibility.yml`；原生 Windows 与 macOS 不在支持范围（Windows 用户经 WSL 使用）。提示 TUI 的 500 ms 强制性能门禁只在 Ubuntu 24.04/Python 3.13 固定环境运行；详细安装、人工维护、备份、来源查询和性能复现实验见[功能 quickstart](specs/001-persistent-memory-agent/quickstart.md)。
+Ubuntu 24.04 × Python 3.12/3.13/3.14 的功能矩阵在 `.github/workflows/compatibility.yml`；原生 Windows 与 macOS 不在支持范围（Windows 用户经 WSL 使用）。提示 TUI 的 500 ms 强制性能门禁只在 Ubuntu 24.04/Python 3.13 固定环境运行；详细安装、人工维护、备份、来源查询和性能复现实验见[归档 quickstart](docs/archived/specs/001-persistent-memory-agent/quickstart.md)。
 
-> [2026-07-19] 本文与 `specs/001-persistent-memory-agent/` 的规格、计划、契约和验收任务同步。
+> [2026-08-11] 历史规格、计划、契约和验收任务已归档至 `docs/archived/specs/`；主分支不再初始化 speckit 流程，规格工作流仅在独立分支或 worktree 中使用。
