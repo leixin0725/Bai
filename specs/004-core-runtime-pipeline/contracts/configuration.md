@@ -31,7 +31,6 @@
     "providers": "ok",
     "states": "ok",
     "tools": "ok",
-    "logging": "ok",
     "history_timestamps": "ok",
     "personas": "ok",
     "prompts": "ok"

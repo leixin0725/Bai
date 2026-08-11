@@ -14,7 +14,7 @@
 
 **Language/Version**: Python 3.13（同时在 Python 3.14 上运行兼容测试）
 
-**Primary Dependencies**: `openai`（仅限 DeepSeek 适配器）、`pydantic`（配置与领域边界校验）、`ruamel.yaml`（保留人工注释的 YAML 往返编辑）、`filelock`（跨平台单写者锁）；标准库 `argparse`、`asyncio`、`tomllib`、`json`、`pathlib`、`logging`
+**Primary Dependencies**: `openai`（仅限 DeepSeek 适配器）、`pydantic`（配置与领域边界校验）、`ruamel.yaml`（保留人工注释的 YAML 往返编辑）、`filelock`（跨平台单写者锁）；标准库 `argparse`、`asyncio`、`tomllib`、`json`、`pathlib`
 
 **Storage**: 本地明文文件；原始记录使用有界 JSONL 分段，长期记忆、来源索引、`MemoryCoverageOverview` 及整理前沿使用单个可人工编辑的 YAML 文档，提示追踪使用不含正文的原子 JSON；不引入独立概览文件、第二事实来源或数据库
 
@@ -81,7 +81,6 @@ config/
 ├── providers.toml           # Provider、模型、能力、超时与重试
 ├── states.toml              # 状态到人格文件的组合
 ├── tools.toml               # 工具启用、权限和调用上限
-├── logging.toml             # 日志级别与脱敏策略
 ├── personas/
 │   ├── chat.md
 │   ├── memory_curator.md

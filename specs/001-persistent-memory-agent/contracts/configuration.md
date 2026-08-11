@@ -10,7 +10,6 @@ config/
 ├── providers.toml
 ├── states.toml
 ├── tools.toml
-├── logging.toml
 ├── history_timestamps.toml
 ├── personas/
 │   ├── chat.md
@@ -197,19 +196,7 @@ split_on_local_date_change = true
 
 reload 先用同一 snapshot 构造 policy、assembler、curation service、gateway、tool executor 与 controller，再在轮次边界替换单个 controller 引用。任何构造失败都保留完整旧运行时，但当前请求在 raw/工具/provider 前失败；修复配置后下一轮可恢复，不修改 UTC 原始时间或存储字节。wheel/sdist 携带完整 `bai_agent/default_config`，API 可通过 `default_config_dir()` 发现安装制品中的示例配置；生产运行仍应显式传入受控 `--config-dir`。
 
-## 6. `logging.toml`
-
-必须提供日志级别、输出位置、轮换策略、允许字段和脱敏策略。以下字段禁止进入普通日志：
-
-- Authorization/API Key 和环境变量值；
-- 用户/Agent/长期记忆正文；
-- 提示正文和工具 arguments/result 正文；
-- DeepSeek `reasoning_content`；
-- 本地绝对数据路径（错误中仅显示逻辑路径或脱敏形式）。
-
-允许记录稳定 ID、哈希、计数、时长、规范化错误码、Provider/model profile ID 和 token 用量。
-
-## 7. 提示文件契约
+## 6. 提示文件契约
 
 - Markdown 只保存提示正文；职责、模型参数、权限和阈值留在 TOML。
 - `chat.md`、`memory_curator.md` 和每个状态人格为独立文件，统一由同一加载器处理。
@@ -220,7 +207,7 @@ reload 先用同一 snapshot 构造 policy、assembler、curation service、gate
 - 历史记录、长期记忆、工具结果只能填入标记为 `untrusted_data` 的插槽，不得进入可信指令插槽。
 - 文件不能为空，必须在大小限制内；UTF-8/BOM、换行和哈希规则保持确定性。
 
-## 8. 加载与热重载
+## 7. 加载与热重载
 
 1. 读取全部 TOML，校验 Schema 版本和引用图。
 2. 解析路径并检查越界、文件类型、大小和编码。
@@ -231,7 +218,7 @@ reload 先用同一 snapshot 构造 policy、assembler、curation service、gate
 
 每一轮只使用一个不可变 ConfigSnapshot。文件在轮次中改变时不影响当前轮；下一轮重新验证成功后才原子替换快照。验证失败保留最近有效快照并明确告警，但若涉及凭据、人格缺失或安全策略则停止生成，不静默降级。
 
-## 9. 配置契约测试
+## 8. 配置契约测试
 
 - 所有必填字段缺失、类型错误、边界值和交叉字段冲突。
 - 人格/提示文件缺失、空白、过大、非法 UTF-8、模板变量缺失/额外。

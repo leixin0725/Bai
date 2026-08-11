@@ -31,7 +31,6 @@ config/agent.toml                 # 路径、窗口、预算、运行限制
 config/providers.toml             # Provider 与模型 profile
 config/states.toml                # 状态和有序状态人格
 config/tools.toml                 # 工具启用、权限与边界
-config/logging.toml               # 安全日志设置
 config/personas/chat.md           # 基础聊天人格
 config/personas/memory_curator.md # 记忆整理人格
 config/personas/states/*.md       # 状态人格

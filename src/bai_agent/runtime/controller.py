@@ -134,7 +134,6 @@ class SingleTurnController:
         prompt_assembler,
         *,
         on_output: Callable[[str], None] | None = None,
-        tracer=None,
         long_term_store=None,
         curation_service=None,
         tool_executor=None,
@@ -150,7 +149,6 @@ class SingleTurnController:
         self.state_resolver = state_resolver
         self.prompt_assembler = prompt_assembler
         self.on_output = on_output
-        self.tracer = tracer
         self.long_term_store = long_term_store
         self.curation_service = curation_service
         self.tool_executor = tool_executor
@@ -228,7 +226,6 @@ class SingleTurnController:
                 )
                 uow = TurnUnitOfWork(
                     self.transaction_root, self.repository, self.long_term_store,
-                    tracer=self.tracer,
                 )
                 uow.begin(
                     PreTurnCheckpoint.capture(self.repository, self.long_term_store, resolution.state_id),
@@ -242,14 +239,6 @@ class SingleTurnController:
                     state_id=resolution.state_id,
                     config_revision=config_revision,
                     created_at=self.clock.now(),
-                )
-            if self.tracer:
-                self.tracer.emit(
-                    "turn.user_persisted",
-                    record_id=user_record.record_id,
-                    turn_id=resolved_turn_id,
-                    state_id=resolution.state_id,
-                    config_revision=config_revision,
                 )
         curation_proposal = None
         if self.curation_service:
@@ -316,17 +305,6 @@ class SingleTurnController:
             budgets=self.memory_budgets,
             memory_projector=memory_projector,
         )
-        if self.tracer:
-            self.tracer.emit(
-                "prompt.ready",
-                turn_id=resolved_turn_id,
-                flow_id=context.flow_id,
-                state_id=resolution.state_id,
-                config_revision=config_revision,
-                source_manifest=list(context.source_manifest),
-                covered_range=str(context.coverage.get("covered_range", [])),
-                direct_range=str(context.coverage.get("direct_range", [])),
-            )
         request = CompletionRequest(
             flow_id=context.flow_id,
             turn_id=resolved_turn_id,
@@ -480,24 +458,6 @@ class SingleTurnController:
                 config_revision=config_revision,
                 created_at=self.clock.now(),
             )
-        if self.tracer:
-            self.tracer.emit(
-                "turn.assistant_persisted",
-                record_id=assistant.record_id,
-                turn_id=resolved_turn_id,
-                flow_id=context.flow_id,
-                state_id=resolution.state_id,
-                config_revision=config_revision,
-            )
-            if self.long_term_store:
-                self.tracer.emit(
-                    "prompt.coverage",
-                    turn_id=resolved_turn_id,
-                    flow_id=context.flow_id,
-                    overview_revision=self.long_term_store.load().revision,
-                    covered_range=str(context.coverage.get("covered_range", [])),
-                    direct_range=str(context.coverage.get("direct_range", [])),
-                )
         if self.on_output:
             self.on_output(assistant.content)
             if getattr(self.provider, "debug_enabled", False):

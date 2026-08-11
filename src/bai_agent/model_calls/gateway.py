@@ -69,7 +69,6 @@ class ModelCallGateway:
         backoff_seconds: float = 0.05,
         identity_allocator: CallIdentityAllocator | None = None,
         clock=None,
-        tracer=None,
     ) -> None:
         if debug_enabled and presenter is None:
             raise DebugPresentationError("调试已启用但未提供批准界面。")
@@ -85,7 +84,6 @@ class ModelCallGateway:
         self.last_actual_usage: ActualUsageSummary | None = None
         self.identity_allocator = identity_allocator or CallIdentityAllocator()
         self.clock = clock or SystemClock()
-        self.tracer = tracer
         self.call_states: list[CallAttemptState] = []
         self._serial_lock = asyncio.Lock()
 
@@ -105,18 +103,6 @@ class ModelCallGateway:
                 status=status,
             )
         )
-        if self.tracer:
-            self.tracer.emit(
-                "model_call.state",
-                turn_id=draft.turn_id,
-                flow_id=draft.flow_id,
-                call_id=draft.call_id,
-                call_sequence=draft.call_sequence,
-                attempt=attempt,
-                purpose=draft.purpose,
-                status=status,
-            )
-
     async def _complete_assigned(self, draft: ModelCallDraft):
         last_error: BaiError | None = None
         for attempt in range(1, self.max_attempts + 1):
@@ -167,21 +153,6 @@ class ModelCallGateway:
                         }
                     )
                 self.last_actual_usage = self._actual_usage(result, estimate)
-                if self.tracer:
-                    usage = self.last_actual_usage
-                    self.tracer.emit(
-                        "model_call.actual_usage",
-                        turn_id=draft.turn_id,
-                        flow_id=draft.flow_id,
-                        call_id=draft.call_id,
-                        call_sequence=draft.call_sequence,
-                        attempt=attempt,
-                        status=usage.status,
-                        input_tokens=usage.actual_input_tokens,
-                        output_tokens=usage.actual_output_tokens,
-                        actual_total_tokens=usage.actual_total_tokens,
-                        estimated_input_tokens=usage.estimated_input_tokens,
-                    )
                 self._record(draft, attempt, "completed")
                 return result
             except BaiError as exc:

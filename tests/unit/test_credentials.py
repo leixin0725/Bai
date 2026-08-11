@@ -4,7 +4,6 @@ import pytest
 
 from bai_agent.domain.errors import BaiError
 from bai_agent.security.credentials import CredentialGuard, secret_fingerprint
-from bai_agent.security.redaction import redact_text
 
 
 FAKE_SECRET = "sk-test-only-1234567890abcdef1234567890"
@@ -19,10 +18,8 @@ def test_credential_guard_rejects_secret_without_echo() -> None:
     assert raised.value.code == "CREDENTIAL_REJECTED"
 
 
-def test_redaction_and_fingerprint_are_irreversible() -> None:
-    redacted = redact_text(f"token={FAKE_SECRET}")
+def test_fingerprint_is_irreversible() -> None:
     fingerprint = secret_fingerprint(FAKE_SECRET)
-    assert FAKE_SECRET not in redacted
     assert FAKE_SECRET not in fingerprint
     assert fingerprint.startswith("sha256:")
     assert fingerprint == secret_fingerprint(FAKE_SECRET)
@@ -30,4 +27,3 @@ def test_redaction_and_fingerprint_are_irreversible() -> None:
 
 def test_normal_text_is_preserved() -> None:
     assert CredentialGuard().ensure_safe("普通的非敏感聊天内容") == "普通的非敏感聊天内容"
-

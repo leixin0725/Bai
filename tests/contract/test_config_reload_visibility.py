@@ -27,7 +27,6 @@ def test_config_validate_reports_all_groups_ok(
         "providers",
         "states",
         "tools",
-        "logging",
         "history_timestamps",
         "personas",
         "prompts",

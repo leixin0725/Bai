@@ -144,7 +144,6 @@ class AgentApplication:
                 identity_allocator=identity_allocator,
                 clock=self.controller.clock,
                 estimator=chat_estimator,
-                tracer=getattr(self.controller.provider, "tracer", None),
             )
             curator_profile = providers["model_profiles"]["memory_curator"]
             curator_config = next(
@@ -160,7 +159,6 @@ class AgentApplication:
                 identity_allocator=identity_allocator,
                 clock=self.controller.clock,
                 estimator=curator_estimator,
-                tracer=getattr(self.controller.curation_service.provider, "tracer", None),
             )
         short = settings["agent.toml"]["short_term"]
         curation_service = CurationService(
@@ -180,7 +178,6 @@ class AgentApplication:
             boundary_renderer=boundary_renderer,
             curator_asset=assets.get("persona:memory_curator"),
             prompt_asset=assets.get("prompt:memory_curation"),
-            tracer=getattr(self.controller.curation_service, "tracer", None),
         )
         tool_config = next(
             item for item in settings["tools.toml"]["tools"]
@@ -190,7 +187,6 @@ class AgentApplication:
             self.long_term_store,
             self.archive,
             page_size=int(tool_config["page_size"]),
-            tracer=self.controller.tracer,
         )
         registry = ToolRegistry()
         registry.register(
@@ -216,7 +212,6 @@ class AgentApplication:
             deadline_seconds=float(settings["agent.toml"]["runtime"]["tool_deadline_seconds"]),
             max_result_bytes=int(tool_config["max_result_bytes"]),
             clock=self.controller.clock,
-            tracer=self.controller.tracer,
         )
         budget = settings["agent.toml"]["context_budget"]
         memory_budgets = {
@@ -231,7 +226,6 @@ class AgentApplication:
             resolver,
             assembler,
             on_output=self.controller.on_output,
-            tracer=self.controller.tracer,
             long_term_store=self.long_term_store,
             curation_service=curation_service,
             tool_executor=tool_executor,
@@ -290,7 +284,6 @@ def build_application(
     *,
     provider: Any | None = None,
     on_output=None,
-    tracer=None,
     debug_prompts: bool = False,
     presenter=None,
     clock=None,
@@ -320,7 +313,7 @@ def build_application(
 
             raise BaiError(permission.error_code or "MEMORY_PERMISSION_INVALID", permission.warning or "长期记忆权限无效。")
         # [2026-07-20] 持锁恢复必须先于 pending 读取、Provider 创建和任何新轮输入。
-        TurnUnitOfWork(memory_root, archive, long_term_store, tracer=tracer).recover()
+        TurnUnitOfWork(memory_root, archive, long_term_store).recover()
         states_doc = settings["states.toml"]
         states = {str(item["id"]): tuple(item["ordered_persona_ids"]) for item in states_doc["states"] if item.get("enabled", False)}
         resolver = StaticStateResolver(snapshot.default_state_id, states)
@@ -378,7 +371,6 @@ def build_application(
             identity_allocator=identity_allocator,
             clock=clock,
             estimator=chat_estimator,
-            tracer=tracer,
         )
         curator_provider = ModelCallGateway(
             curator_adapter,
@@ -388,7 +380,6 @@ def build_application(
             identity_allocator=identity_allocator,
             clock=clock,
             estimator=curator_estimator,
-            tracer=tracer,
         )
         short = settings["agent.toml"]["short_term"]
         curation_service = CurationService(
@@ -408,14 +399,12 @@ def build_application(
             boundary_renderer=boundary_renderer,
             curator_asset=assets.get("persona:memory_curator"),
             prompt_asset=assets.get("prompt:memory_curation"),
-            tracer=tracer,
         )
         tool_config = next(item for item in settings["tools.toml"]["tools"] if item["id"] == "memory_source_query")
         source_tool = MemorySourceQueryTool(
             long_term_store,
             archive,
             page_size=int(tool_config["page_size"]),
-            tracer=tracer,
         )
         registry = ToolRegistry()
         registry.register(
@@ -441,7 +430,6 @@ def build_application(
             deadline_seconds=float(settings["agent.toml"]["runtime"]["tool_deadline_seconds"]),
             max_result_bytes=int(tool_config["max_result_bytes"]),
             clock=clock,
-            tracer=tracer,
         )
         budgets = settings["agent.toml"]["context_budget"]
         controller = SingleTurnController(
@@ -450,7 +438,6 @@ def build_application(
             resolver,
             assembler,
             on_output=on_output,
-            tracer=tracer,
             long_term_store=long_term_store,
             curation_service=curation_service,
             tool_executor=tool_executor,

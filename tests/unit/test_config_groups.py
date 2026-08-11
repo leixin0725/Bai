@@ -12,7 +12,6 @@ def test_config_groups_cover_all_manifests_and_prompt_files() -> None:
         "providers",
         "states",
         "tools",
-        "logging",
         "history_timestamps",
         "personas",
         "prompts",
@@ -22,7 +21,6 @@ def test_config_groups_cover_all_manifests_and_prompt_files() -> None:
         "providers.toml",
         "states.toml",
         "tools.toml",
-        "logging.toml",
         "history_timestamps.toml",
     }
 

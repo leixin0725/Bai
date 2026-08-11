@@ -192,7 +192,7 @@ US4 可执行回归：
 
 ```bash
 pytest tests/contract/test_cli_prompt_debug.py tests/integration/test_prompt_debug_equivalence.py tests/integration/test_turn_transaction_security.py tests/performance/test_prompt_trace_release.py tests/integration/test_prompt_debug_runtime_lifecycle.py -q
-pytest tests/contract/test_tool_transaction_capabilities.py tests/unit/test_logging.py -q
+pytest tests/contract/test_tool_transaction_capabilities.py -q
 ```
 
 ## 10. 故障判断

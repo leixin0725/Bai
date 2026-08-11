@@ -17,11 +17,10 @@ from bai_agent.domain.models import (
 class MemorySourceQueryTool:
     name = "memory_source_query"
 
-    def __init__(self, store, archive, *, page_size: int = 16, tracer=None) -> None:
+    def __init__(self, store, archive, *, page_size: int = 16) -> None:
         self.store = store
         self.archive = archive
         self.page_size = page_size
-        self.tracer = tracer
         self.definition = ToolDefinition(
             tool_id=self.name,
             name=self.name,
@@ -105,19 +104,6 @@ class MemorySourceQueryTool:
                 ),
             },
         )
-        if self.tracer:
-            self.tracer.emit(
-                "memory.source_query",
-                flow_id=context.flow_id,
-                turn_id=context.turn_id,
-                persona_id=context.persona_id,
-                state_id=context.state_id,
-                memory_id=memory.memory_id,
-                revision=document.revision,
-                source_count=len(records),
-                result_code=result.outcome.value,
-                cursor_present=bool(arguments.get("cursor")),
-            )
         return result
 
     async def execute(self, arguments: dict, context) -> ToolResult:

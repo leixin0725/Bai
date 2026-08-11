@@ -40,13 +40,11 @@ class ToolExecutor:
         deadline_seconds: float = 20,
         max_result_bytes: int = 131072,
         clock=None,
-        tracer=None,
     ) -> None:
         self.registry = registry
         self.deadline_seconds = deadline_seconds
         self.max_result_bytes = max_result_bytes
         self.clock = clock or SystemClock()
-        self.tracer = tracer
         self.guard = CredentialGuard()
         self._serial_lock = asyncio.Lock()
 
@@ -62,18 +60,6 @@ class ToolExecutor:
                 "origin_id": f"tool-result:{call.call_id}:{content_hash(body)[7:]}",
             }
         )
-        if self.tracer:
-            self.tracer.emit(
-                "tool.executed",
-                call_id=call.call_id,
-                flow_id=context.flow_id,
-                turn_id=context.turn_id,
-                persona_id=context.persona_id,
-                state_id=context.state_id,
-                trigger_record_id=context.trigger_record_id,
-                tool_id=call.name,
-                result_code=result.outcome.value,
-            )
         return result
 
     async def _execute(self, call: ToolCall, context: ToolExecutionContext) -> ToolResult:

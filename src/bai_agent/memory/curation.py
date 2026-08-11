@@ -171,7 +171,6 @@ class CurationService:
         curator_asset: ConfigAsset | None = None,
         prompt_asset: ConfigAsset | None = None,
         max_attempts: int = 1,
-        tracer=None,
     ) -> None:
         self.archive = archive
         self.store = store
@@ -185,7 +184,6 @@ class CurationService:
         self.curator_asset = curator_asset
         self.prompt_asset = prompt_asset
         self.max_attempts = max(1, max_attempts)
-        self.tracer = tracer
 
     async def propose(
         self,
@@ -605,16 +603,6 @@ class CurationService:
     def commit(self, proposal: ProposedCuration) -> LongTermMemoryDocument:
         """[2026-07-20] 该入口仅供 READY_TO_COMMIT 发布路径调用。"""
         committed = self.store.commit(proposal.target_document)
-        if self.tracer:
-            batch = proposal.batch
-            self.tracer.emit(
-                "memory.curation_committed",
-                batch_id=batch.batch_id if batch else "batch-none",
-                revision=committed.revision,
-                overview_revision=committed.coverage_overview.revision,
-                count=len(proposal.source_record_ids),
-                covered_range=(str((batch.old_frontier + 1, batch.new_frontier)) if batch else "[]"),
-            )
         return committed
 
     async def curate_if_needed(self, *, force: bool = False) -> LongTermMemoryDocument | None:

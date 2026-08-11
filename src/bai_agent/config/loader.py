@@ -28,7 +28,6 @@ MANIFESTS = (
     "providers.toml",
     "states.toml",
     "tools.toml",
-    "logging.toml",
     "history_timestamps.toml",
 )
 
@@ -38,7 +37,6 @@ CONFIG_GROUPS = (
     "providers",
     "states",
     "tools",
-    "logging",
     "history_timestamps",
     "personas",
     "prompts",
@@ -50,7 +48,6 @@ CONFIG_GROUP_BY_FILE = {
     "providers.toml": "providers",
     "states.toml": "states",
     "tools.toml": "tools",
-    "logging.toml": "logging",
     "history_timestamps.toml": "history_timestamps",
 }
 

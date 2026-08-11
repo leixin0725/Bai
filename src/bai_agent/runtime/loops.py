@@ -97,7 +97,6 @@ class AutonomousLoopRunner:
         clock=monotonic,
         stop_requested=lambda: False,
         checkpoint_store=None,
-        tracer=None,
     ) -> None:
         self.controller = controller
         self.policy = policy
@@ -105,7 +104,6 @@ class AutonomousLoopRunner:
         self.clock = clock
         self.stop_requested = stop_requested
         self.checkpoints = checkpoint_store or MemoryCheckpointStore()
-        self.tracer = tracer
 
     async def run(self, initial_input: str, *, run_id: str = "default") -> LoopResult:
         if self.policy.next_action(None) == LoopDecision.STOP:
@@ -157,14 +155,6 @@ class AutonomousLoopRunner:
                     consumed_cost_units=cost,
                     next_input=next_input,
                 )
-            )
-        if self.tracer:
-            self.tracer.emit(
-                "loop.stopped",
-                iteration=iterations,
-                stop_reason=reason,
-                token_budget=tokens,
-                cost_budget=cost,
             )
         return LoopResult(
             run_id=run_id,

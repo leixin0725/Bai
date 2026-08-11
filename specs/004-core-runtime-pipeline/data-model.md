@@ -95,7 +95,6 @@ waiting ──→ running ──→ success
 | `providers` | `providers.toml` | Provider/profile 能力校验 |
 | `states` | `states.toml` | 状态与人格引用校验 |
 | `tools` | `tools.toml` | 工具清单校验 |
-| `logging` | `logging.toml` | 日志配置校验 |
 | `history_timestamps` | `history_timestamps.toml` | `validate_history_timestamps` |
 | `personas` | `personas/*.md` | 非空、职责唯一、引用解析 |
 | `prompts` | `prompts/*.md` | 模板校验（`validate_template`） |
