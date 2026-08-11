@@ -99,7 +99,7 @@ specs/004-core-runtime-pipeline/
 │   ├── runtime-pipeline.md  # 管道/输入合并/执行器/状态/生命周期契约
 │   ├── configuration.md     # 配置分组与重载错误合同
 │   └── cli.md               # chat 循环、:status 与退出码
-└── tasks.md                 # Phase 2 由 /speckit-tasks 创建
+└── tasks.md                 # Phase 2 由任务清单创建
 ```
 
 ### Source Code (repository root)

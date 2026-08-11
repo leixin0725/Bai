@@ -70,7 +70,7 @@ specs/002-prompt-trace-debugger/
 │   ├── configuration.md
 │   ├── model-call.md
 │   └── turn-transaction.md
-└── tasks.md                 # 已由 /speckit-tasks 生成并完成实现状态更新
+└── tasks.md                 # 已由任务清单生成并完成实现状态更新
 ```
 
 ### Source Code (repository root)

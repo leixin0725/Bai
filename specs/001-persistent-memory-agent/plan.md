@@ -69,7 +69,7 @@ specs/001-persistent-memory-agent/
 │   ├── configuration.md
 │   ├── model-and-tools.md
 │   └── storage.md
-└── tasks.md                  # 由 /speckit-tasks 生成
+└── tasks.md                  # 由任务清单生成
 ```
 
 ### Source Code (repository root)

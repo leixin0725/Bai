@@ -228,7 +228,7 @@ description: "提示词追踪调试工具的依赖有序实现任务（analyze �
 - [X] T106 在 `src/bai_agent/cli.py` 与 `start.ps1` 实现默认丢弃、互斥 `--resume-pending`/`--discard-pending`、安全 turn-id 通知、无 pending 进入新输入、resumed reject 返回输入/Ctrl+C 130，以及 PowerShell ParameterSet 安全透传
 - [X] T107 [P] 最终校准 `README.md`、`specs/001-persistent-memory-agent/{contracts/cli.md,contracts/storage.md,quickstart.md}` 与 `specs/002-prompt-trace-debugger/{spec.md,plan.md,research.md,data-model.md,contracts,quickstart.md,checklists}`，删除默认必须 resume 的旧表述并记录 FR-001—FR-037/BR-001—BR-011/SC-001—SC-019 覆盖
 - [X] T108 运行 T096—T103 对应 unit/contract/integration/fault/security 测试、`pytest -q`、全部 `tests/fault_injection/` 与适用 performance 回归、CLI/PowerShell 文档命令、链接/占位符/凭据扫描及 `git diff --check`，确认不访问真实 API 或当前 `data/`
-- [X] T109 运行 `$speckit-analyze`，确认 CRITICAL/HIGH 为 0、75 个 FR/BR/CR/DR/SC 名义覆盖 100%、无 pending/TTY/事务/TUI 冲突；勾选 T096—T109，并通过 Git 扩展创建只含本功能工件、测试、实现与文档的原子提交
+- [X] T109 运行交叉一致性分析，确认 CRITICAL/HIGH 为 0、75 个 FR/BR/CR/DR/SC 名义覆盖 100%、无 pending/TTY/事务/TUI 冲突；勾选 T096—T109，并通过 Git 扩展创建只含本功能工件、测试、实现与文档的原子提交
 
 **Checkpoint**: 默认启动不再被 pending 阻塞；只有显式 resume 重发，任何合法丢弃都只原子移除未完成 raw 尾部 USER。
 

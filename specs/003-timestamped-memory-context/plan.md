@@ -69,7 +69,7 @@ specs/003-timestamped-memory-context/
 │   ├── configuration.md
 │   ├── prompt-consumers.md
 │   └── temporal-annotation.md
-└── tasks.md                       # Phase 2 由 /speckit-tasks 创建，本计划不创建
+└── tasks.md                       # Phase 2 由任务清单创建，本计划不创建
 ```
 
 ### Source Code (repository root)

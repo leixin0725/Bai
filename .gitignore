@@ -43,3 +43,10 @@ __pycache__/
 .ruff_cache/
 .tox/
 .nox/
+
+# [2026-08-11] 已移除 speckit 工具链；忽略其目录与编辑器/会话产物，防止重新生成后污染 git status。
+.specify/
+.pi/
+.agents/
+.continue/
+.codex/
