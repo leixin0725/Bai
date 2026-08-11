@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: User description: "我预期让你执行Bai/Scriptor_to_Bai_migration/migration-plan.md中的阶段0和1."
+**Input**: User description: "我预期让你执行Bai/docs/archived/Scriptor_to_Bai_migration/migration-plan.md中的阶段0和1."
 
 ## Scope
 
@@ -177,7 +177,7 @@
 - **DR-001**: `README.md` MUST 反映新的运行模型：统一消息处理管道、配置热重载与分组校验、后台任务与状态查看、一次输入动作合并的默认行为及启用/调整入口。
 - **DR-002**: 功能 quickstart 与运行手册（如 `specs/001-persistent-memory-agent/quickstart.md`、`docs/ubuntu-deployment.md`）MUST 同步更新启动/优雅停止、运行中改配置、状态查看与恢复验证的命令和步骤，且示例可执行。
 - **DR-003**: 配置与公共契约文档（如 `specs/001-persistent-memory-agent/contracts/configuration.md`）MUST 记录配置分组、校验规则与热重载语义，并说明既有数据无需迁移。
-- **DR-004**: `Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0/1 验收状态 MUST 在本功能完成后更新为可核对的完成记录，并链接到本规格。
+- **DR-004**: `../../docs/archived/Scriptor_to_Bai_migration/migration-plan.md` 的阶段 0/1 验收状态 MUST 在本功能完成后更新为可核对的完成记录，并链接到本规格。
 - **DR-005**: 新增或变更的 CLI 命令与配置项 MUST 在 README、quickstart 和对应契约中保持一致，并通过文档中的命令可执行性检查验证。
 
 ### Key Entities *(include if feature involves data)*

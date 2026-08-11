@@ -48,7 +48,7 @@
 - `specs/001-persistent-memory-agent/contracts/cli.md`：`chat` 循环、管道输入语义、`:status` 与退出码。
 - `specs/001-persistent-memory-agent/contracts/configuration.md`：配置分组表、重载语义与错误合同。
 - `specs/001-persistent-memory-agent/quickstart.md`：聊天与退出章节按新行为更新。
-- `Scriptor_to_Bai_migration/migration-plan.md`：已完成阶段 0/1 范围同步（2026-08-08 提交）。
+- `../../docs/archived/Scriptor_to_Bai_migration/migration-plan.md`：已完成阶段 0/1 范围同步（2026-08-08 提交）。
 - `docs/ubuntu-deployment.md`：仅当启动/停止命令变化时同步，否则记录 N/A。
 
 **Target Platform**: 原生 Ubuntu 24.04/WSL、Python 3.12/3.13/3.14 是唯一支持环境；原生 Windows 与 macOS 不在支持范围。

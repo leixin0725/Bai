@@ -4,7 +4,7 @@
 
 ## 0. 阶段 0 核对（无代码改动）
 
-对照 `Scriptor_to_Bai_migration/archived/feature-checklist.md` 第 4 节备注与第 12 节、`archived/future-and-discarded.md` 第 4 节核对：
+对照 `../../docs/archived/Scriptor_to_Bai_migration/archived/feature-checklist.md` 第 4 节备注与第 12 节、`../../docs/archived/Scriptor_to_Bai_migration/archived/future-and-discarded.md` 第 4 节核对：
 
 - 远程编码代理接入归入未来插件系统（本次不做）——已落盘；
 - 内置技能暂缓，只做技能框架（阶段 8 实现）——已落盘。
